@@ -51,8 +51,11 @@ model CashMove {
 }
 
 model DayClosure {
-  id        Int      @id @default(autoincrement())
-  day       String   @unique
-  note      String?
-  createdAt DateTime @default(now())
+  id           Int      @id @default(autoincrement())
+  day          String   @unique
+  totalIncome  Float    @default(0)
+  totalExpense Float    @default(0)
+  balance      Float    @default(0)
+  note         String?
+  createdAt    DateTime @default(now())
 }

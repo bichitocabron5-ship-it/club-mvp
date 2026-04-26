@@ -1,88 +1,88 @@
+// app/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
 
-export default function Home() {
-  const [members, setMembers] = useState<any[]>([]);
-  const [form, setForm] = useState({
-    fullName: "",
-    dni: "",
-    phone: "",
-  });
-
-  async function loadMembers() {
-    const res = await fetch("/api/members");
-    const data = await res.json();
-    setMembers(data);
-  }
+export default function DashboardPage() {
+  const [data, setData] = useState<any>(null);
 
   useEffect(() => {
-    loadMembers();
+    fetch("/api/dashboard")
+      .then((res) => res.json())
+      .then(setData);
   }, []);
 
-  async function handleSubmit(e: any) {
-    e.preventDefault();
-
-    await fetch("/api/members", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(form),
-    });
-
-    setForm({ fullName: "", dni: "", phone: "" });
-    loadMembers();
+  if (!data) {
+    return <main>Cargando...</main>;
   }
 
   return (
-    <div className="p-6 max-w-xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">Socios</h1>
+    <main>
+      <h1 className="text-2xl font-bold mb-4">Dashboard</h1>
 
-      {/* FORM */}
-      <form onSubmit={handleSubmit} className="mb-6 space-y-2">
-        <input
-          className="border p-2 w-full"
-          placeholder="Nombre completo"
-          value={form.fullName}
-          onChange={(e) =>
-            setForm({ ...form, fullName: e.target.value })
-          }
-          required
-        />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        <div className="rounded border p-4">
+          <div className="text-sm text-gray-500">Ingresos hoy</div>
+          <strong>{Number(data.income).toFixed(2)} €</strong>
+        </div>
 
-        <input
-          className="border p-2 w-full"
-          placeholder="DNI"
-          value={form.dni}
-          onChange={(e) =>
-            setForm({ ...form, dni: e.target.value })
-          }
-          required
-        />
+        <div className="rounded border p-4">
+          <div className="text-sm text-gray-500">Balance hoy</div>
+          <strong>{Number(data.balance).toFixed(2)} €</strong>
+        </div>
 
-        <input
-          className="border p-2 w-full"
-          placeholder="Teléfono"
-          value={form.phone}
-          onChange={(e) =>
-            setForm({ ...form, phone: e.target.value })
-          }
-        />
+        <div className="rounded border p-4">
+          <div className="text-sm text-gray-500">Retiradas hoy</div>
+          <strong>{data.salesCount}</strong>
+        </div>
 
-        <button className="bg-blue-600 text-white px-4 py-2 w-full">
-          Crear socio
-        </button>
-      </form>
+        <div className="rounded border p-4">
+          <div className="text-sm text-gray-500">Socios hoy</div>
+          <strong>{data.activeMembersToday}</strong>
+        </div>
+      </div>
 
-      {/* LISTA */}
-      <ul>
-        {members.map((m) => (
-          <li key={m.id} className="border-b py-2">
-            {m.fullName} — {m.dni}
-          </li>
-        ))}
-      </ul>
-    </div>
+      <section className="mb-6">
+        <h2 className="font-semibold mb-2">Últimas retiradas</h2>
+
+        <div className="space-y-2">
+          {data.lastSales.length === 0 && (
+            <div className="text-sm text-gray-500">Sin retiradas hoy.</div>
+          )}
+
+          {data.lastSales.map((s: any) => (
+            <div key={s.id} className="rounded border p-3 flex justify-between">
+              <div>
+                <div className="font-medium">{s.member.fullName}</div>
+                <div className="text-sm text-gray-500">
+                  {s.product.name} · {s.qty} {s.product.unit}
+                </div>
+              </div>
+
+              <strong>{Number(s.totalAmount).toFixed(2)} €</strong>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <h2 className="font-semibold mb-2">Stock bajo</h2>
+
+        <div className="space-y-2">
+          {data.lowStock.length === 0 && (
+            <div className="text-sm text-gray-500">Sin alertas de stock.</div>
+          )}
+
+          {data.lowStock.map((p: any) => (
+            <div key={p.id} className="rounded border p-3 flex justify-between">
+              <span>{p.name}</span>
+              <strong className="text-red-600">
+                {p.stock} {p.unit}
+              </strong>
+            </div>
+          ))}
+        </div>
+      </section>
+    </main>
   );
 }

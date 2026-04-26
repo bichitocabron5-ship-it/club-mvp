@@ -22,12 +22,27 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Producto no existe" }, { status: 404 });
   }
 
+  
+
   // 2. Calcular total REAL
   const total = qty * product.price;
 
   // 3. Calcular consumo de hoy
   const startToday = new Date();
-  startToday.setHours(0, 0, 0, 0);
+    startToday.setHours(0, 0, 0, 0);
+
+    const todayKey = startToday.toISOString().slice(0, 10);
+
+    const todayClosed = await prisma.dayClosure.findUnique({
+      where: { day: todayKey },
+    });
+
+    if (todayClosed) {
+      return NextResponse.json(
+        { error: "El día está cerrado. No se pueden registrar más retiradas." },
+        { status: 400 }
+      );
+    }
 
   const salesToday = await prisma.sale.findMany({
     where: {
@@ -60,23 +75,35 @@ export async function POST(req: Request) {
   }
 
   // 6. Crear venta + actualizar stock
-  const sale = await prisma.sale.create({
-    data: {
-      memberId,
-      productId,
-      qty,
-      totalAmount: total,
-    },
-  });
-
-  await prisma.product.update({
-    where: { id: productId },
-    data: {
-      stock: {
-        decrement: qty,
+  const result = await prisma.$transaction(async (tx) => {
+    const sale = await tx.sale.create({
+      data: {
+        memberId,
+        productId,
+        qty,
+        totalAmount: total,
       },
-    },
+    });
+
+    await tx.product.update({
+      where: { id: productId },
+      data: {
+        stock: {
+          decrement: qty,
+        },
+      },
+    });
+
+    await tx.cashMove.create({
+      data: {
+        type: "income",
+        amount: total,
+        note: `Retirada producto ${product.name}`,
+      },
+    });
+
+    return sale;
   });
 
-  return NextResponse.json(sale);
+  return NextResponse.json(result);
 }
