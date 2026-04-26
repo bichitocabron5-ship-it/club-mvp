@@ -1,13 +1,30 @@
 //app/api/sales/route.ts
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 
 const DAILY_LIMIT_G = 10;
 const DAILY_LIMIT_UD = 15;
 
+const saleSchema = z.object({
+  memberId: z.number().int().positive(),
+  productId: z.number().int().positive(),
+  qty: z.number().positive(),
+});
+
 export async function POST(req: Request) {
   const body = await req.json();
-  const { memberId, productId, qty } = body;
+
+  const parsed = saleSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "Datos inválidos" },
+      { status: 400 }
+    );
+  }
+
+  const { memberId, productId, qty } = parsed.data;
 
   if (!memberId || !productId || !qty || qty <= 0) {
     return NextResponse.json({ error: "Datos inválidos" }, { status: 400 });
@@ -21,8 +38,6 @@ export async function POST(req: Request) {
   if (!product) {
     return NextResponse.json({ error: "Producto no existe" }, { status: 404 });
   }
-
-  
 
   // 2. Calcular total REAL
   const total = qty * product.price;
@@ -75,6 +90,7 @@ export async function POST(req: Request) {
   }
 
   // 6. Crear venta + actualizar stock
+  try {
   const result = await prisma.$transaction(async (tx) => {
     const sale = await tx.sale.create({
       data: {
@@ -85,8 +101,13 @@ export async function POST(req: Request) {
       },
     });
 
-    await tx.product.update({
-      where: { id: productId },
+    const productUpdated = await tx.product.updateMany({
+      where: {
+        id: productId,
+        stock: {
+          gte: qty, // 🔥 evita stock negativo por concurrencia
+        },
+      },
       data: {
         stock: {
           decrement: qty,
@@ -94,6 +115,10 @@ export async function POST(req: Request) {
       },
     });
 
+    if (productUpdated.count === 0) {
+      throw new Error("Stock insuficiente (concurrencia)");
+    }
+    
     await tx.cashMove.create({
       data: {
         type: "income",
@@ -103,7 +128,14 @@ export async function POST(req: Request) {
     });
 
     return sale;
-  });
+    });
 
-  return NextResponse.json(result);
+    return NextResponse.json(result);
+
+  } catch (err: any) {
+    return NextResponse.json(
+      { error: err.message || "Error en la venta" },
+      { status: 400 }
+    );
+  }
 }
