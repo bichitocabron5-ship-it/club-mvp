@@ -67,13 +67,23 @@ export default function MemberDetail() {
                   className="mt-3 max-w-xs border bg-white p-2"
                 />
               )}
-              <a
-              href={`/api/contracts/${c.id}/pdf`}
-              target="_blank"
-              className="mt-3 inline-block rounded bg-blue-600 px-4 py-2 text-white"
-            >
-              Ver PDF firmado
-            </a>
+
+              {c.signedPdfUrl && (
+                <a
+                  href={c.signedPdfUrl}
+                  target="_blank"
+                  className="ml-2 mt-3 inline-block rounded bg-green-600 px-4 py-2 text-white"
+                >
+                  Abrir PDF guardado
+                </a>
+              )}
+                <a
+                  href={`/api/contracts/${c.id}/pdf`}
+                  target="_blank"
+                  className="mt-3 inline-block rounded bg-blue-600 px-4 py-2 text-white"
+                >
+                  Ver PDF firmado
+                </a>
             </div>
           ))}
         </div>

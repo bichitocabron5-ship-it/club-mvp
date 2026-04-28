@@ -2,6 +2,7 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 
 function formatDate(value: string | Date | null | undefined) {
   if (!value) return "";
@@ -168,6 +169,33 @@ export async function GET(
   });
 
   const pdfBytes = await pdfDoc.save();
+
+  const filePath = `contracts/member-${contract.memberId}/contract-${contract.id}.pdf`;
+
+  const upload = await supabaseAdmin.storage
+    .from("signed-contracts")
+    .upload(filePath, Buffer.from(pdfBytes), {
+      contentType: "application/pdf",
+      upsert: true,
+    });
+
+  if (upload.error) {
+    return NextResponse.json(
+      { error: upload.error.message },
+      { status: 500 }
+    );
+  }
+
+  const { data } = supabaseAdmin.storage
+    .from("signed-contracts")
+    .getPublicUrl(filePath);
+
+  await prisma.memberContract.update({
+    where: { id: contract.id },
+    data: {
+      signedPdfUrl: data.publicUrl,
+    },
+  });
 
   return new NextResponse(Buffer.from(pdfBytes), {
     headers: {
