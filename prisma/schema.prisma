@@ -16,6 +16,8 @@ model Member {
   createdAt DateTime @default(now())
 
   sales     Sale[]
+  contracts MemberContract[]
+  signingSessions SigningSession[]
 }
 
 model Product {
@@ -58,4 +60,53 @@ model DayClosure {
   balance      Float    @default(0)
   note         String?
   createdAt    DateTime @default(now())
+}
+
+model ContractTemplate {
+  id        Int      @id @default(autoincrement())
+  name      String
+  version   String
+  fileUrl   String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  contracts MemberContract[]
+}
+
+model MemberContract {
+  id                 Int      @id @default(autoincrement())
+  memberId           Int
+  signingSessionId Int?     @unique
+  contractTemplateId Int?
+
+  fullName         String
+  dni              String
+  address          String?
+  birthPlace       String?
+  birthDate        DateTime?
+  phone            String?
+  email            String?
+  consumptionGrams Int?
+
+  
+  signatureImage     String   @db.Text
+  signedPdfUrl       String?
+  signedAt           DateTime @default(now())
+
+  member             Member           @relation(fields: [memberId], references: [id])
+  contractTemplate   ContractTemplate? @relation(fields: [contractTemplateId], references: [id])
+  signingSession     SigningSession? @relation(fields: [signingSessionId], references: [id])
+}
+
+model SigningSession {
+  id             Int       @id @default(autoincrement())
+  token          String    @unique
+  memberId       Int
+  status         String    @default("PENDING") // PENDING / SIGNED / CANCELLED
+  signatureImage String?   @db.Text
+  signedAt       DateTime?
+  createdAt      DateTime  @default(now())
+
+  member Member @relation(fields: [memberId], references: [id])
+  contract MemberContract?
 }
