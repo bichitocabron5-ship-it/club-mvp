@@ -1,51 +1,76 @@
-// app/cash/page.tsx
 "use client";
 
+import type { CashMove, DayClosure } from "@/lib/types";
 import { useEffect, useState } from "react";
 
+type ClosureResponse = {
+  closed: boolean;
+  closure: DayClosure | null;
+};
+
 export default function CashPage() {
-  const [moves, setMoves] = useState<any[]>([]);
-  const [closure, setClosure] = useState<any>(null);
+  const [moves, setMoves] = useState<CashMove[]>([]);
+  const [closure, setClosure] = useState<DayClosure | null>(null);
   const [closed, setClosed] = useState(false);
   const [note, setNote] = useState("");
 
   async function loadCash() {
-    const movesRes = await fetch("/api/cash");
-    const movesData = await movesRes.json();
-    setMoves(movesData);
+    const [movesRes, closureRes] = await Promise.all([
+      fetch("/api/cash"),
+      fetch("/api/day-closure"),
+    ]);
 
-    const closureRes = await fetch("/api/day-closure");
-    const closureData = await closureRes.json();
+    const movesData: CashMove[] = await movesRes.json();
+    const closureData: ClosureResponse = await closureRes.json();
+
+    setMoves(movesData);
     setClosed(closureData.closed);
     setClosure(closureData.closure);
   }
 
   useEffect(() => {
-    loadCash();
+    let cancelled = false;
+
+    void Promise.all([fetch("/api/cash"), fetch("/api/day-closure")])
+      .then(async ([movesRes, closureRes]) => {
+        const movesData: CashMove[] = await movesRes.json();
+        const closureData: ClosureResponse = await closureRes.json();
+
+        if (!cancelled) {
+          setMoves(movesData);
+          setClosed(closureData.closed);
+          setClosure(closureData.closure);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const todayMoves = moves.filter((m) => {
-    const d = new Date(m.createdAt);
+  const todayMoves = moves.filter((move) => {
+    const date = new Date(move.createdAt);
     const now = new Date();
+
     return (
-      d.getFullYear() === now.getFullYear() &&
-      d.getMonth() === now.getMonth() &&
-      d.getDate() === now.getDate()
+      date.getFullYear() === now.getFullYear() &&
+      date.getMonth() === now.getMonth() &&
+      date.getDate() === now.getDate()
     );
   });
 
   const income = todayMoves
-    .filter((m) => m.type === "income")
-    .reduce((acc, m) => acc + Number(m.amount), 0);
+    .filter((move) => move.type === "income")
+    .reduce((acc, move) => acc + Number(move.amount), 0);
 
   const expense = todayMoves
-    .filter((m) => m.type === "expense")
-    .reduce((acc, m) => acc + Number(m.amount), 0);
+    .filter((move) => move.type === "expense")
+    .reduce((acc, move) => acc + Number(move.amount), 0);
 
   const balance = income - expense;
 
   async function closeDay() {
-    const ok = confirm("¿Cerrar el día? No se podrán registrar más retiradas hoy.");
+    const ok = confirm("Cerrar el dia? No se podran registrar mas retiradas hoy.");
     if (!ok) return;
 
     const res = await fetch("/api/day-closure", {
@@ -57,38 +82,38 @@ export default function CashPage() {
     });
 
     if (!res.ok) {
-      const err = await res.json();
-      alert(err.error || "Error al cerrar el día");
+      const err: { error?: string } = await res.json();
+      alert(err.error || "Error al cerrar el dia");
       return;
     }
 
     setNote("");
-    loadCash();
+    await loadCash();
   }
 
   return (
-    <main className="p-6 max-w-2xl mx-auto">
-      <h1 className="text-xl font-bold mb-4">Caja</h1>
+    <main className="mx-auto max-w-2xl p-6">
+      <h1 className="mb-4 text-xl font-bold">Caja</h1>
 
       {closed && (
         <div className="mb-4 rounded bg-green-100 p-3 text-green-700">
-          Día cerrado. Balance:{" "}
-          <strong>{Number(closure?.balance || 0).toFixed(2)} €</strong>
+          Dia cerrado. Balance:{" "}
+          <strong>{Number(closure?.balance || 0).toFixed(2)} EUR</strong>
         </div>
       )}
 
       <div className="mb-4 grid grid-cols-3 gap-2 text-center">
         <div className="rounded border p-3">
           <div className="text-sm text-gray-500">Ingresos</div>
-          <strong>{income.toFixed(2)} €</strong>
+          <strong>{income.toFixed(2)} EUR</strong>
         </div>
         <div className="rounded border p-3">
           <div className="text-sm text-gray-500">Gastos</div>
-          <strong>{expense.toFixed(2)} €</strong>
+          <strong>{expense.toFixed(2)} EUR</strong>
         </div>
         <div className="rounded border p-3">
           <div className="text-sm text-gray-500">Balance</div>
-          <strong>{balance.toFixed(2)} €</strong>
+          <strong>{balance.toFixed(2)} EUR</strong>
         </div>
       </div>
 
@@ -100,11 +125,8 @@ export default function CashPage() {
             value={note}
             onChange={(e) => setNote(e.target.value)}
           />
-          <button
-            onClick={closeDay}
-            className="w-full bg-red-600 p-2 text-white"
-          >
-            Cerrar día
+          <button onClick={closeDay} className="w-full bg-red-600 p-2 text-white">
+            Cerrar dia
           </button>
         </div>
       )}
@@ -112,18 +134,18 @@ export default function CashPage() {
       <h2 className="mb-2 font-semibold">Movimientos de hoy</h2>
 
       <div className="space-y-2">
-        {todayMoves.map((m) => (
-          <div key={m.id} className="flex justify-between rounded border p-3">
+        {todayMoves.map((move) => (
+          <div key={move.id} className="flex justify-between rounded border p-3">
             <div>
               <div className="text-sm text-gray-600">
-                {new Date(m.createdAt).toLocaleString()}
+                {new Date(move.createdAt).toLocaleString()}
               </div>
-              <div>{m.note}</div>
+              <div>{move.note}</div>
             </div>
 
-            <div className={m.type === "income" ? "text-green-600" : "text-red-600"}>
-              {m.type === "income" ? "+" : "-"}
-              {Number(m.amount).toFixed(2)} €
+            <div className={move.type === "income" ? "text-green-600" : "text-red-600"}>
+              {move.type === "income" ? "+" : "-"}
+              {Number(move.amount).toFixed(2)} EUR
             </div>
           </div>
         ))}

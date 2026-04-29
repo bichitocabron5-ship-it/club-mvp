@@ -1,43 +1,34 @@
-// app/api/sales/bulk/route.ts
 import { prisma } from "@/lib/prisma";
+import {
+  DAILY_LIMIT_G,
+  DAILY_LIMIT_UD,
+  getDailyTotals,
+  getErrorMessage,
+  getSaleMemberStatus,
+  getTodayRange,
+  normalizeUnit,
+} from "@/lib/sales";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-const DAILY_LIMIT_G = 10;
-const DAILY_LIMIT_UD = 15;
-
 const bulkSaleSchema = z.object({
   memberId: z.number().int().positive(),
-  items: z.array(
-    z.object({
-      productId: z.number().int().positive(),
-      qty: z.number().positive(),
-    })
-  ).min(1),
+  items: z
+    .array(
+      z.object({
+        productId: z.number().int().positive(),
+        qty: z.number().positive(),
+      })
+    )
+    .min(1),
 });
-
-function getTodayRange() {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-
-  const day = start.toISOString().slice(0, 10);
-
-  return { start, end, day };
-}
 
 export async function POST(req: Request) {
   const body = await req.json();
-
   const parsed = bulkSaleSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Datos inválidos" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Datos invalidos" }, { status: 400 });
   }
 
   const { memberId, items } = parsed.data;
@@ -49,23 +40,22 @@ export async function POST(req: Request) {
 
   if (todayClosed) {
     return NextResponse.json(
-      { error: "El día está cerrado. No se pueden registrar más retiradas." },
+      { error: "El dia esta cerrado. No se pueden registrar mas retiradas." },
       { status: 400 }
     );
   }
 
-  const member = await prisma.member.findUnique({
-    where: { id: memberId },
-  });
+  const memberStatus = await getSaleMemberStatus(memberId);
 
-  if (!member) {
+  if ("error" in memberStatus) {
     return NextResponse.json(
-      { error: "Socio no encontrado" },
-      { status: 404 }
+      { error: memberStatus.error },
+      { status: memberStatus.status }
     );
   }
 
-  const productIds = items.map((i) => i.productId);
+  const { member } = memberStatus;
+  const productIds = items.map((item) => item.productId);
 
   const products = await prisma.product.findMany({
     where: {
@@ -75,21 +65,16 @@ export async function POST(req: Request) {
 
   if (products.length !== productIds.length) {
     return NextResponse.json(
-      { error: "Algún producto no existe" },
+      { error: "Algun producto no existe" },
       { status: 400 }
     );
   }
 
-  const productMap = new Map(products.map((p) => [p.id, p]));
-
-  // Agrupar por producto por si se añade el mismo varias veces
+  const productMap = new Map(products.map((product) => [product.id, product]));
   const grouped = new Map<number, number>();
 
   for (const item of items) {
-    grouped.set(
-      item.productId,
-      (grouped.get(item.productId) || 0) + item.qty
-    );
+    grouped.set(item.productId, (grouped.get(item.productId) || 0) + item.qty);
   }
 
   let cartG = 0;
@@ -100,13 +85,19 @@ export async function POST(req: Request) {
     const product = productMap.get(productId);
 
     if (!product) {
+      return NextResponse.json({ error: "Producto invalido" }, { status: 400 });
+    }
+
+    const unit = normalizeUnit(product.unit);
+
+    if (!unit) {
       return NextResponse.json(
-        { error: "Producto inválido" },
+        { error: `Unidad invalida: ${product.name}` },
         { status: 400 }
       );
     }
 
-    if (product.unit === "UD" && !Number.isInteger(qty)) {
+    if (unit === "UD" && !Number.isInteger(qty)) {
       return NextResponse.json(
         { error: `El producto ${product.name} requiere unidades enteras` },
         { status: 400 }
@@ -120,8 +111,8 @@ export async function POST(req: Request) {
       );
     }
 
-    if (product.unit === "G") cartG += qty;
-    if (product.unit === "UD") cartUD += qty;
+    if (unit === "G") cartG += qty;
+    if (unit === "UD") cartUD += qty;
 
     totalAmount += qty * Number(product.price);
   }
@@ -136,24 +127,18 @@ export async function POST(req: Request) {
     },
   });
 
-  let todayG = 0;
-  let todayUD = 0;
-
-  for (const sale of salesToday) {
-    if (sale.product.unit === "G") todayG += sale.qty;
-    if (sale.product.unit === "UD") todayUD += sale.qty;
-  }
+  const { grams: todayG, units: todayUD } = getDailyTotals(salesToday);
 
   if (todayG + cartG > DAILY_LIMIT_G) {
     return NextResponse.json(
-      { error: `Límite diario de gramos superado (${DAILY_LIMIT_G} g)` },
+      { error: `Limite diario de gramos superado (${DAILY_LIMIT_G} g)` },
       { status: 400 }
     );
   }
 
   if (todayUD + cartUD > DAILY_LIMIT_UD) {
     return NextResponse.json(
-      { error: `Límite diario de unidades superado (${DAILY_LIMIT_UD} ud)` },
+      { error: `Limite diario de unidades superado (${DAILY_LIMIT_UD} ud)` },
       { status: 400 }
     );
   }
@@ -201,7 +186,7 @@ export async function POST(req: Request) {
         data: {
           type: "income",
           amount: totalAmount,
-          note: `Retirada múltiple - ${member.fullName}`,
+          note: `Retirada multiple - ${member.fullName}`,
         },
       });
 
@@ -212,9 +197,9 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json(result);
-  } catch (err: any) {
+  } catch (error: unknown) {
     return NextResponse.json(
-      { error: err.message || "Error al registrar retirada" },
+      { error: getErrorMessage(error, "Error al registrar retirada") },
       { status: 400 }
     );
   }

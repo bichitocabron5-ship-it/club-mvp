@@ -1,10 +1,15 @@
-//app/api/sales/route.ts
 import { prisma } from "@/lib/prisma";
+import {
+  DAILY_LIMIT_G,
+  DAILY_LIMIT_UD,
+  getDailyTotals,
+  getErrorMessage,
+  getSaleMemberStatus,
+  getTodayRange,
+  normalizeUnit,
+} from "@/lib/sales";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-
-const DAILY_LIMIT_G = 10;
-const DAILY_LIMIT_UD = 15;
 
 const saleSchema = z.object({
   memberId: z.number().int().positive(),
@@ -14,127 +19,129 @@ const saleSchema = z.object({
 
 export async function POST(req: Request) {
   const body = await req.json();
-
   const parsed = saleSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Datos inválidos" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Datos invalidos" }, { status: 400 });
   }
 
   const { memberId, productId, qty } = parsed.data;
+  const memberStatus = await getSaleMemberStatus(memberId);
 
-  if (!memberId || !productId || !qty || qty <= 0) {
-    return NextResponse.json({ error: "Datos inválidos" }, { status: 400 });
+  if ("error" in memberStatus) {
+    return NextResponse.json(
+      { error: memberStatus.error },
+      { status: memberStatus.status }
+    );
   }
 
-  // 1. Buscar producto
   const product = await prisma.product.findUnique({
-    where: { id: memberId ? productId : 0 },
+    where: { id: productId },
   });
 
   if (!product) {
     return NextResponse.json({ error: "Producto no existe" }, { status: 404 });
   }
 
-  // 2. Calcular total REAL
+  const productUnit = normalizeUnit(product.unit);
+
+  if (!productUnit) {
+    return NextResponse.json(
+      { error: "Unidad de producto invalida" },
+      { status: 400 }
+    );
+  }
+
+  if (productUnit === "UD" && !Number.isInteger(qty)) {
+    return NextResponse.json(
+      { error: `El producto ${product.name} requiere unidades enteras` },
+      { status: 400 }
+    );
+  }
+
   const total = qty * product.price;
+  const { start, day } = getTodayRange();
 
-  // 3. Calcular consumo de hoy
-  const startToday = new Date();
-    startToday.setHours(0, 0, 0, 0);
+  const todayClosed = await prisma.dayClosure.findUnique({
+    where: { day },
+  });
 
-    const todayKey = startToday.toISOString().slice(0, 10);
-
-    const todayClosed = await prisma.dayClosure.findUnique({
-      where: { day: todayKey },
-    });
-
-    if (todayClosed) {
-      return NextResponse.json(
-        { error: "El día está cerrado. No se pueden registrar más retiradas." },
-        { status: 400 }
-      );
-    }
+  if (todayClosed) {
+    return NextResponse.json(
+      { error: "El dia esta cerrado. No se pueden registrar mas retiradas." },
+      { status: 400 }
+    );
+  }
 
   const salesToday = await prisma.sale.findMany({
     where: {
       memberId,
-      createdAt: { gte: startToday },
+      createdAt: { gte: start },
     },
     include: { product: true },
   });
 
-  let totalG = 0;
-  let totalUD = 0;
+  const { grams, units } = getDailyTotals(salesToday);
 
-  for (const s of salesToday) {
-    if (s.product.unit === "g") totalG += s.qty;
-    if (s.product.unit === "ud") totalUD += s.qty;
+  if (productUnit === "G" && grams + qty > DAILY_LIMIT_G) {
+    return NextResponse.json({ error: "Limite diario gramos" }, { status: 400 });
   }
 
-  // 4. Validar límites
-  if (product.unit === "g" && totalG + qty > DAILY_LIMIT_G) {
-    return NextResponse.json({ error: "Límite diario gramos" }, { status: 400 });
+  if (productUnit === "UD" && units + qty > DAILY_LIMIT_UD) {
+    return NextResponse.json(
+      { error: "Limite diario unidades" },
+      { status: 400 }
+    );
   }
 
-  if (product.unit === "ud" && totalUD + qty > DAILY_LIMIT_UD) {
-    return NextResponse.json({ error: "Límite diario unidades" }, { status: 400 });
-  }
-
-  // 5. Validar stock
   if (product.stock < qty) {
     return NextResponse.json({ error: "Sin stock" }, { status: 400 });
   }
 
-  // 6. Crear venta + actualizar stock
   try {
-  const result = await prisma.$transaction(async (tx) => {
-    const sale = await tx.sale.create({
-      data: {
-        memberId,
-        productId,
-        qty,
-        totalAmount: total,
-      },
-    });
-
-    const productUpdated = await tx.product.updateMany({
-      where: {
-        id: productId,
-        stock: {
-          gte: qty, // 🔥 evita stock negativo por concurrencia
+    const result = await prisma.$transaction(async (tx) => {
+      const sale = await tx.sale.create({
+        data: {
+          memberId,
+          productId,
+          qty,
+          totalAmount: total,
         },
-      },
-      data: {
-        stock: {
-          decrement: qty,
+      });
+
+      const productUpdated = await tx.product.updateMany({
+        where: {
+          id: productId,
+          stock: {
+            gte: qty,
+          },
         },
-      },
-    });
+        data: {
+          stock: {
+            decrement: qty,
+          },
+        },
+      });
 
-    if (productUpdated.count === 0) {
-      throw new Error("Stock insuficiente (concurrencia)");
-    }
-    
-    await tx.cashMove.create({
-      data: {
-        type: "income",
-        amount: total,
-        note: `Retirada producto ${product.name}`,
-      },
-    });
+      if (productUpdated.count === 0) {
+        throw new Error("Stock insuficiente (concurrencia)");
+      }
 
-    return sale;
+      await tx.cashMove.create({
+        data: {
+          type: "income",
+          amount: total,
+          note: `Retirada producto ${product.name}`,
+        },
+      });
+
+      return sale;
     });
 
     return NextResponse.json(result);
-
-  } catch (err: any) {
+  } catch (error: unknown) {
     return NextResponse.json(
-      { error: err.message || "Error en la venta" },
+      { error: getErrorMessage(error, "Error en la venta") },
       { status: 400 }
     );
   }

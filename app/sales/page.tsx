@@ -1,23 +1,12 @@
-// app/sales/page.tsx
 "use client";
 
+import { DAILY_LIMIT_G, DAILY_LIMIT_UD } from "@/lib/sales-rules";
+import type { MemberSummary, ProductSummary } from "@/lib/types";
 import { useEffect, useMemo, useState } from "react";
 
-const DAILY_LIMIT_G = 10;
-const DAILY_LIMIT_UD = 15;
-
-type Member = {
-  id: number;
-  fullName: string;
-  dni?: string;
-};
-
-type Product = {
-  id: number;
-  name: string;
-  unit: "G" | "UD";
-  price: number;
-  stock: number;
+type TodayTotals = {
+  grams: number;
+  units: number;
 };
 
 type CartItem = {
@@ -25,44 +14,74 @@ type CartItem = {
   qty: number;
 };
 
-export default function SalesPage() {
-  const [members, setMembers] = useState<Member[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [today, setToday] = useState({ grams: 0, units: 0 });
+const emptyToday: TodayTotals = {
+  grams: 0,
+  units: 0,
+};
 
+export default function SalesPage() {
+  const [members, setMembers] = useState<MemberSummary[]>([]);
+  const [products, setProducts] = useState<ProductSummary[]>([]);
+  const [today, setToday] = useState<TodayTotals>(emptyToday);
   const [memberId, setMemberId] = useState("");
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    fetch("/api/members").then((res) => res.json()).then(setMembers);
-    fetch("/api/products").then((res) => res.json()).then(setProducts);
+    let cancelled = false;
+
+    void Promise.all([fetch("/api/members"), fetch("/api/products")]).then(
+      async ([membersRes, productsRes]) => {
+        const membersData: MemberSummary[] = await membersRes.json();
+        const productsData: ProductSummary[] = await productsRes.json();
+
+        if (!cancelled) {
+          setMembers(membersData);
+          setProducts(productsData);
+        }
+      }
+    );
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
     if (!memberId) {
-      setToday({ grams: 0, units: 0 });
       return;
     }
 
-    fetch(`/api/members/${memberId}/today`)
+    let cancelled = false;
+
+    void fetch(`/api/members/${memberId}/today`)
       .then((res) => res.json())
-      .then(setToday);
+      .then((data: TodayTotals) => {
+        if (!cancelled) {
+          setToday(data);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [memberId]);
 
-  const filteredProducts = useMemo(() => {
-    const q = search.trim().toLowerCase();
+  const visibleToday = memberId ? today : emptyToday;
 
-    return products.filter((p) => {
-      if (!q) return true;
-      return p.name.toLowerCase().includes(q);
+  const filteredProducts = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    return products.filter((product) => {
+      if (!query) return true;
+      return product.name.toLowerCase().includes(query);
     });
   }, [products, search]);
 
   const cartLines = useMemo(() => {
     return cart.map((item) => {
-      const product = products.find((p) => p.id === item.productId);
+      const product = products.find((candidate) => candidate.id === item.productId);
       const price = product ? Number(product.price) : 0;
       const stock = product ? Number(product.stock) : 0;
       const lineTotal = item.qty * price;
@@ -89,9 +108,8 @@ export default function SalesPage() {
     return acc;
   }, 0);
 
-  const gramsAfter = today.grams + cartG;
-  const unitsAfter = today.units + cartUD;
-
+  const gramsAfter = visibleToday.grams + cartG;
+  const unitsAfter = visibleToday.units + cartUD;
   const overGrams = gramsAfter > DAILY_LIMIT_G;
   const overUnits = unitsAfter > DAILY_LIMIT_UD;
 
@@ -108,18 +126,15 @@ export default function SalesPage() {
     stockProblems.length > 0 ||
     loading;
 
-  function addProduct(product: Product) {
+  function addProduct(product: ProductSummary) {
     if (Number(product.stock) <= 0) return;
 
     setCart((prev) => {
-      const existing = prev.find((i) => i.productId === product.id);
+      const existing = prev.find((item) => item.productId === product.id);
 
       if (existing) {
-        const nextQty =
-          product.unit === "UD" ? existing.qty + 1 : existing.qty + 1;
-
-        return prev.map((i) =>
-          i.productId === product.id ? { ...i, qty: nextQty } : i
+        return prev.map((item) =>
+          item.productId === product.id ? { ...item, qty: existing.qty + 1 } : item
         );
       }
 
@@ -134,34 +149,24 @@ export default function SalesPage() {
   }
 
   function updateQty(productId: number, value: string) {
-    const product = products.find((p) => p.id === productId);
+    const product = products.find((candidate) => candidate.id === productId);
     if (!product) return;
 
     let qty = Number(value);
 
     if (!Number.isFinite(qty) || qty < 0) qty = 0;
-
-    if (product.unit === "UD") {
-      qty = Math.floor(qty);
-    }
+    if (product.unit === "UD") qty = Math.floor(qty);
 
     setCart((prev) =>
-      prev.map((i) =>
-        i.productId === productId
-          ? {
-              ...i,
-              qty,
-            }
-          : i
-      )
+      prev.map((item) => (item.productId === productId ? { ...item, qty } : item))
     );
   }
 
   function removeProduct(productId: number) {
-    setCart((prev) => prev.filter((i) => i.productId !== productId));
+    setCart((prev) => prev.filter((item) => item.productId !== productId));
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (invalid) return;
 
@@ -174,14 +179,14 @@ export default function SalesPage() {
       },
       body: JSON.stringify({
         memberId: Number(memberId),
-        items: cart.filter((i) => i.qty > 0),
+        items: cart.filter((item) => item.qty > 0),
       }),
     });
 
     setLoading(false);
 
     if (!res.ok) {
-      const err = await res.json();
+      const err: { error?: string } = await res.json();
       alert(err.error || "Error al registrar retirada");
       return;
     }
@@ -190,17 +195,19 @@ export default function SalesPage() {
 
     setCart([]);
 
-    const refreshedProducts = await fetch("/api/products").then((r) => r.json());
+    const refreshedProducts: ProductSummary[] = await fetch("/api/products").then((r) =>
+      r.json()
+    );
     setProducts(refreshedProducts);
 
-    const refreshedToday = await fetch(`/api/members/${memberId}/today`).then(
-      (r) => r.json()
-    );
+    const refreshedToday: TodayTotals = await fetch(
+      `/api/members/${memberId}/today`
+    ).then((r) => r.json());
     setToday(refreshedToday);
   }
 
   return (
-    <main className="p-4 md:p-6 max-w-6xl mx-auto">
+    <main className="mx-auto max-w-6xl p-4 md:p-6">
       <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className="text-2xl font-bold">TPV de retiradas</h1>
@@ -210,8 +217,9 @@ export default function SalesPage() {
         </div>
 
         <div className="rounded border bg-blue-50 p-3 text-sm">
-          Hoy: <strong>{today.grams.toFixed(2)} g</strong> / {DAILY_LIMIT_G} g ·{" "}
-          <strong>{today.units.toFixed(0)} ud</strong> / {DAILY_LIMIT_UD} ud
+          Hoy: <strong>{visibleToday.grams.toFixed(2)} g</strong> / {DAILY_LIMIT_G} g
+          {" · "}
+          <strong>{visibleToday.units.toFixed(0)} ud</strong> / {DAILY_LIMIT_UD} ud
         </div>
       </div>
 
@@ -229,9 +237,9 @@ export default function SalesPage() {
               required
             >
               <option value="">Selecciona socio</option>
-              {members.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.fullName}
+              {members.map((member) => (
+                <option key={member.id} value={member.id}>
+                  {member.fullName}
                 </option>
               ))}
             </select>
@@ -250,30 +258,30 @@ export default function SalesPage() {
           </div>
 
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
-            {filteredProducts.map((p) => {
-              const noStock = Number(p.stock) <= 0;
+            {filteredProducts.map((product) => {
+              const noStock = Number(product.stock) <= 0;
 
               return (
                 <button
-                  key={p.id}
+                  key={product.id}
                   type="button"
-                  onClick={() => addProduct(p)}
+                  onClick={() => addProduct(product)}
                   disabled={noStock}
                   className="min-h-32 rounded border p-3 text-left shadow-sm hover:bg-gray-50 disabled:opacity-40"
                 >
-                  <div className="font-semibold">{p.name}</div>
+                  <div className="font-semibold">{product.name}</div>
 
                   <div className="mt-1 text-sm text-gray-500">
-                    Stock: {Number(p.stock).toFixed(2)} {p.unit}
+                    Stock: {Number(product.stock).toFixed(2)} {product.unit}
                   </div>
 
                   <div className="mt-1 text-sm">
-                    {Number(p.price).toFixed(2)} €/
-                    {p.unit === "G" ? "g" : "ud"}
+                    {Number(product.price).toFixed(2)} EUR/
+                    {product.unit === "G" ? "g" : "ud"}
                   </div>
 
                   <div className="mt-3 text-sm font-medium text-blue-600">
-                    {noStock ? "Sin stock" : "Añadir"}
+                    {noStock ? "Sin stock" : "Anadir"}
                   </div>
                 </button>
               );
@@ -286,7 +294,7 @@ export default function SalesPage() {
 
           {cartLines.length === 0 && (
             <div className="rounded bg-gray-50 p-3 text-sm text-gray-500">
-              Añade productos para registrar una retirada.
+              Anade productos para registrar una retirada.
             </div>
           )}
 
@@ -319,16 +327,14 @@ export default function SalesPage() {
                       step={line.product?.unit === "UD" ? "1" : "0.01"}
                       min="0"
                       value={line.qty}
-                      onChange={(e) =>
-                        updateQty(line.productId, e.target.value)
-                      }
+                      onChange={(e) => updateQty(line.productId, e.target.value)}
                     />
                   </div>
 
                   <div>
-                    <label className="text-xs text-gray-500">Total línea</label>
+                    <label className="text-xs text-gray-500">Total linea</label>
                     <div className="rounded border bg-gray-50 p-2">
-                      {line.lineTotal.toFixed(2)} €
+                      {line.lineTotal.toFixed(2)} EUR
                     </div>
                   </div>
                 </div>
@@ -344,15 +350,15 @@ export default function SalesPage() {
 
           <div className="mt-4 rounded bg-gray-900 p-4 text-white">
             <div className="text-sm opacity-80">Total retirada</div>
-            <div className="text-3xl font-bold">{cartTotal.toFixed(2)} €</div>
+            <div className="text-3xl font-bold">{cartTotal.toFixed(2)} EUR</div>
           </div>
 
           <div className="mt-3 rounded border p-3 text-sm">
             Con carrito:{" "}
             <strong className={overGrams ? "text-red-600" : "text-green-700"}>
               {gramsAfter.toFixed(2)} g
-            </strong>{" "}
-            ·{" "}
+            </strong>
+            {" · "}
             <strong className={overUnits ? "text-red-600" : "text-green-700"}>
               {unitsAfter.toFixed(0)} ud
             </strong>
@@ -360,13 +366,13 @@ export default function SalesPage() {
 
           {overGrams && (
             <div className="mt-3 rounded bg-red-100 p-3 text-sm text-red-700">
-              Se supera el límite diario de {DAILY_LIMIT_G} g.
+              Se supera el limite diario de {DAILY_LIMIT_G} g.
             </div>
           )}
 
           {overUnits && (
             <div className="mt-3 rounded bg-red-100 p-3 text-sm text-red-700">
-              Se supera el límite diario de {DAILY_LIMIT_UD} ud.
+              Se supera el limite diario de {DAILY_LIMIT_UD} ud.
             </div>
           )}
 

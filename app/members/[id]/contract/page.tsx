@@ -1,14 +1,15 @@
-// app/members/[id]/contract/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import type { SigningSessionData } from "@/lib/types";
+import Image from "next/image";
 import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
 
 export default function MemberContractPage() {
-  const params = useParams();
+  const params = useParams<{ id: string }>();
   const memberId = Number(params.id);
 
-  const [session, setSession] = useState<any>(null);
+  const [session, setSession] = useState<SigningSessionData | null>(null);
 
   async function createSession() {
     const res = await fetch("/api/signing-sessions", {
@@ -19,7 +20,7 @@ export default function MemberContractPage() {
       body: JSON.stringify({ memberId }),
     });
 
-    const data = await res.json();
+    const data: SigningSessionData = await res.json();
     setSession(data);
   }
 
@@ -28,26 +29,26 @@ export default function MemberContractPage() {
 
     const interval = setInterval(async () => {
       const res = await fetch(`/api/signing-sessions/${session.token}`);
-      const data = await res.json();
+      const data: SigningSessionData = await res.json();
       setSession(data);
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [session?.token, session?.status]);
+  }, [session?.status, session?.token]);
 
   const signUrl =
-    session && `${window.location.origin}/sign/${session.token}`;
+    session ? `${window.location.origin}/sign/${session.token}` : "";
 
   return (
     <main>
-      <h1 className="text-2xl font-bold mb-4">Contrato y firma</h1>
+      <h1 className="mb-4 text-2xl font-bold">Contrato y firma</h1>
 
       {!session && (
         <button
           onClick={createSession}
-          className="rounded bg-blue-600 p-4 text-white font-bold"
+          className="rounded bg-blue-600 p-4 font-bold text-white"
         >
-          Crear sesión de firma
+          Crear sesion de firma
         </button>
       )}
 
@@ -68,7 +69,7 @@ export default function MemberContractPage() {
                 onFocus={(e) => e.currentTarget.select()}
               />
               <p className="mt-2 text-sm text-gray-500">
-                Si la tablet está en la misma red, usa la IP local del ordenador
+                Si la tablet esta en la misma red, usa la IP local del ordenador
                 en lugar de localhost.
               </p>
             </div>
@@ -76,14 +77,15 @@ export default function MemberContractPage() {
 
           {session.status === "SIGNED" && (
             <div className="rounded border bg-green-50 p-4">
-              <h2 className="font-bold text-green-700 mb-3">
-                Contrato firmado
-              </h2>
+              <h2 className="mb-3 font-bold text-green-700">Contrato firmado</h2>
 
               {session.signatureImage && (
-                <img
+                <Image
                   src={session.signatureImage}
                   alt="Firma"
+                  width={384}
+                  height={192}
+                  unoptimized
                   className="max-w-sm rounded border bg-white p-2"
                 />
               )}

@@ -8,12 +8,14 @@ datasource db {
 }
 
 model Member {
-  id        Int      @id @default(autoincrement())
+  id        Int       @id @default(autoincrement())
   fullName  String
-  dni       String   @unique
+  dni       String    @unique
   phone     String?
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
+  active    Boolean   @default(true)
+  joinedAt  DateTime  @default(now())
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
 
   sales     Sale[]
   contracts MemberContract[]
@@ -23,7 +25,7 @@ model Member {
 model Product {
   id        Int      @id @default(autoincrement())
   name      String
-  unit      String   // "g" o "ud"
+  unit      String   // "G" o "UD"
   price     Float
   stock     Float    @default(0)
   createdAt DateTime @default(now())

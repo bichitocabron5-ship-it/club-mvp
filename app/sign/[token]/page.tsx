@@ -1,32 +1,51 @@
-// app/sign/[token]/page.tsx
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import type { SigningSessionData } from "@/lib/types";
 import { useParams } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import SignatureCanvas from "react-signature-canvas";
 
+type SignForm = {
+  fullName: string;
+  dni: string;
+  address: string;
+  birthPlace: string;
+  birthDate: string;
+  phone: string;
+  email: string;
+  consumptionGrams: string;
+};
+
+const emptyForm: SignForm = {
+  fullName: "",
+  dni: "",
+  address: "",
+  birthPlace: "",
+  birthDate: "",
+  phone: "",
+  email: "",
+  consumptionGrams: "30",
+};
+
 export default function SignPage() {
-  const params = useParams();
-  const token = params.token as string;
+  const params = useParams<{ token: string }>();
+  const token = params.token;
 
   const sigRef = useRef<SignatureCanvas | null>(null);
-  const [session, setSession] = useState<any>(null);
+  const [session, setSession] = useState<SigningSessionData | null>(null);
   const [saved, setSaved] = useState(false);
-  const [form, setForm] = useState({
-    fullName: "",
-    dni: "",
-    address: "",
-    birthPlace: "",
-    birthDate: "",
-    phone: "",
-    email: "",
-    consumptionGrams: "30",
-  });
+  const [form, setForm] = useState<SignForm>(emptyForm);
 
   useEffect(() => {
-    fetch(`/api/signing-sessions/${token}`)
+    if (!token) return;
+
+    let cancelled = false;
+
+    void fetch(`/api/signing-sessions/${token}`)
       .then((res) => res.json())
-      .then((data) => {
+      .then((data: SigningSessionData) => {
+        if (cancelled) return;
+
         setSession(data);
         setForm({
           fullName: data.member?.fullName || "",
@@ -39,6 +58,10 @@ export default function SignPage() {
           consumptionGrams: "30",
         });
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
   async function saveSignature() {
@@ -47,9 +70,7 @@ export default function SignPage() {
       return;
     }
 
-    const signatureImage = sigRef.current
-      .getTrimmedCanvas()
-      .toDataURL("image/png");
+    const signatureImage = sigRef.current.getTrimmedCanvas().toDataURL("image/png");
 
     const res = await fetch(`/api/signing-sessions/${token}`, {
       method: "POST",
@@ -79,8 +100,8 @@ export default function SignPage() {
   }
 
   return (
-    <main className="p-4 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold mb-2">Firma de contrato</h1>
+    <main className="mx-auto max-w-3xl p-4">
+      <h1 className="mb-2 text-2xl font-bold">Firma de contrato</h1>
 
       <div className="mb-4 rounded border bg-gray-50 p-4">
         <p>
@@ -91,7 +112,7 @@ export default function SignPage() {
         </p>
       </div>
 
-      <div className="mb-4 rounded border p-4 space-y-3">
+      <div className="mb-4 space-y-3 rounded border p-4">
         <h2 className="font-bold">Datos del socio</h2>
 
         <input
@@ -131,7 +152,7 @@ export default function SignPage() {
 
         <input
           className="w-full border p-3"
-          placeholder="Teléfono"
+          placeholder="Telefono"
           value={form.phone}
           onChange={(e) => setForm({ ...form, phone: e.target.value })}
         />
@@ -153,10 +174,10 @@ export default function SignPage() {
       </div>
 
       <div className="mb-4 rounded border p-4 text-sm leading-6">
-        <h2 className="font-bold mb-2">Contrato provisional</h2>
+        <h2 className="mb-2 font-bold">Contrato provisional</h2>
         <p>
-          El socio declara haber leído y aceptado las condiciones internas del
-          club. Este texto será sustituido por el PDF oficial del contrato.
+          El socio declara haber leido y aceptado las condiciones internas del
+          club. Este texto sera sustituido por el PDF oficial del contrato.
         </p>
       </div>
 
@@ -165,7 +186,7 @@ export default function SignPage() {
           ref={sigRef}
           penColor="black"
           canvasProps={{
-            className: "w-full h-64 border bg-white",
+            className: "h-64 w-full border bg-white",
           }}
         />
       </div>

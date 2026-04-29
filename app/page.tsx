@@ -1,15 +1,25 @@
-// app/page.tsx
 "use client";
 
+import type { DashboardData } from "@/lib/types";
 import { useEffect, useState } from "react";
 
 export default function DashboardPage() {
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<DashboardData | null>(null);
 
   useEffect(() => {
-    fetch("/api/dashboard")
+    let cancelled = false;
+
+    void fetch("/api/dashboard")
       .then((res) => res.json())
-      .then(setData);
+      .then((nextData: DashboardData) => {
+        if (!cancelled) {
+          setData(nextData);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (!data) {
@@ -18,17 +28,17 @@ export default function DashboardPage() {
 
   return (
     <main>
-      <h1 className="text-2xl font-bold mb-4">Dashboard</h1>
+      <h1 className="mb-4 text-2xl font-bold">Dashboard</h1>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
         <div className="rounded border p-4">
           <div className="text-sm text-gray-500">Ingresos hoy</div>
-          <strong>{Number(data.income).toFixed(2)} €</strong>
+          <strong>{Number(data.income).toFixed(2)} EUR</strong>
         </div>
 
         <div className="rounded border p-4">
           <div className="text-sm text-gray-500">Balance hoy</div>
-          <strong>{Number(data.balance).toFixed(2)} €</strong>
+          <strong>{Number(data.balance).toFixed(2)} EUR</strong>
         </div>
 
         <div className="rounded border p-4">
@@ -43,41 +53,44 @@ export default function DashboardPage() {
       </div>
 
       <section className="mb-6">
-        <h2 className="font-semibold mb-2">Últimas retiradas</h2>
+        <h2 className="mb-2 font-semibold">Ultimas retiradas</h2>
 
         <div className="space-y-2">
           {data.lastSales.length === 0 && (
             <div className="text-sm text-gray-500">Sin retiradas hoy.</div>
           )}
 
-          {data.lastSales.map((s: any) => (
-            <div key={s.id} className="rounded border p-3 flex justify-between">
+          {data.lastSales.map((sale) => (
+            <div key={sale.id} className="flex justify-between rounded border p-3">
               <div>
-                <div className="font-medium">{s.member.fullName}</div>
+                <div className="font-medium">{sale.member.fullName}</div>
                 <div className="text-sm text-gray-500">
-                  {s.product.name} · {s.qty} {s.product.unit}
+                  {sale.product.name} · {sale.qty} {sale.product.unit}
                 </div>
               </div>
 
-              <strong>{Number(s.totalAmount).toFixed(2)} €</strong>
+              <strong>{Number(sale.totalAmount).toFixed(2)} EUR</strong>
             </div>
           ))}
         </div>
       </section>
 
       <section>
-        <h2 className="font-semibold mb-2">Stock bajo</h2>
+        <h2 className="mb-2 font-semibold">Stock bajo</h2>
 
         <div className="space-y-2">
           {data.lowStock.length === 0 && (
             <div className="text-sm text-gray-500">Sin alertas de stock.</div>
           )}
 
-          {data.lowStock.map((p: any) => (
-            <div key={p.id} className="rounded border p-3 flex justify-between">
-              <span>{p.name}</span>
+          {data.lowStock.map((product) => (
+            <div
+              key={product.id}
+              className="flex justify-between rounded border p-3"
+            >
+              <span>{product.name}</span>
               <strong className="text-red-600">
-                {p.stock} {p.unit}
+                {product.stock} {product.unit}
               </strong>
             </div>
           ))}
