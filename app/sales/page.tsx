@@ -29,6 +29,21 @@ type MemberOperationalStatus = {
   };
 };
 
+const PRODUCT_CATEGORIES = [
+  { value: "ALL", label: "Todo" },
+  { value: "CANNABIS", label: "Cannabis" },
+  { value: "SATIVA", label: "Sativa" },
+  { value: "INDICA", label: "Índica" },
+  { value: "HYBRID", label: "Híbrida" },
+  { value: "CBD", label: "CBD" },
+  { value: "RESIN", label: "Resina" },
+  { value: "HASH", label: "Hash" },
+  { value: "JOINT", label: "Joints" },
+  { value: "DRINK", label: "Bebidas" },
+  { value: "FOOD", label: "Comida" },
+  { value: "MERCH", label: "Merch" },
+];
+
 const emptyToday: TodayTotals = {
   grams: 0,
   units: 0,
@@ -46,6 +61,7 @@ export default function SalesPage() {
   const [loading, setLoading] = useState(false);
   const [rfidInput, setRfidInput] = useState("");
   const [rfidError, setRfidError] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("ALL");
 
   const rfidRef = useRef<HTMLInputElement | null>(null);
 
@@ -104,10 +120,14 @@ export default function SalesPage() {
     return products
       .filter((product) => product.active)
       .filter((product) => {
+        if (selectedCategory === "ALL") return true;
+        return product.category === selectedCategory;
+      })
+      .filter((product) => {
         if (!query) return true;
         return product.name.toLowerCase().includes(query);
       });
-  }, [products, search]);
+  }, [products, search, selectedCategory]);
 
   const filteredMembers = useMemo(() => {
     const q = memberSearch.trim().toLowerCase();
@@ -427,6 +447,27 @@ export default function SalesPage() {
             />
           </div>
 
+          <div className="rounded border p-3">
+            <div className="mb-2 text-sm font-medium">Categorías rápidas</div>
+
+            <div className="flex flex-wrap gap-2">
+              {PRODUCT_CATEGORIES.map((category) => (
+                <button
+                  key={category.value}
+                  type="button"
+                  onClick={() => setSelectedCategory(category.value)}
+                  className={`rounded-full px-4 py-2 text-sm font-bold ${
+                    selectedCategory === category.value
+                      ? "bg-gray-900 text-white"
+                      : "bg-gray-100 text-gray-700"
+                  }`}
+                >
+                  {category.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
             {filteredProducts.map((product) => {
               const noStock = Number(product.stock) <= 0;
@@ -442,6 +483,10 @@ export default function SalesPage() {
                   }`}
                 >
                   <div className="text-lg font-black">{product.name}</div>
+
+                  <div className="mt-1 text-xs font-bold text-gray-500">
+                    {product.category}
+                  </div>
 
                   <div className="mt-2 text-2xl font-bold text-blue-700">
                     {Number(product.price).toFixed(2)} €
