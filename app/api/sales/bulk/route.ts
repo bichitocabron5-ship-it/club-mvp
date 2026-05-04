@@ -151,6 +151,9 @@ export async function POST(req: Request) {
         const product = productMap.get(productId)!;
         const lineTotal = qty * Number(product.price);
 
+        const previousStock = Number(product.stock);
+        const newStock = previousStock - qty;
+
         const updated = await tx.product.updateMany({
           where: {
             id: productId,
@@ -178,6 +181,17 @@ export async function POST(req: Request) {
             note: "Retirada en carrito",
           },
         });
+      
+       await tx.stockMove.create({
+        data: {
+          productId,
+          type: "OUT",
+          qty,
+          previousStock,
+          newStock,
+          note: `Retirada en carrito`,
+        },
+      });
 
         createdSales.push(sale);
       }
