@@ -129,6 +129,33 @@ export default function MembersPage() {
                     ? ` · Caduca ${new Date(member.expiresAt).toLocaleDateString()}`
                     : ""}
                 </div>
+                <div className="flex items-center justify-between border p-3 rounded">
+                  <div>
+                    <div className="font-semibold">{member.fullName}</div>
+                    <div className="text-sm text-gray-500">{member.dni}</div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    {!member.active && (
+                      <span className="bg-red-100 text-red-700 px-2 py-1 rounded text-sm">
+                        Bloqueado
+                      </span>
+                    )}
+
+                    {member.expiresAt && new Date(member.expiresAt) < new Date() && (
+                      <span className="bg-red-100 text-red-700 px-2 py-1 rounded text-sm">
+                        Caducado
+                      </span>
+                    )}
+
+                    {member.active &&
+                      (!member.expiresAt || new Date(member.expiresAt) >= new Date()) && (
+                        <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-sm">
+                          Activo
+                        </span>
+                      )}
+                  </div>
+                </div>
               </div>
             </Link>
           );

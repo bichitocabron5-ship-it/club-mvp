@@ -37,9 +37,110 @@ export default function MemberDetail() {
 
   if (!data) return <div>Cargando...</div>;
 
+  type MemberStatusPayload = {
+    active?: boolean;
+    renewOneYear?: boolean;
+    clearExpiration?: boolean;
+  };
+
+  async function updateMemberStatus(payload: MemberStatusPayload) {
+    const res = await fetch(`/api/members/${id}/status`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      alert("Error actualizando socio");
+      return;
+    }
+
+    const historyRes = await fetch(`/api/members/${id}/history`);
+    const historyData: MemberHistoryData = await historyRes.json();
+    setData(historyData);
+  }
+
   return (
     <main>
       <h1 className="mb-4 text-xl font-bold">Historial del socio</h1>
+
+      {data.member && (
+        <div className="mb-4 rounded border p-4">
+          <div className="mb-2 text-sm text-gray-500">Estado del socio</div>
+
+          <div className="flex flex-wrap gap-2">
+            <span
+              className={
+                data.member.active
+                  ? "rounded bg-green-100 px-3 py-1 text-green-700"
+                  : "rounded bg-red-100 px-3 py-1 text-red-700"
+              }
+            >
+            {data.member.active ? "Activo" : "Bloqueado"}
+            </span>
+
+            {data.member.expiresAt && new Date(data.member.expiresAt) < new Date() && (
+              <span className="rounded bg-red-100 px-3 py-1 text-red-700">
+                Membresía caducada
+              </span>
+            )}
+
+            {data.member.expiresAt && new Date(data.member.expiresAt) >= new Date() && (
+              <span className="rounded bg-blue-100 px-3 py-1 text-blue-700">
+                Válido hasta {new Date(data.member.expiresAt).toLocaleDateString()}
+              </span>
+            )}
+
+            {!data.member.expiresAt && (
+              <span className="rounded bg-yellow-100 px-3 py-1 text-yellow-700">
+                Sin fecha de vencimiento
+              </span>
+            )}
+          </div>
+
+          <div className="mt-3 text-sm text-gray-500">
+            Alta:{" "}
+            {data.member.joinedAt
+              ? new Date(data.member.joinedAt).toLocaleDateString()
+              : "Sin fecha"}
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            {data.member.active ? (
+              <button
+                onClick={() => updateMemberStatus({ active: false })}
+                className="rounded bg-red-600 px-4 py-2 text-white"
+              >
+                Bloquear socio
+              </button>
+            ) : (
+              <button
+                onClick={() => updateMemberStatus({ active: true })}
+                className="rounded bg-green-600 px-4 py-2 text-white"
+              >
+                Activar socio
+              </button>
+            )}
+
+            <button
+              onClick={() => updateMemberStatus({ renewOneYear: true })}
+              className="rounded bg-blue-600 px-4 py-2 text-white"
+            >
+              Renovar 1 año
+            </button>
+
+            <button
+              onClick={() => updateMemberStatus({ clearExpiration: true })}
+              className="rounded border px-4 py-2"
+            >
+              Quitar vencimiento
+            </button>
+          </div>
+
+        </div>
+      )}
 
       <a
         href={`/members/${id}/contract`}

@@ -15,22 +15,33 @@ model Member {
   active    Boolean   @default(true)
   joinedAt  DateTime  @default(now())
   expiresAt DateTime?
+  rfidCode  String?   @unique
   createdAt DateTime  @default(now())
 
-  sales     Sale[]
-  contracts MemberContract[]
+  sales           Sale[]
+  contracts       MemberContract[]
   signingSessions SigningSession[]
+  accessLogs      AccessLog[]
+}
+
+model AccessLog {
+  id       Int    @id @default(autoincrement())
+  memberId Int
+  member   Member @relation(fields: [memberId], references: [id])
+
+  type      String // "IN" | "OUT"
+  createdAt DateTime @default(now())
 }
 
 model Product {
   id        Int      @id @default(autoincrement())
   name      String
-  unit      String   // "G" o "UD"
+  unit      String // "G" o "UD"
   price     Float
   stock     Float    @default(0)
   createdAt DateTime @default(now())
 
-  sales     Sale[]
+  sales Sale[]
 }
 
 model Sale {
@@ -48,7 +59,7 @@ model Sale {
 
 model CashMove {
   id        Int      @id @default(autoincrement())
-  type      String   // income / expense
+  type      String // income / expense
   amount    Float
   note      String?
   createdAt DateTime @default(now())
@@ -76,9 +87,9 @@ model ContractTemplate {
 }
 
 model MemberContract {
-  id                 Int      @id @default(autoincrement())
+  id                 Int  @id @default(autoincrement())
   memberId           Int
-  signingSessionId Int?     @unique
+  signingSessionId   Int? @unique
   contractTemplateId Int?
 
   fullName         String
@@ -90,14 +101,13 @@ model MemberContract {
   email            String?
   consumptionGrams Int?
 
-  
-  signatureImage     String   @db.Text
-  signedPdfUrl       String?
-  signedAt           DateTime @default(now())
+  signatureImage String   @db.Text
+  signedPdfUrl   String?
+  signedAt       DateTime @default(now())
 
-  member             Member           @relation(fields: [memberId], references: [id])
-  contractTemplate   ContractTemplate? @relation(fields: [contractTemplateId], references: [id])
-  signingSession     SigningSession? @relation(fields: [signingSessionId], references: [id])
+  member           Member            @relation(fields: [memberId], references: [id])
+  contractTemplate ContractTemplate? @relation(fields: [contractTemplateId], references: [id])
+  signingSession   SigningSession?   @relation(fields: [signingSessionId], references: [id])
 }
 
 model SigningSession {
@@ -109,6 +119,6 @@ model SigningSession {
   signedAt       DateTime?
   createdAt      DateTime  @default(now())
 
-  member Member @relation(fields: [memberId], references: [id])
+  member   Member          @relation(fields: [memberId], references: [id])
   contract MemberContract?
 }

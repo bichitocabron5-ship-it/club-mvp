@@ -83,6 +83,16 @@ export type MemberHistorySale = {
 };
 
 export type MemberHistoryData = {
+  member: {
+    id: number;
+    fullName: string;
+    dni: string;
+    phone: string | null;
+    active: boolean;
+    joinedAt: string | null;
+    expiresAt: string | null;
+    createdAt: string;
+  };
   sales: MemberHistorySale[];
   totalSpent: number;
   count: number;

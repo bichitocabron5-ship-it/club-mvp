@@ -16,16 +16,21 @@ export async function GET(
     );
   }
 
+  const member = await prisma.member.findUnique({
+    where: { id: memberId },
+  });
+
+  if (!member) {
+    return NextResponse.json(
+      { error: "Socio no encontrado" },
+      { status: 404 }
+    );
+  }
+
   const sales = await prisma.sale.findMany({
-    where: {
-      memberId,
-    },
-    include: {
-      product: true,
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
+    where: { memberId },
+    include: { product: true },
+    orderBy: { createdAt: "desc" },
   });
 
   const totalSpent = sales.reduce(
@@ -34,6 +39,7 @@ export async function GET(
   );
 
   return NextResponse.json({
+    member,
     sales,
     totalSpent,
     count: sales.length,

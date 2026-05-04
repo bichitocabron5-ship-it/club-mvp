@@ -2,7 +2,7 @@
 
 import { DAILY_LIMIT_G, DAILY_LIMIT_UD } from "@/lib/sales-rules";
 import type { MemberSummary, ProductSummary } from "@/lib/types";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type TodayTotals = {
   grams: number;
@@ -12,6 +12,21 @@ type TodayTotals = {
 type CartItem = {
   productId: number;
   qty: number;
+};
+
+type MemberOperationalStatus = {
+  member: MemberSummary & {
+    active: boolean;
+    expiresAt: string | null;
+  };
+  hasContract: boolean;
+  expired: boolean;
+  canWithdraw: boolean;
+  reasons: {
+    inactive: boolean;
+    noContract: boolean;
+    expired: boolean;
+  };
 };
 
 const emptyToday: TodayTotals = {
@@ -24,9 +39,19 @@ export default function SalesPage() {
   const [products, setProducts] = useState<ProductSummary[]>([]);
   const [today, setToday] = useState<TodayTotals>(emptyToday);
   const [memberId, setMemberId] = useState("");
+  const [memberStatus, setMemberStatus] = useState<MemberOperationalStatus | null>(null);
+  const [memberSearch, setMemberSearch] = useState("");
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [rfidInput, setRfidInput] = useState("");
+  const [rfidError, setRfidError] = useState("");
+
+  const rfidRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    rfidRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,19 +74,22 @@ export default function SalesPage() {
   }, []);
 
   useEffect(() => {
-    if (!memberId) {
-      return;
-    }
+    if (!memberId) return;
 
     let cancelled = false;
 
-    void fetch(`/api/members/${memberId}/today`)
-      .then((res) => res.json())
-      .then((data: TodayTotals) => {
-        if (!cancelled) {
-          setToday(data);
-        }
-      });
+    void Promise.all([
+      fetch(`/api/members/${memberId}/today`),
+      fetch(`/api/members/${memberId}/operational-status`),
+    ]).then(async ([todayRes, statusRes]) => {
+      const todayData: TodayTotals = await todayRes.json();
+      const statusData: MemberOperationalStatus = await statusRes.json();
+
+      if (!cancelled) {
+        setToday(todayData);
+        setMemberStatus(statusData);
+      }
+    });
 
     return () => {
       cancelled = true;
@@ -78,6 +106,19 @@ export default function SalesPage() {
       return product.name.toLowerCase().includes(query);
     });
   }, [products, search]);
+
+  const filteredMembers = useMemo(() => {
+    const q = memberSearch.trim().toLowerCase();
+
+    if (!q) return members;
+
+    return members.filter((m) => {
+      return (
+        m.fullName.toLowerCase().includes(q) ||
+        String(m.dni || "").toLowerCase().includes(q)
+      );
+    });
+  }, [members, memberSearch]);
 
   const cartLines = useMemo(() => {
     return cart.map((item) => {
@@ -120,6 +161,7 @@ export default function SalesPage() {
 
   const invalid =
     !memberId ||
+    !memberStatus?.canWithdraw ||
     cart.length === 0 ||
     overGrams ||
     overUnits ||
@@ -204,6 +246,43 @@ export default function SalesPage() {
       `/api/members/${memberId}/today`
     ).then((r) => r.json());
     setToday(refreshedToday);
+
+    setMemberId("");
+    setMemberSearch("");
+    setRfidInput("");
+    setToday(emptyToday);
+    setMemberStatus(null);
+
+    setTimeout(() => {
+      rfidRef.current?.focus();
+    }, 0);
+  }
+
+  async function handleRfidSubmit(e: React.FormEvent) {
+    e.preventDefault();
+
+    const code = rfidInput.trim();
+    if (!code) return;
+
+    setRfidError("");
+
+    const res = await fetch(`/api/members/by-rfid/${encodeURIComponent(code)}`);
+
+    if (!res.ok) {
+      setRfidError("Chapita no asignada");
+      return;
+    }
+
+    const member = await res.json();
+
+    setMemberId(String(member.id));
+    setMemberSearch(member.fullName);
+    setCart([]);
+    setRfidInput("");
+
+    setTimeout(() => {
+      rfidRef.current?.focus();
+    }, 0);
   }
 
   return (
@@ -223,10 +302,38 @@ export default function SalesPage() {
         </div>
       </div>
 
+      <form onSubmit={handleRfidSubmit} className="rounded border p-3 space-y-2">
+        <label className="block text-sm font-medium">Escanear chapita</label>
+
+        <input
+          className="w-full rounded border p-3 text-base"
+          placeholder="Pasa la chapita por el lector..."
+          value={rfidInput}
+          onChange={(e) => setRfidInput(e.target.value)}
+          autoComplete="off"
+          ref={rfidRef}
+          autoFocus
+        />
+
+        {rfidError && (
+          <div className="rounded bg-red-100 p-2 text-sm text-red-700">
+            {rfidError}
+          </div>
+        )}
+      </form>
+
       <form onSubmit={handleSubmit} className="grid gap-4 lg:grid-cols-[1fr_380px]">
         <section className="space-y-4">
-          <div className="rounded border p-3">
-            <label className="mb-1 block text-sm font-medium">Socio</label>
+          <div className="rounded border p-3 space-y-3">
+            <label className="block text-sm font-medium">Socio</label>
+
+            <input
+              className="w-full rounded border p-3 text-base"
+              placeholder="Buscar socio por nombre o DNI..."
+              value={memberSearch}
+              onChange={(e) => setMemberSearch(e.target.value)}
+            />
+
             <select
               className="w-full rounded border p-3 text-base"
               value={memberId}
@@ -237,13 +344,74 @@ export default function SalesPage() {
               required
             >
               <option value="">Selecciona socio</option>
-              {members.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.fullName}
+              {filteredMembers.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.fullName} {m.dni ? `— ${m.dni}` : ""}
                 </option>
               ))}
             </select>
+
+            {memberId && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMemberId("");
+                  setMemberSearch("");
+                  setCart([]);
+                  setToday(emptyToday);
+                  setMemberStatus(null);
+                  rfidRef.current?.focus();
+                }}
+                className="rounded border px-3 py-2 text-sm"
+              >
+                Cambiar socio
+              </button>
+            )}
           </div>
+
+              {memberStatus && (
+                <div className="rounded border p-3 text-sm">
+                  <div className="mb-2 font-semibold">Estado del socio</div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {memberStatus.member.active ? (
+                      <span className="rounded bg-green-100 px-3 py-1 text-green-700">
+                        Activo
+                      </span>
+                    ) : (
+                      <span className="rounded bg-red-100 px-3 py-1 text-red-700">
+                        Bloqueado
+                      </span>
+                    )}
+
+                    {memberStatus.hasContract ? (
+                      <span className="rounded bg-green-100 px-3 py-1 text-green-700">
+                        Contrato firmado
+                      </span>
+                    ) : (
+                      <span className="rounded bg-red-100 px-3 py-1 text-red-700">
+                        Sin contrato
+                      </span>
+                    )}
+
+                    {memberStatus.expired ? (
+                      <span className="rounded bg-red-100 px-3 py-1 text-red-700">
+                        Membresía caducada
+                      </span>
+                    ) : (
+                      <span className="rounded bg-blue-100 px-3 py-1 text-blue-700">
+                        Membresía vigente
+                      </span>
+                    )}
+                  </div>
+
+                  {!memberStatus.canWithdraw && (
+                    <div className="mt-3 rounded bg-red-100 p-2 text-red-700">
+                      Este socio no puede realizar retiradas.
+                    </div>
+                  )}
+                </div>
+              )}
 
           <div className="rounded border p-3">
             <label className="mb-1 block text-sm font-medium">

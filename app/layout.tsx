@@ -15,6 +15,7 @@ export default function RootLayout({
               Club MVP
             </Link>
 
+            <Link href="/access">Acceso</Link>
             <Link href="/sales">Retiradas</Link>
             <Link href="/cash">Caja</Link>
             <Link href="/products">Productos</Link>
