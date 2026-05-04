@@ -34,12 +34,17 @@ model AccessLog {
 }
 
 model Product {
-  id        Int      @id @default(autoincrement())
-  name      String
-  unit      String // "G" o "UD"
-  price     Float
-  stock     Float    @default(0)
+  id    Int    @id @default(autoincrement())
+  name  String
+  unit  String // "G" o "UD"
+  price Float
+  stock Float  @default(0)
+
+  category String @default("CANNABIS")
+  minStock Float  @default(5)
+
   createdAt DateTime @default(now())
+  active Boolean @default(true)
 
   sales      Sale[]
   stockMoves StockMove[]

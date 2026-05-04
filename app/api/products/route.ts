@@ -1,3 +1,4 @@
+// app/api/products/route.ts
 import { prisma } from "@/lib/prisma";
 import { normalizeUnit } from "@/lib/sales";
 import { NextResponse } from "next/server";
@@ -8,6 +9,8 @@ const productSchema = z.object({
   unit: z.string().trim().min(1),
   price: z.coerce.number().positive(),
   stock: z.coerce.number().min(0).optional(),
+  category: z.string().trim().min(1).optional(),
+  minStock: z.coerce.number().min(0).optional(),
 });
 
 export async function GET() {
@@ -41,6 +44,8 @@ export async function POST(req: Request) {
       unit,
       price: parsed.data.price,
       stock: parsed.data.stock ?? 0,
+      category: parsed.data.category || "CANNABIS",
+      minStock: parsed.data.minStock ?? 5,
     },
   });
 

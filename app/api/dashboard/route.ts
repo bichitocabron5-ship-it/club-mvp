@@ -54,7 +54,9 @@ export async function GET() {
     .filter((m) => m.type === "expense")
     .reduce((acc, m) => acc + Number(m.amount), 0);
 
-  const lowStock = products.filter((p) => Number(p.stock) <= 5);
+  const lowStock = products.filter(
+    (p) => Number(p.stock) <= Number(p.minStock)
+  );
 
   const activeMembersToday = new Set(sales.map((s) => s.memberId)).size;
 

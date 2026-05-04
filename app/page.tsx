@@ -1,7 +1,34 @@
 "use client";
-
-import type { DashboardData } from "@/lib/types";
 import { useEffect, useState } from "react";
+
+type LowStockProduct = {
+  id: number;
+  name: string;
+  stock: number;
+  minStock: number;
+  unit: string;
+};
+
+type DashboardData = {
+  income: number;
+  expense: number;
+  balance: number;
+  salesCount: number;
+  activeMembersToday: number;
+  lowStock: LowStockProduct[];
+  lastSales: {
+    id: number;
+    qty: number;
+    totalAmount: number;
+    product: {
+      name: string;
+      unit: string;
+    };
+    member: {
+      fullName: string;
+    };
+  }[];
+};
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
@@ -91,6 +118,21 @@ export default function DashboardPage() {
               <span>{product.name}</span>
               <strong className="text-red-600">
                 {product.stock} {product.unit}
+              </strong>
+            </div>
+          ))}
+
+          {data.lowStock.map((p) => (
+            <div key={p.id} className="rounded border p-3 flex justify-between">
+              <div>
+                <div className="font-medium">{p.name}</div>
+                <div className="text-sm text-gray-500">
+                  Mínimo: {Number(p.minStock).toFixed(2)} {p.unit}
+                </div>
+              </div>
+
+              <strong className="text-red-600">
+                {Number(p.stock).toFixed(2)} {p.unit}
               </strong>
             </div>
           ))}

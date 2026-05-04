@@ -101,10 +101,12 @@ export default function SalesPage() {
   const filteredProducts = useMemo(() => {
     const query = search.trim().toLowerCase();
 
-    return products.filter((product) => {
-      if (!query) return true;
-      return product.name.toLowerCase().includes(query);
-    });
+    return products
+      .filter((product) => product.active)
+      .filter((product) => {
+        if (!query) return true;
+        return product.name.toLowerCase().includes(query);
+      });
   }, [products, search]);
 
   const filteredMembers = useMemo(() => {
@@ -425,7 +427,7 @@ export default function SalesPage() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
             {filteredProducts.map((product) => {
               const noStock = Number(product.stock) <= 0;
 
@@ -435,21 +437,29 @@ export default function SalesPage() {
                   type="button"
                   onClick={() => addProduct(product)}
                   disabled={noStock}
-                  className="min-h-32 rounded border p-3 text-left shadow-sm hover:bg-gray-50 disabled:opacity-40"
+                  className={`min-h-36 rounded-xl border p-4 text-left shadow-sm transition hover:scale-[1.02] disabled:opacity-40 ${
+                    noStock ? "bg-gray-100" : "bg-white hover:bg-blue-50"
+                  }`}
                 >
-                  <div className="font-semibold">{product.name}</div>
+                  <div className="text-lg font-black">{product.name}</div>
 
-                  <div className="mt-1 text-sm text-gray-500">
-                    Stock: {Number(product.stock).toFixed(2)} {product.unit}
+                  <div className="mt-2 text-2xl font-bold text-blue-700">
+                    {Number(product.price).toFixed(2)} €
                   </div>
 
-                  <div className="mt-1 text-sm">
-                    {Number(product.price).toFixed(2)} EUR/
-                    {product.unit === "G" ? "g" : "ud"}
+                  <div className="text-xs text-gray-500">
+                    por {product.unit === "G" ? "gramo" : "unidad"}
                   </div>
 
-                  <div className="mt-3 text-sm font-medium text-blue-600">
-                    {noStock ? "Sin stock" : "Anadir"}
+                  <div className="mt-3 text-sm">
+                    Stock:{" "}
+                    <strong>
+                      {Number(product.stock).toFixed(2)} {product.unit}
+                    </strong>
+                  </div>
+
+                  <div className="mt-3 rounded bg-gray-900 px-3 py-2 text-center text-sm font-bold text-white">
+                    {noStock ? "SIN STOCK" : "AÑADIR"}
                   </div>
                 </button>
               );
@@ -489,14 +499,35 @@ export default function SalesPage() {
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   <div>
                     <label className="text-xs text-gray-500">Cantidad</label>
-                    <input
-                      className="w-full rounded border p-2"
-                      type="number"
-                      step={line.product?.unit === "UD" ? "1" : "0.01"}
-                      min="0"
-                      value={line.qty}
-                      onChange={(e) => updateQty(line.productId, e.target.value)}
-                    />
+
+                    <div className="mt-1 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateQty(line.productId, String(Math.max(0, line.qty - 1)))
+                        }
+                        className="h-11 w-11 rounded bg-gray-200 text-xl font-bold"
+                      >
+                        -
+                      </button>
+
+                      <input
+                        className="h-11 w-24 rounded border p-2 text-center text-lg font-bold"
+                        type="number"
+                        step={line.product?.unit === "UD" ? "1" : "0.01"}
+                        min="0"
+                        value={line.qty}
+                        onChange={(e) => updateQty(line.productId, e.target.value)}
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => updateQty(line.productId, String(line.qty + 1))}
+                        className="h-11 w-11 rounded bg-gray-900 text-xl font-bold text-white"
+                      >
+                        +
+                      </button>
+                    </div>
                   </div>
 
                   <div>
@@ -518,7 +549,7 @@ export default function SalesPage() {
 
           <div className="mt-4 rounded bg-gray-900 p-4 text-white">
             <div className="text-sm opacity-80">Total retirada</div>
-            <div className="text-3xl font-bold">{cartTotal.toFixed(2)} EUR</div>
+            <div className="text-5xl font-black">{cartTotal.toFixed(2)} EUR</div>
           </div>
 
           <div className="mt-3 rounded border p-3 text-sm">
@@ -552,9 +583,9 @@ export default function SalesPage() {
 
           <button
             disabled={invalid}
-            className="mt-4 w-full rounded bg-blue-600 p-4 text-lg font-bold text-white disabled:opacity-40"
+            className="mt-4 w-full rounded-xl bg-blue-600 p-6 text-2xl font-black text-white shadow-lg disabled:opacity-40"
           >
-            {loading ? "Registrando..." : "Registrar retirada"}
+            {loading ? "Registrando..." : "COBRAR / REGISTRAR"}
           </button>
         </aside>
       </form>

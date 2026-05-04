@@ -17,6 +17,9 @@ export type ProductSummary = {
   unit: ProductUnit;
   price: number;
   stock: number;
+  category: string;
+  minStock: number;
+  active: boolean;
   createdAt?: string;
 };
 
