@@ -1,6 +1,11 @@
+// app/members/[id]/page.tsx
 "use client";
 
-import type { MemberContractRecord, MemberHistoryData } from "@/lib/types";
+import type {
+  AccessLogRecord,
+  MemberContractRecord,
+  MemberHistoryData,
+} from "@/lib/types";
 import Image from "next/image";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -11,6 +16,7 @@ export default function MemberDetail() {
 
   const [data, setData] = useState<MemberHistoryData | null>(null);
   const [contracts, setContracts] = useState<MemberContractRecord[]>([]);
+  const [accessLogs, setAccessLogs] = useState<AccessLogRecord[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -20,13 +26,16 @@ export default function MemberDetail() {
     void Promise.all([
       fetch(`/api/members/${id}/contracts`),
       fetch(`/api/members/${id}/history`),
-    ]).then(async ([contractsRes, historyRes]) => {
+      fetch(`/api/members/${id}/access-logs`),
+    ]).then(async ([contractsRes, historyRes, accessRes]) => {
       const contractsData: MemberContractRecord[] = await contractsRes.json();
       const historyData: MemberHistoryData = await historyRes.json();
+      const accessData: AccessLogRecord[] = await accessRes.json();
 
       if (!cancelled) {
         setContracts(contractsData);
         setData(historyData);
+        setAccessLogs(accessData);
       }
     });
 
@@ -203,6 +212,39 @@ export default function MemberDetail() {
               >
                 Ver PDF firmado
               </a>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-6">
+        <h2 className="mb-3 text-xl font-bold">Historial de accesos</h2>
+
+        {accessLogs.length === 0 && (
+          <p className="text-gray-500">No hay accesos registrados.</p>
+        )}
+
+        <div className="space-y-2">
+          {accessLogs.map((log) => (
+            <div
+              key={log.id}
+              className="flex items-center justify-between rounded border p-3"
+            >
+              <div>
+                <span
+                  className={
+                    log.type === "IN"
+                      ? "rounded bg-green-100 px-3 py-1 text-green-700"
+                      : "rounded bg-blue-100 px-3 py-1 text-blue-700"
+                  }
+                >
+                  {log.type === "IN" ? "Entrada" : "Salida"}
+                </span>
+              </div>
+
+              <div className="text-sm text-gray-500">
+                {new Date(log.createdAt).toLocaleString()}
+              </div>
             </div>
           ))}
         </div>

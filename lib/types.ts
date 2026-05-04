@@ -108,3 +108,10 @@ export type SigningSessionData = {
   member: MemberSummary;
   contract?: MemberContractRecord | null;
 };
+
+export type AccessLogRecord = {
+  id: number;
+  memberId: number;
+  type: "IN" | "OUT" | string;
+  createdAt: string;
+};
