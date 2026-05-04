@@ -15,36 +15,69 @@ function getTodayRange() {
 export async function GET() {
   const { start, end } = getTodayRange();
 
-  const cashMoves = await prisma.cashMove.findMany({
-    where: {
-      createdAt: {
-        gte: start,
-        lt: end,
-      },
-    },
-  });
+  const [cashMoves, sales, products, members, lastAccessLogs] =
+    await Promise.all([
+      prisma.cashMove.findMany({
+        where: {
+          createdAt: {
+            gte: start,
+            lt: end,
+          },
+        },
+      }),
 
-  const sales = await prisma.sale.findMany({
-    where: {
-      createdAt: {
-        gte: start,
-        lt: end,
-      },
-    },
-    include: {
-      member: true,
-      product: true,
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
-  });
+      prisma.sale.findMany({
+        where: {
+          createdAt: {
+            gte: start,
+            lt: end,
+          },
+        },
+        include: {
+          member: true,
+          product: true,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      }),
 
-  const products = await prisma.product.findMany({
-    orderBy: {
-      stock: "asc",
-    },
-  });
+      prisma.product.findMany({
+        orderBy: {
+          stock: "asc",
+        },
+      }),
+
+      prisma.member.findMany({
+        include: {
+          contracts: {
+            take: 1,
+            orderBy: {
+              signedAt: "desc",
+            },
+          },
+          accessLogs: {
+            take: 1,
+            orderBy: {
+              createdAt: "desc",
+            },
+          },
+        },
+        orderBy: {
+          fullName: "asc",
+        },
+      }),
+
+      prisma.accessLog.findMany({
+        include: {
+          member: true,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+        take: 8,
+      }),
+    ]);
 
   const income = cashMoves
     .filter((m) => m.type === "income")
@@ -60,13 +93,40 @@ export async function GET() {
 
   const activeMembersToday = new Set(sales.map((s) => s.memberId)).size;
 
+  const insideMembers = members.filter(
+    (m) => m.accessLogs[0]?.type === "IN"
+  );
+
+  const now = new Date();
+
+  const membersWithoutContract = members.filter(
+    (m) => m.contracts.length === 0
+  );
+
+  const expiredMembers = members.filter(
+    (m) => m.expiresAt && new Date(m.expiresAt) < now
+  );
+
+  const blockedMembers = members.filter((m) => !m.active);
+
   return NextResponse.json({
     income,
     expense,
     balance: income - expense,
+
     salesCount: sales.length,
     activeMembersToday,
+    currentInsideCount: insideMembers.length,
+
     lowStock,
     lastSales: sales.slice(0, 8),
+    lastAccessLogs,
+
+    alerts: {
+      membersWithoutContract: membersWithoutContract.length,
+      expiredMembers: expiredMembers.length,
+      blockedMembers: blockedMembers.length,
+      lowStock: lowStock.length,
+    },
   });
 }
