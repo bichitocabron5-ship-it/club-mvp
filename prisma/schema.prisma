@@ -12,6 +12,7 @@ model Member {
   fullName  String
   dni       String    @unique
   phone     String?
+  email     String?
   active    Boolean   @default(true)
   joinedAt  DateTime  @default(now())
   expiresAt DateTime?

@@ -12,10 +12,23 @@ const memberSchema = z.object({
 
 export async function GET() {
   const members = await prisma.member.findMany({
+    include: {
+      contracts: {
+        take: 1,
+        orderBy: {
+          signedAt: "desc",
+        },
+      },
+    },
     orderBy: { createdAt: "desc" },
   });
 
-  return NextResponse.json(members);
+  const result = members.map((member) => ({
+    ...member,
+    hasContract: member.contracts.length > 0,
+  }));
+
+  return NextResponse.json(result);
 }
 
 export async function POST(req: Request) {

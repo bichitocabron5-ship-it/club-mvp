@@ -1,3 +1,4 @@
+// app/members/page.tsx
 "use client";
 
 import type { MemberSummary } from "@/lib/types";
@@ -12,6 +13,8 @@ type MemberForm = {
   expiresAt: string;
 };
 
+type MemberFilter = "ALL" | "ACTIVE" | "EXPIRED" | "BLOCKED" | "NO_CONTRACT";
+
 const initialForm: MemberForm = {
   fullName: "",
   dni: "",
@@ -23,6 +26,8 @@ const initialForm: MemberForm = {
 export default function MembersPage() {
   const [members, setMembers] = useState<MemberSummary[]>([]);
   const [form, setForm] = useState<MemberForm>(initialForm);
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<MemberFilter>("ALL");
 
   async function loadMembers() {
     const res = await fetch("/api/members");
@@ -61,11 +66,75 @@ export default function MembersPage() {
     await loadMembers();
   }
 
+  const filteredMembers = members.filter((m) => {
+    const query = search.toLowerCase();
+
+    const matchesSearch =
+      m.fullName.toLowerCase().includes(query) ||
+      m.dni.toLowerCase().includes(query);
+
+    const now = new Date();
+
+    const isExpired = m.expiresAt && new Date(m.expiresAt) < now;
+    const isBlocked = !m.active;
+    const hasContract = m.hasContract;
+
+    let matchesFilter = true;
+
+    if (filter === "ACTIVE") {
+      matchesFilter = m.active && !isExpired;
+    } else if (filter === "EXPIRED") {
+      matchesFilter = !!isExpired;
+    } else if (filter === "BLOCKED") {
+      matchesFilter = isBlocked;
+    } else if (filter === "NO_CONTRACT") {
+      matchesFilter = !hasContract;
+    }
+
+    return matchesSearch && matchesFilter;
+  });
+
   return (
     <main>
       <h1 className="mb-4 text-2xl font-bold">Socios</h1>
 
+      <Link
+        href="/members/new"
+        className="mb-4 inline-block rounded bg-blue-600 px-4 py-2 text-white"
+      >
+        Alta de socio
+      </Link>
+
       <form onSubmit={handleSubmit} className="mb-6 grid gap-2 rounded border p-4">
+        <input
+          className="w-full rounded border p-3"
+          placeholder="Buscar por nombre o DNI"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+       
+        <div className="mt-3 flex flex-wrap gap-2">
+          {[
+            { key: "ALL", label: "Todos" },
+            { key: "ACTIVE", label: "Activos" },
+            { key: "EXPIRED", label: "Caducados" },
+            { key: "BLOCKED", label: "Bloqueados" },
+            { key: "NO_CONTRACT", label: "Sin contrato" },
+          ].map((f) => (
+            <button
+              key={f.key}
+              onClick={() => setFilter(f.key as MemberFilter)}
+              className={`rounded px-4 py-2 text-sm font-bold ${
+                filter === f.key
+                  ? "bg-gray-900 text-white"
+                  : "bg-gray-100 text-gray-700"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
         <input
           className="border p-2"
           placeholder="Nombre completo"
@@ -109,7 +178,7 @@ export default function MembersPage() {
       </form>
 
       <div className="space-y-2">
-        {members.map((member) => {
+        {filteredMembers.map((member) => {
           const expired =
             Boolean(member.expiresAt) &&
             new Date(member.expiresAt as string) < new Date();
@@ -135,25 +204,34 @@ export default function MembersPage() {
                     <div className="text-sm text-gray-500">{member.dni}</div>
                   </div>
 
-                  <div className="flex gap-2">
-                    {!member.active && (
-                      <span className="bg-red-100 text-red-700 px-2 py-1 rounded text-sm">
-                        Bloqueado
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                    {member.active ? (
+                      <span className="rounded bg-green-100 px-2 py-1 text-green-700">
+                        ACTIVO
+                      </span>
+                    ) : (
+                      <span className="rounded bg-red-100 px-2 py-1 text-red-700">
+                        BLOQUEADO
                       </span>
                     )}
 
                     {member.expiresAt && new Date(member.expiresAt) < new Date() && (
-                      <span className="bg-red-100 text-red-700 px-2 py-1 rounded text-sm">
-                        Caducado
+                      <span className="rounded bg-red-100 px-2 py-1 text-red-700">
+                        CADUCADO
                       </span>
                     )}
 
-                    {member.active &&
-                      (!member.expiresAt || new Date(member.expiresAt) >= new Date()) && (
-                        <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-sm">
-                          Activo
-                        </span>
-                      )}
+                    {!member.hasContract && (
+                      <span className="rounded bg-yellow-100 px-2 py-1 text-yellow-700">
+                        SIN CONTRATO
+                      </span>
+                    )}
+
+                    {member.rfidCode && (
+                      <span className="rounded bg-blue-100 px-2 py-1 text-blue-700">
+                        RFID
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>

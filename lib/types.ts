@@ -6,9 +6,11 @@ export type MemberSummary = {
   dni: string;
   phone: string | null;
   active: boolean;
+  hasContract: boolean;
   joinedAt: string;
   expiresAt: string | null;
   createdAt: string;
+  rfidCode: string | null;
 };
 
 export type ProductSummary = {
@@ -91,9 +93,11 @@ export type MemberHistoryData = {
     fullName: string;
     dni: string;
     phone: string | null;
+    email: string | null;
     active: boolean;
     joinedAt: string | null;
     expiresAt: string | null;
+    rfidCode: string | null;
     createdAt: string;
   };
   sales: MemberHistorySale[];

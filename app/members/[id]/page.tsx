@@ -17,6 +17,17 @@ export default function MemberDetail() {
   const [data, setData] = useState<MemberHistoryData | null>(null);
   const [contracts, setContracts] = useState<MemberContractRecord[]>([]);
   const [accessLogs, setAccessLogs] = useState<AccessLogRecord[]>([]);
+  const [editing, setEditing] = useState(false);
+  const [assigningRfid, setAssigningRfid] = useState(false);
+
+  const [editForm, setEditForm] = useState({
+    fullName: "",
+    dni: "",
+    phone: "",
+    email: "",
+    expiresAt: "",
+    rfidCode: "",
+  });
 
   useEffect(() => {
     if (!id) return;
@@ -36,6 +47,19 @@ export default function MemberDetail() {
         setContracts(contractsData);
         setData(historyData);
         setAccessLogs(accessData);
+
+        if (historyData.member) {
+          setEditForm({
+            fullName: historyData.member.fullName || "",
+            dni: historyData.member.dni || "",
+            phone: historyData.member.phone || "",
+            email: historyData.member.email || "",
+            expiresAt: historyData.member.expiresAt
+              ? historyData.member.expiresAt.slice(0, 10)
+              : "",
+            rfidCode: historyData.member.rfidCode || "",
+          });
+        }
       }
     });
 
@@ -69,6 +93,52 @@ export default function MemberDetail() {
     const historyRes = await fetch(`/api/members/${id}/history`);
     const historyData: MemberHistoryData = await historyRes.json();
     setData(historyData);
+  }
+
+  async function saveMember() {
+    const res = await fetch(`/api/members/${id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(editForm),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      alert(err.error || "Error actualizando socio");
+      return;
+    }
+
+    setEditing(false);
+
+    // recargar datos
+    window.location.reload();
+  }
+
+  async function saveScannedRfid(code: string) {
+    const cleanCode = code.trim();
+    if (!cleanCode) return;
+
+    const res = await fetch(`/api/members/${id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        rfidCode: cleanCode,
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      alert(err.error || "Error asignando RFID");
+      return;
+    }
+
+    setEditForm({ ...editForm, rfidCode: cleanCode });
+    setAssigningRfid(false);
+    alert("Chapita asignada correctamente");
   }
 
   return (
@@ -146,8 +216,103 @@ export default function MemberDetail() {
             >
               Quitar vencimiento
             </button>
-          </div>
 
+            <button
+              onClick={() => setEditing(!editing)}
+              className="mt-3 rounded bg-gray-900 px-4 py-2 text-white"
+            >
+              {editing ? "Cancelar" : "Editar socio"}
+            </button>
+
+              {editing && (
+                <div className="mt-4 rounded border p-4 space-y-3">
+                  <h2 className="font-bold">Editar socio</h2>
+
+                  <input
+                    className="w-full border p-2"
+                    placeholder="Nombre"
+                    value={editForm.fullName}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, fullName: e.target.value })
+                    }
+                  />
+
+                  <input
+                    className="w-full border p-2"
+                    placeholder="DNI"
+                    value={editForm.dni}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, dni: e.target.value })
+                    }
+                  />
+
+                  <input
+                    className="w-full border p-2"
+                    placeholder="Teléfono"
+                    value={editForm.phone}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, phone: e.target.value })
+                    }
+                  />
+
+                  <input
+                    className="w-full border p-2"
+                    placeholder="Email"
+                    value={editForm.email}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, email: e.target.value })
+                    }
+                  />
+
+                  <input
+                    className="w-full border p-2"
+                    type="date"
+                    value={editForm.expiresAt}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, expiresAt: e.target.value })
+                    }
+                  />
+
+                  <input
+                    className="w-full border p-2"
+                    placeholder="RFID"
+                    value={editForm.rfidCode}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, rfidCode: e.target.value })
+                    }
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => setAssigningRfid(true)}
+                    className="w-full rounded bg-gray-900 p-3 font-bold text-white"
+                  >
+                    Asignar RFID escaneando
+                  </button>
+
+                {assigningRfid && (
+                  <input
+                    autoFocus
+                    className="w-full border border-blue-500 p-3"
+                    placeholder="Pasa la chapita ahora..."
+                    onChange={(e) => {
+                      const value = e.target.value.trim();
+                      if (value) {
+                        void saveScannedRfid(value);
+                      }
+                    }}
+                  />
+                )}
+                
+                  <button
+                    onClick={saveMember}
+                    className="w-full rounded bg-blue-600 p-3 text-white font-bold"
+                  >
+                    Guardar cambios
+                  </button>
+                </div>
+              )}
+          </div>
         </div>
       )}
 
