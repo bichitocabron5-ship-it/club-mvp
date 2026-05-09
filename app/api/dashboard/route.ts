@@ -15,7 +15,7 @@ function getTodayRange() {
 export async function GET() {
   const { start, end } = getTodayRange();
 
-  const [cashMoves, sales, products, members, lastAccessLogs] =
+  const [cashMoves, sales, products, members, lastAccessLogs, expenses] =
     await Promise.all([
       prisma.cashMove.findMany({
         where: {
@@ -77,6 +77,18 @@ export async function GET() {
         },
         take: 8,
       }),
+
+      prisma.expense.findMany({
+        where: {
+          createdAt: {
+            gte: start,
+            lt: end,
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      }),
     ]);
 
   const income = cashMoves
@@ -109,6 +121,16 @@ export async function GET() {
 
   const blockedMembers = members.filter((m) => !m.active);
 
+  const expensesByCategory = expenses.reduce<Record<string, number>>(
+    (acc, expense) => {
+      acc[expense.category] =
+        (acc[expense.category] || 0) + Number(expense.amount);
+
+      return acc;
+    },
+    {}
+  );
+
   return NextResponse.json({
     income,
     expense,
@@ -121,6 +143,9 @@ export async function GET() {
     lowStock,
     lastSales: sales.slice(0, 8),
     lastAccessLogs,
+
+    expensesToday: expenses,
+    expensesByCategory,
 
     alerts: {
       membersWithoutContract: membersWithoutContract.length,

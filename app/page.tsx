@@ -45,6 +45,8 @@ type DashboardData = {
   lowStock: LowStockProduct[];
   lastSales: DashboardSale[];
   lastAccessLogs: DashboardAccessLog[];
+  expensesToday: DashboardExpense[];
+  expensesByCategory: Record<string, number>;
   alerts: {
     membersWithoutContract: number;
     expiredMembers: number;
@@ -53,18 +55,29 @@ type DashboardData = {
   };
 };
 
+type DashboardExpense = {
+  id: number;
+  category: string;
+  description: string;
+  amount: number;
+  paidMethod: string;
+  createdAt: string;
+};
+
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
-
+  
   async function loadDashboard() {
     const res = await fetch("/api/dashboard");
     const json: DashboardData = await res.json();
+    
     setData(json);
   }
 
   useEffect(() => {
     const timeout = setTimeout(() => {
       void loadDashboard();
+      
     }, 0);
 
     return () => clearTimeout(timeout);
@@ -117,6 +130,41 @@ export default function DashboardPage() {
         <div className="rounded border bg-gray-900 p-4 text-white">
           <div className="text-sm opacity-80">Aforo actual</div>
           <div className="text-2xl font-black">{data.currentInsideCount}</div>
+        </div>
+      </section>
+
+      <section className="mb-6 grid gap-3 md:grid-cols-3">
+        <div className="rounded border bg-green-50 p-4">
+          <div className="text-sm text-green-700">Ingresos</div>
+          <div className="text-3xl font-black text-green-800">
+            {Number(data.income).toFixed(2)} €
+          </div>
+        </div>
+
+        <div className="rounded border bg-red-50 p-4">
+          <div className="text-sm text-red-700">Gastos</div>
+          <div className="text-3xl font-black text-red-800">
+            {Number(data.expense).toFixed(2)} €
+          </div>
+        </div>
+
+        <div
+          className={
+            data.balance >= 0
+              ? "rounded border bg-blue-50 p-4"
+              : "rounded border bg-red-50 p-4"
+          }
+        >
+          <div className="text-sm text-gray-600">Resultado neto</div>
+          <div
+            className={
+              data.balance >= 0
+                ? "text-3xl font-black text-blue-800"
+                : "text-3xl font-black text-red-800"
+            }
+          >
+            {Number(data.balance).toFixed(2)} €
+          </div>
         </div>
       </section>
 
@@ -216,6 +264,59 @@ export default function DashboardPage() {
                 >
                   {log.type === "IN" ? "Entrada" : "Salida"}
                 </span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded border p-4">
+          <h2 className="mb-3 text-lg font-bold">Gastos por categoría</h2>
+
+          {Object.keys(data.expensesByCategory).length === 0 && (
+            <p className="text-sm text-gray-500">Sin gastos hoy.</p>
+          )}
+
+          <div className="space-y-2">
+            {Object.entries(data.expensesByCategory).map(([category, amount]) => (
+              <div
+                key={category}
+                className="flex items-center justify-between rounded border p-3"
+              >
+                <div className="font-semibold">{category}</div>
+                <strong className="text-red-600">
+                  -{Number(amount).toFixed(2)} €
+                </strong>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded border p-4">
+          <h2 className="mb-3 text-lg font-bold">Últimos gastos</h2>
+
+          {data.expensesToday.length === 0 && (
+            <p className="text-sm text-gray-500">Sin gastos registrados hoy.</p>
+          )}
+
+          <div className="space-y-2">
+            {data.expensesToday.slice(0, 8).map((expense) => (
+              <div
+                key={expense.id}
+                className="flex items-center justify-between rounded border p-3"
+              >
+                <div>
+                  <div className="font-semibold">{expense.description}</div>
+                  <div className="text-sm text-gray-500">
+                    {expense.category} · {expense.paidMethod}
+                  </div>
+                  <div className="text-xs text-gray-400">
+                    {new Date(expense.createdAt).toLocaleTimeString()}
+                  </div>
+                </div>
+
+                <strong className="text-red-600">
+                  -{Number(expense.amount).toFixed(2)} €
+                </strong>
               </div>
             ))}
           </div>

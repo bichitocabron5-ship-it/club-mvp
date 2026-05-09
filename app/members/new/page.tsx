@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type CreatedMember = {
   id: number;
@@ -10,6 +10,7 @@ type CreatedMember = {
   dni: string;
   phone: string | null;
   email: string | null;
+  active: boolean;
   expiresAt: string | null;
   rfidCode: string | null;
 };
@@ -31,6 +32,7 @@ export default function NewMemberPage() {
   const [signingSession, setSigningSession] = useState<SigningSession | null>(null);
   const [assigningRfid, setAssigningRfid] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [contractSigned, setContractSigned] = useState(false);
 
   const [form, setForm] = useState({
     fullName: "",
@@ -119,10 +121,41 @@ export default function NewMemberPage() {
 
     const session = await res.json();
     setSigningSession(session);
+    setContractSigned(session.status === "SIGNED");
   }
 
   const signUrl =
     signingSession && `${window.location.origin}/sign/${signingSession.token}`;
+
+  useEffect(() => {
+    if (!signingSession?.token || contractSigned) return;
+
+    const interval = setInterval(async () => {
+      const res = await fetch(`/api/signing-sessions/${signingSession.token}`);
+      const data: SigningSession = await res.json();
+
+      setSigningSession(data);
+
+      if (data.status === "SIGNED") {
+        setContractSigned(true);
+        clearInterval(interval);
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [signingSession?.token, contractSigned]);
+
+  const isReady =
+    createdMember &&
+    createdMember.active &&
+    createdMember.rfidCode &&
+    contractSigned;
+
+  const missing = {
+    rfid: !createdMember?.rfidCode,
+    contract: !contractSigned,
+    expires: !createdMember?.expiresAt,
+  };
 
   return (
     <main className="mx-auto max-w-4xl p-4 md:p-6">
@@ -281,13 +314,22 @@ export default function NewMemberPage() {
             {signingSession && (
               <div className="space-y-3">
                 <div className="rounded bg-gray-50 p-3">
-                  Estado: <strong>{signingSession.status}</strong>
+                 Estado:{" "}
+                <strong className={contractSigned ? "text-green-700" : ""}>
+                  {contractSigned ? "FIRMADO" : signingSession.status}
+                </strong>
                 </div>
 
                 <div>
                   <label className="mb-1 block text-sm text-gray-500">
                     Enlace para tablet
                   </label>
+
+                  {contractSigned && (
+                    <div className="rounded bg-green-100 p-3 font-bold text-green-700">
+                      Contrato firmado correctamente.
+                    </div>
+                  )}
 
                   <input
                     className="w-full rounded border p-3"
@@ -306,14 +348,62 @@ export default function NewMemberPage() {
           </section>
 
           <section className="rounded border p-4">
-            <h2 className="mb-3 text-lg font-bold">Finalizar</h2>
+            <h2 className="mb-3 text-lg font-bold">Estado final</h2>
+
+            {!isReady && (
+              <div className="mb-4 space-y-2">
+                <div className="text-sm font-medium text-gray-600">
+                  Pendiente para completar:
+                </div>
+
+                <div className="flex flex-wrap gap-2 text-xs">
+                  {missing.rfid && (
+                    <span className="rounded bg-yellow-100 px-3 py-1 text-yellow-700">
+                      Falta RFID
+                    </span>
+                  )}
+
+                  {missing.contract && (
+                    <span className="rounded bg-yellow-100 px-3 py-1 text-yellow-700">
+                      Falta contrato
+                    </span>
+                  )}
+
+                  {missing.expires && (
+                    <span className="rounded bg-yellow-100 px-3 py-1 text-yellow-700">
+                      Sin vencimiento
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {isReady && (
+              <div className="mb-4 rounded bg-green-100 p-4 font-bold text-green-800">
+                Socio listo para operar
+              </div>
+            )}
 
             <div className="flex flex-wrap gap-2">
               <Link
-                href={`/members/${createdMember.id}`}
+                href={`/members/${createdMember?.id}`}
                 className="rounded bg-green-600 px-4 py-3 font-bold text-white"
               >
-                Ver ficha del socio
+                Ver ficha
+              </Link>
+
+              <Link
+                href="/sales"
+                className="rounded bg-blue-600 px-4 py-3 font-bold text-white"
+              >
+                Ir al TPV
+              </Link>
+
+              <Link
+                href="/access"
+                className="rounded bg-gray-900 px-4 py-3 font-bold text-white"
+              >
+                Control de acceso
               </Link>
 
               <Link
@@ -328,6 +418,7 @@ export default function NewMemberPage() {
                 onClick={() => {
                   setCreatedMember(null);
                   setSigningSession(null);
+                  setContractSigned(false);
                   setAssigningRfid(false);
                   setForm({
                     fullName: "",

@@ -45,7 +45,7 @@ model Product {
   minStock Float  @default(5)
 
   createdAt DateTime @default(now())
-  active Boolean @default(true)
+  active    Boolean  @default(true)
 
   sales      Sale[]
   stockMoves StockMove[]
@@ -93,6 +93,15 @@ model DayClosure {
   balance      Float    @default(0)
   note         String?
   createdAt    DateTime @default(now())
+}
+
+model Expense {
+  id          Int      @id @default(autoincrement())
+  category    String
+  description String
+  amount      Float
+  paidMethod  String   @default("CASH")
+  createdAt   DateTime @default(now())
 }
 
 model ContractTemplate {
