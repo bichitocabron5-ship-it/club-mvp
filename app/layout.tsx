@@ -19,6 +19,8 @@ export default function RootLayout({
             <Link href="/sales">Retiradas</Link>
             <Link href="/cash">Caja</Link>
             <Link href="/expenses">Gastos</Link>
+            <Link href="/suppliers">Proveedores</Link>
+            <Link href="/purchases">Compras</Link>
             <Link href="/products">Productos</Link>
             <Link href="/stock">Stock</Link>
             <Link href="/members">Socios</Link>

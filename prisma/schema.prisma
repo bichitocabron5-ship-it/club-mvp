@@ -47,8 +47,9 @@ model Product {
   createdAt DateTime @default(now())
   active    Boolean  @default(true)
 
-  sales      Sale[]
-  stockMoves StockMove[]
+  sales         Sale[]
+  stockMoves    StockMove[]
+  purchaseItems PurchaseItem[]
 }
 
 model StockMove {
@@ -150,4 +151,43 @@ model SigningSession {
 
   member   Member          @relation(fields: [memberId], references: [id])
   contract MemberContract?
+}
+
+model Supplier {
+  id        Int      @id @default(autoincrement())
+  name      String
+  phone     String?
+  email     String?
+  notes     String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  purchases Purchase[]
+}
+
+model Purchase {
+  id         Int      @id @default(autoincrement())
+  supplierId Int
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+
+  totalAmount Float
+  paidAmount  Float    @default(0)
+  status      String   @default("PENDING") // PENDING | PARTIAL | PAID
+  note        String?
+  createdAt   DateTime @default(now())
+
+  items PurchaseItem[]
+}
+
+model PurchaseItem {
+  id         Int      @id @default(autoincrement())
+  purchaseId Int
+  purchase   Purchase @relation(fields: [purchaseId], references: [id])
+
+  productId Int
+  product   Product @relation(fields: [productId], references: [id])
+
+  qty       Float
+  unitCost  Float
+  lineTotal Float
 }
