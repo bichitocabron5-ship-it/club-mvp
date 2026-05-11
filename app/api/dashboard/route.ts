@@ -138,6 +138,54 @@ export async function GET() {
     {}
   );
 
+  const productStatsMap = new Map<
+    number,
+    {
+      productId: number;
+      name: string;
+      unit: string;
+      qty: number;
+      revenue: number;
+      profit: number;
+      salesCount: number;
+    }
+  >();
+
+  for (const sale of sales) {
+    const existing = productStatsMap.get(sale.productId);
+
+    if (existing) {
+      existing.qty += Number(sale.qty);
+      existing.revenue += Number(sale.totalAmount);
+      existing.profit += Number(sale.profit || 0);
+      existing.salesCount += 1;
+    } else {
+      productStatsMap.set(sale.productId, {
+        productId: sale.productId,
+        name: sale.product.name,
+        unit: sale.product.unit,
+        qty: Number(sale.qty),
+        revenue: Number(sale.totalAmount),
+        profit: Number(sale.profit || 0),
+        salesCount: 1,
+      });
+    }
+  }
+
+  const productStats = Array.from(productStatsMap.values());
+
+  const topProductsByRevenue = [...productStats]
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 5);
+
+  const topProductsByProfit = [...productStats]
+    .sort((a, b) => b.profit - a.profit)
+    .slice(0, 5);
+
+  const worstProductsByProfit = [...productStats]
+    .sort((a, b) => a.profit - b.profit)
+    .slice(0, 5);
+
   return NextResponse.json({
     income,
     expense,
@@ -148,6 +196,10 @@ export async function GET() {
     salesCount: sales.length,
     activeMembersToday,
     currentInsideCount: insideMembers.length,
+
+    topProductsByRevenue,
+    topProductsByProfit,
+    worstProductsByProfit,
 
     lowStock,
     lastSales: sales.slice(0, 8),

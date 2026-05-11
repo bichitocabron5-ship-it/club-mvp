@@ -49,6 +49,9 @@ type DashboardData = {
   lastAccessLogs: DashboardAccessLog[];
   expensesToday: DashboardExpense[];
   expensesByCategory: Record<string, number>;
+  topProductsByRevenue: ProductStat[];
+  topProductsByProfit: ProductStat[];
+  worstProductsByProfit: ProductStat[];
   alerts: {
     membersWithoutContract: number;
     expiredMembers: number;
@@ -64,6 +67,16 @@ type DashboardExpense = {
   amount: number;
   paidMethod: string;
   createdAt: string;
+};
+
+type ProductStat = {
+  productId: number;
+  name: string;
+  unit: string;
+  qty: number;
+  revenue: number;
+  profit: number;
+  salesCount: number;
 };
 
 export default function DashboardPage() {
@@ -132,6 +145,83 @@ export default function DashboardPage() {
         <div className="rounded border bg-gray-900 p-4 text-white">
           <div className="text-sm opacity-80">Aforo actual</div>
           <div className="text-2xl font-black">{data.currentInsideCount}</div>
+        </div>
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-3">
+        <div className="rounded border p-4">
+          <h2 className="mb-3 text-lg font-bold">
+            Top ventas
+          </h2>
+
+          <div className="space-y-2">
+            {data.topProductsByRevenue.map((p) => (
+              <div
+                key={p.productId}
+                className="rounded border p-3"
+              >
+                <div className="font-semibold">{p.name}</div>
+
+                <div className="text-sm text-gray-500">
+                  {p.qty.toFixed(2)} {p.unit}
+                </div>
+
+                <div className="mt-1 text-green-700 font-bold">
+                  {p.revenue.toFixed(2)} €
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded border p-4">
+          <h2 className="mb-3 text-lg font-bold">
+            Más rentables
+          </h2>
+
+          <div className="space-y-2">
+            {data.topProductsByProfit.map((p) => (
+              <div
+                key={p.productId}
+                className="rounded border p-3"
+              >
+                <div className="font-semibold">{p.name}</div>
+
+                <div className="text-sm text-gray-500">
+                  {p.salesCount} ventas
+                </div>
+
+                <div className="mt-1 font-bold text-purple-700">
+                  +{p.profit.toFixed(2)} €
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded border p-4">
+          <h2 className="mb-3 text-lg font-bold">
+            Menor margen
+          </h2>
+
+          <div className="space-y-2">
+            {data.worstProductsByProfit.map((p) => (
+              <div
+                key={p.productId}
+                className="rounded border p-3"
+              >
+                <div className="font-semibold">{p.name}</div>
+
+                <div className="text-sm text-gray-500">
+                  {p.salesCount} ventas
+                </div>
+
+                <div className="mt-1 font-bold text-red-600">
+                  {p.profit.toFixed(2)} €
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
