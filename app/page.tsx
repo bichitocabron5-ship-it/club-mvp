@@ -52,6 +52,7 @@ type DashboardData = {
   topProductsByRevenue: ProductStat[];
   topProductsByProfit: ProductStat[];
   worstProductsByProfit: ProductStat[];
+  topMembersByAmount: MemberStat[];
   alerts: {
     membersWithoutContract: number;
     expiredMembers: number;
@@ -77,6 +78,16 @@ type ProductStat = {
   revenue: number;
   profit: number;
   salesCount: number;
+};
+
+type MemberStat = {
+  memberId: number;
+  fullName: string;
+  dni: string;
+  salesCount: number;
+  totalAmount: number;
+  totalQty: number;
+  profit: number;
 };
 
 export default function DashboardPage() {
@@ -347,6 +358,38 @@ export default function DashboardPage() {
                 </div>
 
                 <strong>{Number(sale.totalAmount).toFixed(2)} €</strong>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded border p-4">
+          <h2 className="mb-3 text-lg font-bold">Top socios hoy</h2>
+
+          {data.topMembersByAmount.length === 0 && (
+            <p className="text-sm text-gray-500">Sin actividad de socios hoy.</p>
+          )}
+
+          <div className="space-y-2">
+            {data.topMembersByAmount.map((member) => (
+              <div key={member.memberId} className="rounded border p-3">
+                <div className="font-semibold">{member.fullName}</div>
+                <div className="text-sm text-gray-500">{member.dni}</div>
+
+                <div className="mt-2 grid grid-cols-3 gap-2 text-sm">
+                  <div>
+                    Retiradas: <strong>{member.salesCount}</strong>
+                  </div>
+                  <div>
+                    Total: <strong>{member.totalAmount.toFixed(2)} €</strong>
+                  </div>
+                  <div>
+                    Margen:{" "}
+                    <strong className="text-purple-700">
+                      {member.profit.toFixed(2)} €
+                    </strong>
+                  </div>
+                </div>
               </div>
             ))}
           </div>

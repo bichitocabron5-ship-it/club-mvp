@@ -186,6 +186,44 @@ export async function GET() {
     .sort((a, b) => a.profit - b.profit)
     .slice(0, 5);
 
+  const memberStatsMap = new Map<
+    number,
+    {
+      memberId: number;
+      fullName: string;
+      dni: string;
+      salesCount: number;
+      totalAmount: number;
+      totalQty: number;
+      profit: number;
+    }
+  >();
+
+  for (const sale of sales) {
+    const existing = memberStatsMap.get(sale.memberId);
+
+    if (existing) {
+      existing.salesCount += 1;
+      existing.totalAmount += Number(sale.totalAmount);
+      existing.totalQty += Number(sale.qty);
+      existing.profit += Number(sale.profit || 0);
+    } else {
+      memberStatsMap.set(sale.memberId, {
+        memberId: sale.memberId,
+        fullName: sale.member.fullName,
+        dni: sale.member.dni,
+        salesCount: 1,
+        totalAmount: Number(sale.totalAmount),
+        totalQty: Number(sale.qty),
+        profit: Number(sale.profit || 0),
+      });
+    }
+  }
+
+  const topMembersByAmount = Array.from(memberStatsMap.values())
+    .sort((a, b) => b.totalAmount - a.totalAmount)
+    .slice(0, 5);
+
   return NextResponse.json({
     income,
     expense,
@@ -200,6 +238,7 @@ export async function GET() {
     topProductsByRevenue,
     topProductsByProfit,
     worstProductsByProfit,
+    topMembersByAmount,
 
     lowStock,
     lastSales: sales.slice(0, 8),
