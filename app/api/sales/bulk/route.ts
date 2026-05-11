@@ -151,6 +151,9 @@ export async function POST(req: Request) {
         const product = productMap.get(productId)!;
         const lineTotal = qty * Number(product.price);
 
+        const unitCost = Number(product.averageCost || 0);
+        const profit = lineTotal - qty * unitCost;
+
         const previousStock = Number(product.stock);
         const newStock = previousStock - qty;
 
@@ -178,6 +181,8 @@ export async function POST(req: Request) {
             productId,
             qty,
             totalAmount: lineTotal,
+            unitCost,
+            profit,
             note: "Retirada en carrito",
           },
         });

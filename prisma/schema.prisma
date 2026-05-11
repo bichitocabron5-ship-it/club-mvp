@@ -35,11 +35,12 @@ model AccessLog {
 }
 
 model Product {
-  id    Int    @id @default(autoincrement())
-  name  String
-  unit  String // "G" o "UD"
-  price Float
-  stock Float  @default(0)
+  id          Int    @id @default(autoincrement())
+  name        String
+  unit        String // "G" o "UD"
+  price       Float
+  stock       Float  @default(0)
+  averageCost Float  @default(0)
 
   category String @default("CANNABIS")
   minStock Float  @default(5)
@@ -71,6 +72,8 @@ model Sale {
   productId   Int
   qty         Float
   totalAmount Float
+  unitCost    Float    @default(0)
+  profit      Float    @default(0)
   note        String?
   createdAt   DateTime @default(now())
 

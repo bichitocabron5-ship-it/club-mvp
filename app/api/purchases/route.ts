@@ -87,6 +87,14 @@ export async function POST(req: Request) {
         const newStock = previousStock + item.qty;
         const lineTotal = item.qty * item.unitCost;
 
+        const previousAverageCost = Number(product.averageCost || 0);
+
+        const newAverageCost =
+          newStock > 0
+            ? (previousStock * previousAverageCost + item.qty * item.unitCost) /
+              newStock
+            : item.unitCost;
+
         await tx.purchaseItem.create({
           data: {
             purchaseId: purchase.id,
@@ -101,6 +109,7 @@ export async function POST(req: Request) {
           where: { id: item.productId },
           data: {
             stock: newStock,
+            averageCost: newAverageCost,
           },
         });
 

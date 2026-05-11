@@ -95,9 +95,16 @@ export async function GET() {
     .filter((m) => m.type === "income")
     .reduce((acc, m) => acc + Number(m.amount), 0);
 
+  const grossProfit = sales.reduce(
+    (acc, sale) => acc + Number(sale.profit || 0),
+    0
+  );
+
   const expense = cashMoves
     .filter((m) => m.type === "expense")
     .reduce((acc, m) => acc + Number(m.amount), 0);
+
+  const netProfit = grossProfit - expense;
 
   const lowStock = products.filter(
     (p) => Number(p.stock) <= Number(p.minStock)
@@ -135,6 +142,8 @@ export async function GET() {
     income,
     expense,
     balance: income - expense,
+    grossProfit,
+    netProfit,
 
     salesCount: sales.length,
     activeMembersToday,

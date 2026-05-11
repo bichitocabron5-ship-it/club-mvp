@@ -40,6 +40,8 @@ type DashboardData = {
   expense: number;
   balance: number;
   salesCount: number;
+  grossProfit: number;
+  netProfit: number;
   activeMembersToday: number;
   currentInsideCount: number;
   lowStock: LowStockProduct[];
@@ -133,7 +135,7 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      <section className="mb-6 grid gap-3 md:grid-cols-3">
+      <section className="mb-6 grid gap-3 md:grid-cols-5">
         <div className="rounded border bg-green-50 p-4">
           <div className="text-sm text-green-700">Ingresos</div>
           <div className="text-3xl font-black text-green-800">
@@ -145,6 +147,32 @@ export default function DashboardPage() {
           <div className="text-sm text-red-700">Gastos</div>
           <div className="text-3xl font-black text-red-800">
             {Number(data.expense).toFixed(2)} €
+          </div>
+        </div>
+
+        <div className="rounded border bg-purple-50 p-4">
+          <div className="text-sm text-purple-700">Margen bruto</div>
+          <div className="text-3xl font-black text-purple-800">
+            {Number(data.grossProfit).toFixed(2)} €
+          </div>
+        </div>
+
+        <div
+          className={
+            data.netProfit >= 0
+              ? "rounded border bg-green-50 p-4"
+              : "rounded border bg-red-50 p-4"
+          }
+        >
+          <div className="text-sm text-gray-600">Beneficio neto estimado</div>
+          <div
+            className={
+              data.netProfit >= 0
+                ? "text-3xl font-black text-green-800"
+                : "text-3xl font-black text-red-800"
+            }
+          >
+            {Number(data.netProfit).toFixed(2)} €
           </div>
         </div>
 
