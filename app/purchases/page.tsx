@@ -63,6 +63,7 @@ export default function PurchasesPage() {
   });
 
   const [items, setItems] = useState<PurchaseItemForm[]>([{ ...initialItem }]);
+  const [paymentAmounts, setPaymentAmounts] = useState<Record<number, string>>({});
 
   async function loadData() {
     const [suppliersRes, productsRes, purchasesRes] = await Promise.all([
@@ -171,6 +172,39 @@ export default function PurchasesPage() {
     if (status === "PARTIAL") return "bg-yellow-100 text-yellow-700";
     if (status === "PENDING") return "bg-red-100 text-red-700";
     return "bg-gray-100 text-gray-700";
+  }
+
+  async function payPurchase(purchaseId: number) {
+    const amount = Number(paymentAmounts[purchaseId] || 0);
+
+    if (!amount || amount <= 0) {
+      alert("Introduce un importe válido");
+      return;
+    }
+
+    const res = await fetch(`/api/purchases/${purchaseId}/pay`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        amount,
+        paidMethod: "CASH",
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      alert(err.error || "Error registrando pago");
+      return;
+    }
+
+    setPaymentAmounts((prev) => ({
+      ...prev,
+      [purchaseId]: "",
+    }));
+
+    await loadData();
   }
 
   return (
@@ -380,6 +414,39 @@ export default function PurchasesPage() {
                     </strong>
                   </div>
                 </div>
+
+              {purchase.status !== "PAID" && (
+                <div className="mt-3 rounded border bg-yellow-50 p-3">
+                  <div className="mb-2 text-sm font-bold text-yellow-800">
+                    Registrar pago de deuda
+                  </div>
+
+                  <div className="flex flex-col gap-2 md:flex-row">
+                    <input
+                      className="rounded border p-2"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="Importe a pagar"
+                      value={paymentAmounts[purchase.id] || ""}
+                      onChange={(e) =>
+                        setPaymentAmounts((prev) => ({
+                          ...prev,
+                          [purchase.id]: e.target.value,
+                        }))
+                      }
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => void payPurchase(purchase.id)}
+                      className="rounded bg-yellow-600 px-4 py-2 font-bold text-white"
+                    >
+                      Registrar pago
+                    </button>
+                  </div>
+                </div>
+              )}
 
                 <div className="mt-3 space-y-1">
                   {purchase.items.map((item) => (
