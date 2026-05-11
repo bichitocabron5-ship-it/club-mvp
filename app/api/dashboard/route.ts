@@ -224,6 +224,83 @@ export async function GET() {
     .sort((a, b) => b.totalAmount - a.totalAmount)
     .slice(0, 5);
 
+  const sevenDaysAgo = new Date(start);
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+
+  const [cashMoves7d, sales7d] = await Promise.all([
+    prisma.cashMove.findMany({
+      where: {
+        createdAt: {
+          gte: sevenDaysAgo,
+          lt: end,
+        },
+      },
+    }),
+    prisma.sale.findMany({
+      where: {
+        createdAt: {
+          gte: sevenDaysAgo,
+          lt: end,
+        },
+      },
+    }),
+  ]);
+
+  const dailyMap = new Map<
+    string,
+    {
+      date: string;
+      income: number;
+      expense: number;
+      grossProfit: number;
+      netProfit: number;
+      salesCount: number;
+    }
+  >();
+
+  for (let i = 0; i < 7; i++) {
+    const day = new Date(sevenDaysAgo);
+    day.setDate(sevenDaysAgo.getDate() + i);
+    const key = day.toISOString().slice(0, 10);
+
+    dailyMap.set(key, {
+      date: key,
+      income: 0,
+      expense: 0,
+      grossProfit: 0,
+      netProfit: 0,
+      salesCount: 0,
+    });
+  }
+
+  for (const move of cashMoves7d) {
+    const key = move.createdAt.toISOString().slice(0, 10);
+    const day = dailyMap.get(key);
+    if (!day) continue;
+
+    if (move.type === "income") {
+      day.income += Number(move.amount);
+    }
+
+    if (move.type === "expense") {
+      day.expense += Number(move.amount);
+    }
+  }
+
+  for (const sale of sales7d) {
+    const key = sale.createdAt.toISOString().slice(0, 10);
+    const day = dailyMap.get(key);
+    if (!day) continue;
+
+    day.grossProfit += Number(sale.profit || 0);
+    day.salesCount += 1;
+  }
+
+  const dailyFinance = Array.from(dailyMap.values()).map((day) => ({
+    ...day,
+    netProfit: day.grossProfit - day.expense,
+  }));
+
   return NextResponse.json({
     income,
     expense,
@@ -243,6 +320,7 @@ export async function GET() {
     lowStock,
     lastSales: sales.slice(0, 8),
     lastAccessLogs,
+    dailyFinance,
 
     expensesToday: expenses,
     expensesByCategory,

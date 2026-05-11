@@ -53,6 +53,7 @@ type DashboardData = {
   topProductsByProfit: ProductStat[];
   worstProductsByProfit: ProductStat[];
   topMembersByAmount: MemberStat[];
+  dailyFinance: DailyFinance[];
   alerts: {
     membersWithoutContract: number;
     expiredMembers: number;
@@ -88,6 +89,15 @@ type MemberStat = {
   totalAmount: number;
   totalQty: number;
   profit: number;
+};
+
+type DailyFinance = {
+  date: string;
+  income: number;
+  expense: number;
+  grossProfit: number;
+  netProfit: number;
+  salesCount: number;
 };
 
 export default function DashboardPage() {
@@ -296,6 +306,61 @@ export default function DashboardPage() {
           </div>
         </div>
       </section>
+
+        <section className="mb-6 rounded border p-4">
+          <h2 className="mb-3 text-lg font-bold">Finanzas últimos 7 días</h2>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left">
+                  <th className="p-2">Día</th>
+                  <th className="p-2 text-right">Ingresos</th>
+                  <th className="p-2 text-right">Gastos</th>
+                  <th className="p-2 text-right">Margen</th>
+                  <th className="p-2 text-right">Neto</th>
+                  <th className="p-2 text-right">Retiradas</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {data.dailyFinance.map((day) => (
+                  <tr key={day.date} className="border-b">
+                    <td className="p-2">
+                      {new Date(day.date).toLocaleDateString()}
+                    </td>
+
+                    <td className="p-2 text-right text-green-700">
+                      {Number(day.income).toFixed(2)} €
+                    </td>
+
+                    <td className="p-2 text-right text-red-600">
+                      -{Number(day.expense).toFixed(2)} €
+                    </td>
+
+                    <td className="p-2 text-right text-purple-700">
+                      {Number(day.grossProfit).toFixed(2)} €
+                    </td>
+
+                    <td
+                      className={
+                        day.netProfit >= 0
+                          ? "p-2 text-right font-bold text-green-700"
+                          : "p-2 text-right font-bold text-red-700"
+                      }
+                    >
+                      {Number(day.netProfit).toFixed(2)} €
+                    </td>
+
+                    <td className="p-2 text-right">
+                      {day.salesCount}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
 
       {hasAlerts && (
         <section className="mb-6 rounded border border-red-300 bg-red-50 p-4">
