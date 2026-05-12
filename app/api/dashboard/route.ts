@@ -15,7 +15,7 @@ function getTodayRange() {
 export async function GET() {
   const { start, end } = getTodayRange();
 
-  const [cashMoves, sales, products, members, lastAccessLogs, expenses] =
+  const [cashMoves, sales, products, members, lastAccessLogs, expenses, purchases] =
     await Promise.all([
       prisma.cashMove.findMany({
         where: {
@@ -84,6 +84,20 @@ export async function GET() {
             gte: start,
             lt: end,
           },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      }),
+
+      prisma.purchase.findMany({
+        where: {
+          status: {
+            in: ["PENDING", "PARTIAL"],
+          },
+        },
+        include: {
+          supplier: true,
         },
         orderBy: {
           createdAt: "desc",
@@ -301,6 +315,22 @@ export async function GET() {
     netProfit: day.grossProfit - day.expense,
   }));
 
+  const supplierDebt = purchases.reduce(
+    (acc, purchase) =>
+      acc + (Number(purchase.totalAmount) - Number(purchase.paidAmount)),
+    0
+  );
+
+  const pendingPurchases = purchases.slice(0, 8).map((purchase) => ({
+    id: purchase.id,
+    supplierName: purchase.supplier.name,
+    totalAmount: Number(purchase.totalAmount),
+    paidAmount: Number(purchase.paidAmount),
+    pendingAmount: Number(purchase.totalAmount) - Number(purchase.paidAmount),
+    status: purchase.status,
+    createdAt: purchase.createdAt,
+  }));
+
   return NextResponse.json({
     income,
     expense,
@@ -321,6 +351,9 @@ export async function GET() {
     lastSales: sales.slice(0, 8),
     lastAccessLogs,
     dailyFinance,
+
+    supplierDebt,
+    pendingPurchases,
 
     expensesToday: expenses,
     expensesByCategory,

@@ -54,6 +54,8 @@ type DashboardData = {
   worstProductsByProfit: ProductStat[];
   topMembersByAmount: MemberStat[];
   dailyFinance: DailyFinance[];
+  supplierDebt: number;
+  endingPurchases: PendingPurchase[];
   alerts: {
     membersWithoutContract: number;
     expiredMembers: number;
@@ -98,6 +100,16 @@ type DailyFinance = {
   grossProfit: number;
   netProfit: number;
   salesCount: number;
+};
+
+type PendingPurchase = {
+  id: number;
+  supplierName: string;
+  totalAmount: number;
+  paidAmount: number;
+  pendingAmount: number;
+  status: string;
+  createdAt: string;
 };
 
 export default function DashboardPage() {
@@ -246,7 +258,7 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      <section className="mb-6 grid gap-3 md:grid-cols-5">
+      <section className="mb-6 grid gap-3 md:grid-cols-6">
         <div className="rounded border bg-green-50 p-4">
           <div className="text-sm text-green-700">Ingresos</div>
           <div className="text-3xl font-black text-green-800">
@@ -265,6 +277,13 @@ export default function DashboardPage() {
           <div className="text-sm text-purple-700">Margen bruto</div>
           <div className="text-3xl font-black text-purple-800">
             {Number(data.grossProfit).toFixed(2)} €
+          </div>
+        </div>
+
+        <div className="rounded border bg-yellow-50 p-4">
+          <div className="text-sm text-yellow-700">Deuda proveedores</div>
+          <div className="text-2xl font-black text-yellow-800">
+            {Number(data.supplierDebt).toFixed(2)} €
           </div>
         </div>
 
@@ -512,6 +531,48 @@ export default function DashboardPage() {
                 <strong className="text-red-600">
                   -{Number(amount).toFixed(2)} €
                 </strong>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded border p-4">
+          <h2 className="mb-3 text-lg font-bold">Compras pendientes</h2>
+
+          {data.endingPurchases.length === 0 && (
+            <p className="text-sm text-gray-500">No hay deuda pendiente.</p>
+          )}
+
+          <div className="space-y-2">
+            {data.endingPurchases.map((purchase) => (
+              <div key={purchase.id} className="rounded border p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="font-semibold">{purchase.supplierName}</div>
+                    <div className="text-sm text-gray-500">
+                      {new Date(purchase.createdAt).toLocaleDateString()}
+                    </div>
+                  </div>
+
+                  <span className="rounded bg-yellow-100 px-3 py-1 text-sm font-bold text-yellow-700">
+                    {purchase.status}
+                  </span>
+                </div>
+
+                <div className="mt-2 grid grid-cols-3 gap-2 text-sm">
+                  <div>
+                    Total: <strong>{purchase.totalAmount.toFixed(2)} €</strong>
+                  </div>
+                  <div>
+                    Pagado: <strong>{purchase.paidAmount.toFixed(2)} €</strong>
+                  </div>
+                  <div>
+                    Pendiente:{" "}
+                    <strong className="text-red-600">
+                      {purchase.pendingAmount.toFixed(2)} €
+                    </strong>
+                  </div>
+                </div>
               </div>
             ))}
           </div>
