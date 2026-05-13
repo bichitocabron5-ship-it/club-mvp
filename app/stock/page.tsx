@@ -27,6 +27,9 @@ export default function StockPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [moves, setMoves] = useState<StockMove[]>([]);
   const [loading, setLoading] = useState(false);
+  const [adjustQty, setAdjustQty] = useState("");
+  const [adjustReason, setAdjustReason] = useState("");
+  const [adjustType, setAdjustType] = useState<"ADD" | "REMOVE">("REMOVE");
 
   const [form, setForm] = useState({
     productId: "",
@@ -110,6 +113,49 @@ export default function StockPage() {
     return "bg-gray-100 text-gray-700";
   }
 
+  async function adjustStock() {
+    if (!selectedProduct) {
+      alert("Selecciona producto");
+      return;
+    }
+
+    const qty = Number(adjustQty);
+
+    if (!qty || qty <= 0) {
+      alert("Cantidad inválida");
+      return;
+    }
+
+    if (adjustReason.trim().length < 3) {
+      alert("Indica motivo");
+      return;
+    }
+
+    const res = await fetch("/api/stock/adjust", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        productId: selectedProduct,
+        qty,
+        type: adjustType,
+        reason: adjustReason,
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      alert(err.error || "Error ajustando stock");
+      return;
+    }
+
+    setAdjustQty("");
+    setAdjustReason("");
+
+    await loadData();
+  }
+
   return (
     <main className="mx-auto max-w-6xl p-4 md:p-6">
       <div className="mb-6">
@@ -190,6 +236,48 @@ export default function StockPage() {
                 {loading ? "Guardando..." : "Registrar movimiento"}
               </button>
             </form>
+          </div>
+
+          <div className="mt-4 rounded border p-4">
+            <h3 className="mb-3 font-bold">Ajuste manual</h3>
+
+            <div className="grid gap-2">
+              <select
+                className="rounded border p-2"
+                value={adjustType}
+                onChange={(e) =>
+                  setAdjustType(e.target.value as "ADD" | "REMOVE")
+                }
+              >
+                <option value="REMOVE">Salida / Merma</option>
+                <option value="ADD">Entrada / Corrección</option>
+              </select>
+
+              <input
+                className="rounded border p-2"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="Cantidad"
+                value={adjustQty}
+                onChange={(e) => setAdjustQty(e.target.value)}
+              />
+
+              <input
+                className="rounded border p-2"
+                placeholder="Motivo obligatorio"
+                value={adjustReason}
+                onChange={(e) => setAdjustReason(e.target.value)}
+              />
+
+              <button
+                type="button"
+                onClick={() => void adjustStock()}
+                className="rounded bg-orange-600 p-2 font-bold text-white"
+              >
+                Registrar ajuste
+              </button>
+            </div>
           </div>
 
           <div className="rounded border p-4">
