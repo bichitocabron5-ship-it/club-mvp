@@ -31,6 +31,9 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
+  const countedCash =
+    body.countedCash !== undefined ? Number(body.countedCash) : 0;
+  const note = body.note ? String(body.note) : null;
   const { start, end, day } = getTodayRange();
 
   const existing = await prisma.dayClosure.findUnique({
@@ -62,6 +65,8 @@ export async function POST(req: Request) {
     .reduce((acc, m) => acc + Number(m.amount), 0);
 
   const balance = totalIncome - totalExpense;
+  const expectedCash = balance;
+  const difference = countedCash - expectedCash;
 
   const closure = await prisma.dayClosure.create({
     data: {
@@ -69,7 +74,10 @@ export async function POST(req: Request) {
       totalIncome,
       totalExpense,
       balance,
-      note: body.note || null,
+      expectedCash,
+      countedCash,
+      difference,
+      note,
     },
   });
 

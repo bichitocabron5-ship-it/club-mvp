@@ -39,6 +39,9 @@ export type DayClosure = {
   totalIncome: number;
   totalExpense: number;
   balance: number;
+  expectedCash: number;
+  countedCash: number;
+  difference: number;
   note: string | null;
   createdAt: string;
 };

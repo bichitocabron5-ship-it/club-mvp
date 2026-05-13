@@ -1,3 +1,4 @@
+// app/cash/page.tsx
 "use client";
 
 import type { CashMove, DayClosure } from "@/lib/types";
@@ -13,6 +14,7 @@ export default function CashPage() {
   const [closure, setClosure] = useState<DayClosure | null>(null);
   const [closed, setClosed] = useState(false);
   const [note, setNote] = useState("");
+  const [countedCash, setCountedCash] = useState("");
 
   async function loadCash() {
     const [movesRes, closureRes] = await Promise.all([
@@ -29,23 +31,11 @@ export default function CashPage() {
   }
 
   useEffect(() => {
-    let cancelled = false;
+    const timeout = setTimeout(() => {
+      void loadCash();
+    }, 0);
 
-    void Promise.all([fetch("/api/cash"), fetch("/api/day-closure")])
-      .then(async ([movesRes, closureRes]) => {
-        const movesData: CashMove[] = await movesRes.json();
-        const closureData: ClosureResponse = await closureRes.json();
-
-        if (!cancelled) {
-          setMoves(movesData);
-          setClosed(closureData.closed);
-          setClosure(closureData.closure);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
+    return () => clearTimeout(timeout);
   }, []);
 
   const todayMoves = moves.filter((move) => {
@@ -68,9 +58,11 @@ export default function CashPage() {
     .reduce((acc, move) => acc + Number(move.amount), 0);
 
   const balance = income - expense;
+  const counted = Number(countedCash || 0);
+  const difference = counted - balance;
 
   async function closeDay() {
-    const ok = confirm("Cerrar el dia? No se podran registrar mas retiradas hoy.");
+    const ok = confirm("Cerrar el día? No se podrán registrar más retiradas hoy.");
     if (!ok) return;
 
     const res = await fetch("/api/day-closure", {
@@ -78,16 +70,20 @@ export default function CashPage() {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ note }),
+      body: JSON.stringify({
+        countedCash: counted,
+        note,
+      }),
     });
 
     if (!res.ok) {
       const err: { error?: string } = await res.json();
-      alert(err.error || "Error al cerrar el dia");
+      alert(err.error || "Error al cerrar el día");
       return;
     }
 
     setNote("");
+    setCountedCash("");
     await loadCash();
   }
 
@@ -97,8 +93,27 @@ export default function CashPage() {
 
       {closed && (
         <div className="mb-4 rounded bg-green-100 p-3 text-green-700">
-          Dia cerrado. Balance:{" "}
-          <strong>{Number(closure?.balance || 0).toFixed(2)} EUR</strong>
+          <div className="font-bold">Día cerrado</div>
+          <div>
+            Esperado:{" "}
+            <strong>{Number(closure?.expectedCash || 0).toFixed(2)} EUR</strong>
+          </div>
+          <div>
+            Contado:{" "}
+            <strong>{Number(closure?.countedCash || 0).toFixed(2)} EUR</strong>
+          </div>
+          <div>
+            Diferencia:{" "}
+            <strong
+              className={
+                Number(closure?.difference || 0) === 0
+                  ? "text-green-700"
+                  : "text-red-700"
+              }
+            >
+              {Number(closure?.difference || 0).toFixed(2)} EUR
+            </strong>
+          </div>
         </div>
       )}
 
@@ -112,21 +127,43 @@ export default function CashPage() {
           <strong>{expense.toFixed(2)} EUR</strong>
         </div>
         <div className="rounded border p-3">
-          <div className="text-sm text-gray-500">Balance</div>
+          <div className="text-sm text-gray-500">Esperado</div>
           <strong>{balance.toFixed(2)} EUR</strong>
         </div>
       </div>
 
       {!closed && (
         <div className="mb-6 rounded border p-3">
+          <div className="mb-3 rounded bg-gray-50 p-3 text-sm">
+            <div>
+              Efectivo esperado: <strong>{balance.toFixed(2)} EUR</strong>
+            </div>
+            <div>
+              Diferencia actual:{" "}
+              <strong className={difference === 0 ? "text-green-700" : "text-red-700"}>
+                {difference.toFixed(2)} EUR
+              </strong>
+            </div>
+          </div>
+
+          <input
+            className="mb-2 w-full border p-2"
+            type="number"
+            step="0.01"
+            placeholder="Efectivo contado"
+            value={countedCash}
+            onChange={(e) => setCountedCash(e.target.value)}
+          />
+
           <input
             className="mb-2 w-full border p-2"
             placeholder="Nota de cierre opcional"
             value={note}
             onChange={(e) => setNote(e.target.value)}
           />
+
           <button onClick={closeDay} className="w-full bg-red-600 p-2 text-white">
-            Cerrar dia
+            Cerrar día
           </button>
         </div>
       )}
@@ -143,7 +180,11 @@ export default function CashPage() {
               <div>{move.note}</div>
             </div>
 
-            <div className={move.type === "income" ? "text-green-600" : "text-red-600"}>
+            <div
+              className={
+                move.type === "income" ? "text-green-600" : "text-red-600"
+              }
+            >
               {move.type === "income" ? "+" : "-"}
               {Number(move.amount).toFixed(2)} EUR
             </div>

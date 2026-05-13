@@ -55,7 +55,8 @@ type DashboardData = {
   topMembersByAmount: MemberStat[];
   dailyFinance: DailyFinance[];
   supplierDebt: number;
-  endingPurchases: PendingPurchase[];
+  pendingPurchases: PendingPurchase[];
+  recentClosures: RecentClosure[];
   alerts: {
     membersWithoutContract: number;
     expiredMembers: number;
@@ -109,6 +110,19 @@ type PendingPurchase = {
   paidAmount: number;
   pendingAmount: number;
   status: string;
+  createdAt: string;
+};
+
+type RecentClosure = {
+  id: number;
+  day: string;
+  totalIncome: number;
+  totalExpense: number;
+  balance: number;
+  expectedCash: number;
+  countedCash: number;
+  difference: number;
+  note: string | null;
   createdAt: string;
 };
 
@@ -539,12 +553,12 @@ export default function DashboardPage() {
         <section className="rounded border p-4">
           <h2 className="mb-3 text-lg font-bold">Compras pendientes</h2>
 
-          {data.endingPurchases.length === 0 && (
+          {data.pendingPurchases.length === 0 && (
             <p className="text-sm text-gray-500">No hay deuda pendiente.</p>
           )}
 
           <div className="space-y-2">
-            {data.endingPurchases.map((purchase) => (
+            {data.pendingPurchases.map((purchase) => (
               <div key={purchase.id} className="rounded border p-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -573,6 +587,59 @@ export default function DashboardPage() {
                     </strong>
                   </div>
                 </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded border p-4">
+          <h2 className="mb-3 text-lg font-bold">Últimos cierres</h2>
+
+          {data.recentClosures.length === 0 && (
+            <p className="text-sm text-gray-500">No hay cierres registrados.</p>
+          )}
+
+          <div className="space-y-2">
+            {data.recentClosures.map((closure) => (
+              <div key={closure.id} className="rounded border p-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-semibold">{closure.day}</div>
+                    <div className="text-sm text-gray-500">
+                      {new Date(closure.createdAt).toLocaleString()}
+                    </div>
+                  </div>
+
+                  <strong
+                    className={
+                      Number(closure.difference) === 0
+                        ? "text-green-700"
+                        : "text-red-700"
+                    }
+                  >
+                    {Number(closure.difference).toFixed(2)} €
+                  </strong>
+                </div>
+
+                <div className="mt-2 grid grid-cols-3 gap-2 text-sm">
+                  <div>
+                    Esperado:{" "}
+                    <strong>{Number(closure.expectedCash).toFixed(2)} €</strong>
+                  </div>
+                  <div>
+                    Contado:{" "}
+                    <strong>{Number(closure.countedCash).toFixed(2)} €</strong>
+                  </div>
+                  <div>
+                    Balance: <strong>{Number(closure.balance).toFixed(2)} €</strong>
+                  </div>
+                </div>
+
+                {closure.note && (
+                  <div className="mt-2 rounded bg-gray-50 p-2 text-sm text-gray-600">
+                    {closure.note}
+                  </div>
+                )}
               </div>
             ))}
           </div>
