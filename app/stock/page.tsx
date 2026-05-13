@@ -165,6 +165,13 @@ export default function StockPage() {
         </p>
       </div>
 
+      <a
+        href="/stock/history"
+        className="mb-4 inline-block rounded bg-gray-900 px-4 py-2 text-white"
+      >
+        Ver historial de stock
+      </a>
+
       <div className="grid gap-4 lg:grid-cols-[380px_1fr]">
         <section className="space-y-4">
           <div className="rounded border p-4">
