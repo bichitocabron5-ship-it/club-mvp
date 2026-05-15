@@ -1,3 +1,5 @@
+// app/api/members/route.ts
+import { requireAuth } from "@/lib/auth-server";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -11,6 +13,7 @@ const memberSchema = z.object({
 });
 
 export async function GET() {
+  await requireAuth();
   const members = await prisma.member.findMany({
     include: {
       contracts: {

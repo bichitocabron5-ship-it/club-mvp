@@ -1,4 +1,5 @@
 // app/api/purchases/route.ts
+import { requireAdmin } from "@/lib/auth-server";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -19,6 +20,7 @@ const purchaseSchema = z.object({
 });
 
 export async function GET() {
+  await requireAdmin();
   const purchases = await prisma.purchase.findMany({
     include: {
       supplier: true,

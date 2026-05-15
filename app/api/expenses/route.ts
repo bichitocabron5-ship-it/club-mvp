@@ -1,4 +1,5 @@
 // app/api/expenses/route.ts
+import { requireAdmin } from "@/lib/auth-server";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -11,6 +12,7 @@ const expenseSchema = z.object({
 });
 
 export async function GET() {
+  await requireAdmin();
   const expenses = await prisma.expense.findMany({
     orderBy: {
       createdAt: "desc",

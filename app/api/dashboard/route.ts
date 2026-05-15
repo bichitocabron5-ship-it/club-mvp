@@ -1,4 +1,5 @@
 // app/api/dashboard/route.ts
+import { requireAuth } from "@/lib/auth-server";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
@@ -13,6 +14,7 @@ function getTodayRange() {
 }
 
 export async function GET() {
+  await requireAuth();
   const { start, end } = getTodayRange();
 
   const [cashMoves, sales, products, members, lastAccessLogs, expenses, purchases,recentClosures] =

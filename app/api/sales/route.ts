@@ -1,3 +1,5 @@
+// app/api/sales/route.ts
+import { requireAuth } from "@/lib/auth-server";
 import { prisma } from "@/lib/prisma";
 import {
   DAILY_LIMIT_G,
@@ -18,6 +20,7 @@ const saleSchema = z.object({
 });
 
 export async function POST(req: Request) {
+  await requireAuth();
   const body = await req.json();
   const parsed = saleSchema.safeParse(body);
 

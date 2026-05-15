@@ -1,4 +1,5 @@
 // app/api/day-closure/route.ts
+import { requireAdmin } from "@/lib/auth-server";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
@@ -15,6 +16,7 @@ function getTodayRange() {
 }
 
 export async function GET() {
+  await requireAdmin();
   const { day } = getTodayRange();
 
   const closure = await prisma.dayClosure.findUnique({

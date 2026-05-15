@@ -34,6 +34,16 @@ model AccessLog {
   createdAt DateTime @default(now())
 }
 
+model AppUser {
+  id           Int      @id @default(autoincrement())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         String   @default("STAFF") // ADMIN | STAFF
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+}
+
 model Product {
   id          Int    @id @default(autoincrement())
   name        String

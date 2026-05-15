@@ -1,7 +1,10 @@
+// app/api/cash/route.ts
+import { requireAuth } from "@/lib/auth-server";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
 export async function GET() {
+  await requireAuth();
   const moves = await prisma.cashMove.findMany({
     orderBy: { createdAt: "desc" },
   });

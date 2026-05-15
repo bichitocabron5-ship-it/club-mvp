@@ -1,4 +1,5 @@
 // app/api/suppliers/route.ts
+import { requireAdmin } from "@/lib/auth-server";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -11,6 +12,7 @@ const supplierSchema = z.object({
 });
 
 export async function GET() {
+  await requireAdmin();
   const suppliers = await prisma.supplier.findMany({
     orderBy: { name: "asc" },
   });

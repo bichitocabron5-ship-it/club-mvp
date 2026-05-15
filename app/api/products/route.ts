@@ -1,4 +1,5 @@
 // app/api/products/route.ts
+import { requireAdmin } from "@/lib/auth-server";
 import { prisma } from "@/lib/prisma";
 import { normalizeUnit } from "@/lib/sales";
 import { NextResponse } from "next/server";
@@ -14,6 +15,7 @@ const productSchema = z.object({
 });
 
 export async function GET() {
+  await requireAdmin();
   const products = await prisma.product.findMany({
     orderBy: { createdAt: "desc" },
   });

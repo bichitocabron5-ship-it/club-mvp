@@ -1,4 +1,5 @@
 // app/api/stock/adjust/route.ts
+import { requireAdmin } from "@/lib/auth-server";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -11,6 +12,7 @@ const adjustSchema = z.object({
 });
 
 export async function POST(req: Request) {
+  await requireAdmin();
   const body = await req.json();
 
   const parsed = adjustSchema.safeParse(body);
