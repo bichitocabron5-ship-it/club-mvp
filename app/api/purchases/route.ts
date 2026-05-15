@@ -20,7 +20,11 @@ const purchaseSchema = z.object({
 });
 
 export async function GET() {
-  await requireAdmin();
+  const auth = await requireAdmin();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
   const purchases = await prisma.purchase.findMany({
     include: {
       supplier: true,
@@ -38,6 +42,11 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const auth = await requireAdmin();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
   const body = await req.json();
   const parsed = purchaseSchema.safeParse(body);
 

@@ -12,7 +12,11 @@ const expenseSchema = z.object({
 });
 
 export async function GET() {
-  await requireAdmin();
+  const auth = await requireAdmin();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
   const expenses = await prisma.expense.findMany({
     orderBy: {
       createdAt: "desc",
@@ -24,6 +28,11 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const auth = await requireAdmin();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
   const body = await req.json();
   const parsed = expenseSchema.safeParse(body);
 

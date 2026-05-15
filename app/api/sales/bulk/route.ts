@@ -1,3 +1,4 @@
+import { requireAuth } from "@/lib/auth-server";
 import { prisma } from "@/lib/prisma";
 import {
   DAILY_LIMIT_G,
@@ -24,6 +25,11 @@ const bulkSaleSchema = z.object({
 });
 
 export async function POST(req: Request) {
+  const auth = await requireAuth();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
   const body = await req.json();
   const parsed = bulkSaleSchema.safeParse(body);
 

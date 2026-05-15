@@ -13,7 +13,11 @@ const memberSchema = z.object({
 });
 
 export async function GET() {
-  await requireAuth();
+  const auth = await requireAuth();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
   const members = await prisma.member.findMany({
     include: {
       contracts: {
@@ -35,6 +39,11 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const auth = await requireAuth();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
   const body = await req.json();
   const parsed = memberSchema.safeParse(body);
 

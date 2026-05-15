@@ -20,7 +20,11 @@ const saleSchema = z.object({
 });
 
 export async function POST(req: Request) {
-  await requireAuth();
+  const auth = await requireAuth();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
   const body = await req.json();
   const parsed = saleSchema.safeParse(body);
 

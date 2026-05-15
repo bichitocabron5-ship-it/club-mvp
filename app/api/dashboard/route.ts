@@ -14,7 +14,11 @@ function getTodayRange() {
 }
 
 export async function GET() {
-  await requireAuth();
+  const auth = await requireAuth();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
   const { start, end } = getTodayRange();
 
   const [cashMoves, sales, products, members, lastAccessLogs, expenses, purchases,recentClosures] =

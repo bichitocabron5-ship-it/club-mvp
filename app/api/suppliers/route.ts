@@ -12,7 +12,11 @@ const supplierSchema = z.object({
 });
 
 export async function GET() {
-  await requireAdmin();
+  const auth = await requireAdmin();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
   const suppliers = await prisma.supplier.findMany({
     orderBy: { name: "asc" },
   });
@@ -21,6 +25,11 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const auth = await requireAdmin();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
   const body = await req.json();
   const parsed = supplierSchema.safeParse(body);
 

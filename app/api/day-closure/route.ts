@@ -16,7 +16,11 @@ function getTodayRange() {
 }
 
 export async function GET() {
-  await requireAdmin();
+  const auth = await requireAdmin();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
   const { day } = getTodayRange();
 
   const closure = await prisma.dayClosure.findUnique({
@@ -32,6 +36,11 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const auth = await requireAdmin();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
   const body = await req.json().catch(() => ({}));
   const countedCash =
     body.countedCash !== undefined ? Number(body.countedCash) : 0;
