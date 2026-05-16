@@ -1,32 +1,16 @@
-// app/stock/page.tsx
 "use client";
 
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/ui/page-header";
+import { fetchJson } from "@/lib/fetch-json";
+import type { ProductSummary, StockMoveRecord } from "@/lib/types";
 import { useEffect, useMemo, useState } from "react";
 
-type Product = {
-  id: number;
-  name: string;
-  unit: "G" | "UD" | string;
-  price: number;
-  stock: number;
-};
-
-type StockMove = {
-  id: number;
-  productId: number;
-  type: "IN" | "OUT" | "ADJUST" | string;
-  qty: number;
-  previousStock: number;
-  newStock: number;
-  note: string | null;
-  createdAt: string;
-  product: Product;
-};
-
 export default function StockPage() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [moves, setMoves] = useState<StockMove[]>([]);
+  const [products, setProducts] = useState<ProductSummary[]>([]);
+  const [moves, setMoves] = useState<StockMoveRecord[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [adjustQty, setAdjustQty] = useState("");
   const [adjustReason, setAdjustReason] = useState("");
   const [adjustType, setAdjustType] = useState<"ADD" | "REMOVE">("REMOVE");
@@ -39,16 +23,18 @@ export default function StockPage() {
   });
 
   async function loadData() {
-    const [productsRes, movesRes] = await Promise.all([
-      fetch("/api/products"),
-      fetch("/api/stock/moves"),
-    ]);
+    try {
+      const [productsData, movesData] = await Promise.all([
+        fetchJson<ProductSummary[]>("/api/products"),
+        fetchJson<StockMoveRecord[]>("/api/stock/moves"),
+      ]);
 
-    const productsData: Product[] = await productsRes.json();
-    const movesData: StockMove[] = await movesRes.json();
-
-    setProducts(productsData);
-    setMoves(movesData);
+      setProducts(productsData);
+      setMoves(movesData);
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error cargando stock");
+    }
   }
 
   useEffect(() => {
@@ -158,12 +144,12 @@ export default function StockPage() {
 
   return (
     <main className="mx-auto max-w-6xl p-4 md:p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">Stock</h1>
-        <p className="text-sm text-gray-500">
-          Entradas, salidas, ajustes e historial de movimientos.
-        </p>
-      </div>
+      <PageHeader
+        title="Stock"
+        description="Entradas, salidas, ajustes e historial de movimientos."
+      />
+
+      {error && <EmptyState message={error} className="mb-4" />}
 
       <a
         href="/stock/history"
@@ -181,9 +167,7 @@ export default function StockPage() {
               <select
                 className="w-full rounded border p-3"
                 value={form.productId}
-                onChange={(e) =>
-                  setForm({ ...form, productId: e.target.value })
-                }
+                onChange={(e) => setForm({ ...form, productId: e.target.value })}
                 required
               >
                 <option value="">Selecciona producto</option>
@@ -198,8 +182,7 @@ export default function StockPage() {
                 <div className="rounded bg-gray-50 p-3 text-sm">
                   Stock actual:{" "}
                   <strong>
-                    {Number(selectedProduct.stock).toFixed(2)}{" "}
-                    {selectedProduct.unit}
+                    {Number(selectedProduct.stock).toFixed(2)} {selectedProduct.unit}
                   </strong>
                 </div>
               )}
@@ -245,16 +228,14 @@ export default function StockPage() {
             </form>
           </div>
 
-          <div className="mt-4 rounded border p-4">
+          <div className="rounded border p-4">
             <h3 className="mb-3 font-bold">Ajuste manual</h3>
 
             <div className="grid gap-2">
               <select
                 className="rounded border p-2"
                 value={adjustType}
-                onChange={(e) =>
-                  setAdjustType(e.target.value as "ADD" | "REMOVE")
-                }
+                onChange={(e) => setAdjustType(e.target.value as "ADD" | "REMOVE")}
               >
                 <option value="REMOVE">Salida / Merma</option>
                 <option value="ADD">Entrada / Corrección</option>
@@ -299,16 +280,13 @@ export default function StockPage() {
                   <div>
                     <div className="font-semibold">{p.name}</div>
                     <div className="text-sm text-gray-500">
-                      {Number(p.price).toFixed(2)} €/
-                      {p.unit === "G" ? "g" : "ud"}
+                      {Number(p.price).toFixed(2)} EUR/{p.unit === "G" ? "g" : "ud"}
                     </div>
                   </div>
 
                   <strong
                     className={
-                      Number(p.stock) <= 5
-                        ? "text-red-600"
-                        : "text-green-700"
+                      Number(p.stock) <= 5 ? "text-red-600" : "text-green-700"
                     }
                   >
                     {Number(p.stock).toFixed(2)} {p.unit}
@@ -323,9 +301,7 @@ export default function StockPage() {
           <h2 className="mb-3 text-lg font-bold">Historial de movimientos</h2>
 
           {moves.length === 0 && (
-            <div className="rounded bg-gray-50 p-3 text-gray-500">
-              No hay movimientos de stock todavía.
-            </div>
+            <EmptyState message="No hay movimientos de stock todavía." />
           )}
 
           <div className="space-y-2">
@@ -340,9 +316,7 @@ export default function StockPage() {
                   </div>
 
                   <span
-                    className={`rounded px-3 py-1 text-sm ${typeClass(
-                      move.type
-                    )}`}
+                    className={`rounded px-3 py-1 text-sm ${typeClass(move.type)}`}
                   >
                     {typeLabel(move.type)}
                   </span>
@@ -359,8 +333,7 @@ export default function StockPage() {
                   <div>
                     Antes:{" "}
                     <strong>
-                      {Number(move.previousStock).toFixed(2)}{" "}
-                      {move.product.unit}
+                      {Number(move.previousStock).toFixed(2)} {move.product.unit}
                     </strong>
                   </div>
 

@@ -1,4 +1,5 @@
-// app/api/contracts/[id]/pdf/route.ts
+import { requireAuth } from "@/lib/auth-server";
+import { downloadAllowedStorageObject } from "@/lib/contract-storage";
 import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { NextResponse } from "next/server";
@@ -20,22 +21,23 @@ function formatYearSuffix(value: string | Date | null | undefined) {
   return String(new Date(value).getFullYear()).slice(-2);
 }
 
-async function fetchPdfBytes(url: string) {
-  const res = await fetch(url);
-
-  if (!res.ok) {
-    throw new Error("No se pudo cargar la plantilla PDF");
-  }
-
-  return Buffer.from(await res.arrayBuffer());
-}
-
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAuth();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
   const { id } = await params;
   const contractId = Number(id);
+  const url = new URL(req.url);
+  const force = url.searchParams.get("force") === "true";
+
+  if (force && auth.session.user.role !== "ADMIN") {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
 
   if (!contractId || Number.isNaN(contractId)) {
     return NextResponse.json({ error: "Contrato inválido" }, { status: 400 });
@@ -53,6 +55,10 @@ export async function GET(
     );
   }
 
+  if (contract.signedPdfUrl && !force) {
+    return NextResponse.redirect(contract.signedPdfUrl);
+  }
+
   const template = await prisma.contractTemplate.findFirst({
     where: { active: true },
     orderBy: { createdAt: "desc" },
@@ -65,7 +71,9 @@ export async function GET(
     );
   }
 
-  const templateBytes = await fetchPdfBytes(template.fileUrl);
+  const { bytes: templateBytes } = await downloadAllowedStorageObject(
+    template.fileUrl
+  );
   const pdfDoc = await PDFDocument.load(templateBytes);
 
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -78,7 +86,6 @@ export async function GET(
 
   const textColor = rgb(0, 0, 0);
 
-  // Página 1 - datos principales
   page1.drawText(formatDate(contract.signedAt), {
     x: 120,
     y: 795,
@@ -143,15 +150,6 @@ export async function GET(
     color: textColor,
   });
 
-  // page1.drawText(String(contract.memberId), {
-    // x: 225,
-    // y: 520,
-    // size: 9,
-    // font,
-    // color: textColor,
-  // });
-
-  // Página 2 - consumo mensual y firma principal
   page2.drawText(
     contract.consumptionGrams ? String(contract.consumptionGrams) : "",
     {
@@ -179,15 +177,6 @@ export async function GET(
     color: textColor,
   });
 
-  // page2.drawText(String(contract.memberId), {
-    // x: 195,
-    // y: 178,
-    // size: 9,
-    // font,
-    // color: textColor,
-  // });
-
-  // Página 3 - protección de datos y aval
   page3.drawText(formatDayMonth(contract.signedAt), {
     x: 180,
     y: 250,
@@ -247,7 +236,6 @@ export async function GET(
   }
 
   const pdfBytes = await pdfDoc.save();
-
   const filePath = `contracts/member-${contract.memberId}/contract-${contract.id}.pdf`;
 
   const upload = await supabaseAdmin.storage
@@ -272,10 +260,5 @@ export async function GET(
     },
   });
 
-  return new NextResponse(Buffer.from(pdfBytes), {
-    headers: {
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="contrato-${contract.id}.pdf"`,
-    },
-  });
+  return NextResponse.redirect(data.publicUrl);
 }

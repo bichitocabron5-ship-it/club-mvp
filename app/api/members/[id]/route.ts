@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+const adminOnlyFields = ["fullName", "dni", "expiresAt", "rfidCode"] as const;
+
 const memberUpdateSchema = z.object({
   fullName: z.string().trim().min(1).optional(),
   dni: z.string().trim().min(1).optional(),
@@ -37,17 +39,63 @@ export async function PATCH(
   }
 
   const data = parsed.data;
+  const existingMember = await prisma.member.findUnique({
+    where: { id: memberId },
+  });
+
+  if (!existingMember) {
+    return NextResponse.json({ error: "Socio no encontrado" }, { status: 404 });
+  }
+
+  const isAdmin = auth.session.user.role === "ADMIN";
+
+  if (!isAdmin) {
+    const normalizedExpiresAt =
+      data.expiresAt === undefined
+        ? undefined
+        : data.expiresAt === null || data.expiresAt === ""
+          ? null
+          : new Date(data.expiresAt).toISOString().slice(0, 10);
+
+    const currentExpiresAt = existingMember.expiresAt
+      ? existingMember.expiresAt.toISOString().slice(0, 10)
+      : null;
+
+    const attemptedSensitiveChange =
+      (data.fullName !== undefined && data.fullName !== existingMember.fullName) ||
+      (data.dni !== undefined && data.dni !== existingMember.dni) ||
+      (data.rfidCode !== undefined &&
+        (data.rfidCode === "" ? null : data.rfidCode) !== existingMember.rfidCode) ||
+      (normalizedExpiresAt !== undefined && normalizedExpiresAt !== currentExpiresAt);
+
+    if (attemptedSensitiveChange) {
+      return NextResponse.json(
+        { error: `FORBIDDEN_FIELDS:${adminOnlyFields.join(",")}` },
+        { status: 403 }
+      );
+    }
+  }
 
   try {
     const member = await prisma.member.update({
       where: { id: memberId },
       data: {
-        fullName: data.fullName,
-        dni: data.dni,
+        fullName: isAdmin ? data.fullName : undefined,
+        dni: isAdmin ? data.dni : undefined,
         phone: data.phone === "" ? null : data.phone,
         email: data.email === "" ? null : data.email,
-        expiresAt: data.expiresAt ? new Date(data.expiresAt) : data.expiresAt === null ? null : undefined,
-        rfidCode: data.rfidCode === "" ? null : data.rfidCode,
+        expiresAt: isAdmin
+          ? data.expiresAt
+            ? new Date(data.expiresAt)
+            : data.expiresAt === null
+              ? null
+              : undefined
+          : undefined,
+        rfidCode: isAdmin
+          ? data.rfidCode === ""
+            ? null
+            : data.rfidCode
+          : undefined,
       },
     });
 

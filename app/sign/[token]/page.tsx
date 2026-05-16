@@ -34,6 +34,7 @@ export default function SignPage() {
   const sigRef = useRef<SignatureCanvas | null>(null);
   const [session, setSession] = useState<SigningSessionData | null>(null);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
   const [form, setForm] = useState<SignForm>(emptyForm);
 
   useEffect(() => {
@@ -41,23 +42,30 @@ export default function SignPage() {
 
     let cancelled = false;
 
-    void fetch(`/api/signing-sessions/${token}`)
-      .then((res) => res.json())
-      .then((data: SigningSessionData) => {
-        if (cancelled) return;
+    void fetch(`/api/signing-sessions/${token}`).then(async (res) => {
+      const data = await res.json();
 
-        setSession(data);
-        setForm({
-          fullName: data.member?.fullName || "",
-          dni: data.member?.dni || "",
-          address: "",
-          birthPlace: "",
-          birthDate: "",
-          phone: data.member?.phone || "",
-          email: "",
-          consumptionGrams: "30",
-        });
+      if (cancelled) return;
+
+      if (!res.ok) {
+        setError(data.error || "La sesión de firma no está disponible");
+        return;
+      }
+
+      const sessionData = data as SigningSessionData;
+
+      setSession(sessionData);
+      setForm({
+        fullName: sessionData.member?.fullName || "",
+        dni: sessionData.member?.dni || "",
+        address: "",
+        birthPlace: "",
+        birthDate: "",
+        phone: sessionData.member?.phone || "",
+        email: "",
+        consumptionGrams: "30",
       });
+    });
 
     return () => {
       cancelled = true;
@@ -70,7 +78,9 @@ export default function SignPage() {
       return;
     }
 
-    const signatureImage = sigRef.current.getTrimmedCanvas().toDataURL("image/png");
+    const signatureImage = sigRef.current
+      .getTrimmedCanvas()
+      .toDataURL("image/png");
 
     const res = await fetch(`/api/signing-sessions/${token}`, {
       method: "POST",
@@ -81,11 +91,21 @@ export default function SignPage() {
     });
 
     if (!res.ok) {
-      alert("Error al guardar firma");
+      const err = await res.json();
+      alert(err.error || "Error al guardar firma");
       return;
     }
 
     setSaved(true);
+  }
+
+  if (error) {
+    return (
+      <main className="p-6 text-center">
+        <h1 className="text-2xl font-bold text-red-700">Sesión no disponible</h1>
+        <p className="mt-2">{error}</p>
+      </main>
+    );
   }
 
   if (!session) return <main className="p-6">Cargando...</main>;

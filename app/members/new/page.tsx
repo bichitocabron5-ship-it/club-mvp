@@ -1,6 +1,9 @@
 // app/members/new/page.tsx
 "use client";
 
+import { PageHeader } from "@/components/ui/page-header";
+import { fetchJson } from "@/lib/fetch-json";
+import type { SigningSessionData } from "@/lib/types";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
@@ -15,21 +18,11 @@ type CreatedMember = {
   rfidCode: string | null;
 };
 
-type SigningSession = {
-  id: number;
-  token: string;
-  memberId: number;
-  status: string;
-  signatureImage: string | null;
-  signedAt: string | null;
-  createdAt: string;
-};
-
 export default function NewMemberPage() {
   const rfidRef = useRef<HTMLInputElement | null>(null);
 
   const [createdMember, setCreatedMember] = useState<CreatedMember | null>(null);
-  const [signingSession, setSigningSession] = useState<SigningSession | null>(null);
+  const [signingSession, setSigningSession] = useState<SigningSessionData | null>(null);
   const [assigningRfid, setAssigningRfid] = useState(false);
   const [loading, setLoading] = useState(false);
   const [contractSigned, setContractSigned] = useState(false);
@@ -119,7 +112,7 @@ export default function NewMemberPage() {
       return;
     }
 
-    const session = await res.json();
+    const session: SigningSessionData = await res.json();
     setSigningSession(session);
     setContractSigned(session.status === "SIGNED");
   }
@@ -131,13 +124,18 @@ export default function NewMemberPage() {
     if (!signingSession?.token || contractSigned) return;
 
     const interval = setInterval(async () => {
-      const res = await fetch(`/api/signing-sessions/${signingSession.token}`);
-      const data: SigningSession = await res.json();
+      try {
+        const data = await fetchJson<SigningSessionData>(
+          `/api/signing-sessions/${signingSession.token}`
+        );
 
-      setSigningSession(data);
+        setSigningSession(data);
 
-      if (data.status === "SIGNED") {
-        setContractSigned(true);
+        if (data.status === "SIGNED") {
+          setContractSigned(true);
+          clearInterval(interval);
+        }
+      } catch {
         clearInterval(interval);
       }
     }, 2000);
@@ -159,12 +157,10 @@ export default function NewMemberPage() {
 
   return (
     <main className="mx-auto max-w-4xl p-4 md:p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">Alta de socio</h1>
-        <p className="text-sm text-gray-500">
-          Flujo guiado: datos, RFID y firma de contrato.
-        </p>
-      </div>
+      <PageHeader
+        title="Alta de socio"
+        description="Flujo guiado: datos, RFID y firma de contrato."
+      />
 
       {!createdMember && (
         <form onSubmit={createMember} className="space-y-3 rounded border p-4">

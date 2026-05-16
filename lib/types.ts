@@ -1,5 +1,11 @@
 export type ProductUnit = "G" | "UD";
 
+export type ProductLike = {
+  id: number;
+  name: string;
+  unit: ProductUnit | string;
+};
+
 export type MemberSummary = {
   id: number;
   fullName: string;
@@ -50,6 +56,7 @@ export type DashboardSale = {
   id: number;
   qty: number;
   totalAmount: number;
+  createdAt: string;
   member: {
     fullName: string;
   };
@@ -59,14 +66,107 @@ export type DashboardSale = {
   };
 };
 
+export type DashboardAccessLog = {
+  id: number;
+  type: "IN" | "OUT" | string;
+  createdAt: string;
+  member: {
+    fullName: string;
+    dni: string;
+  };
+};
+
+export type DashboardExpense = {
+  id: number;
+  category: string;
+  description: string;
+  amount: number;
+  paidMethod: string;
+  createdAt: string;
+};
+
+export type DashboardProductStat = {
+  productId: number;
+  name: string;
+  unit: ProductUnit | string;
+  qty: number;
+  revenue: number;
+  profit: number;
+  salesCount: number;
+};
+
+export type DashboardMemberStat = {
+  memberId: number;
+  fullName: string;
+  dni: string;
+  salesCount: number;
+  totalAmount: number;
+  totalQty: number;
+  profit: number;
+};
+
+export type DashboardDailyFinance = {
+  date: string;
+  income: number;
+  expense: number;
+  grossProfit: number;
+  netProfit: number;
+  salesCount: number;
+};
+
+export type PurchaseSummary = {
+  id: number;
+  supplierName: string;
+  totalAmount: number;
+  paidAmount: number;
+  pendingAmount: number;
+  status: string;
+  createdAt: string;
+};
+
+export type RecentClosure = {
+  id: number;
+  day: string;
+  totalIncome: number;
+  totalExpense: number;
+  balance: number;
+  expectedCash: number;
+  countedCash: number;
+  difference: number;
+  note: string | null;
+  createdAt: string;
+};
+
+export type DashboardAlerts = {
+  membersWithoutContract: number;
+  expiredMembers: number;
+  blockedMembers: number;
+  lowStock: number;
+};
+
 export type DashboardData = {
   income: number;
   expense: number;
   balance: number;
   salesCount: number;
+  grossProfit: number;
+  netProfit: number;
   activeMembersToday: number;
+  currentInsideCount: number;
   lowStock: ProductSummary[];
   lastSales: DashboardSale[];
+  lastAccessLogs: DashboardAccessLog[];
+  expensesToday: DashboardExpense[];
+  expensesByCategory: Record<string, number>;
+  topProductsByRevenue: DashboardProductStat[];
+  topProductsByProfit: DashboardProductStat[];
+  worstProductsByProfit: DashboardProductStat[];
+  topMembersByAmount: DashboardMemberStat[];
+  dailyFinance: DashboardDailyFinance[];
+  supplierDebt: number;
+  pendingPurchases: PurchaseSummary[];
+  recentClosures: RecentClosure[];
+  alerts: DashboardAlerts;
 };
 
 export type MemberContractRecord = {
@@ -115,6 +215,7 @@ export type SigningSessionData = {
   status: "PENDING" | "SIGNED" | "CANCELLED" | string;
   signatureImage: string | null;
   signedAt: string | null;
+  expiresAt: string;
   member: MemberSummary;
   contract?: MemberContractRecord | null;
 };
@@ -124,4 +225,16 @@ export type AccessLogRecord = {
   memberId: number;
   type: "IN" | "OUT" | string;
   createdAt: string;
+};
+
+export type StockMoveRecord = {
+  id: number;
+  productId: number;
+  type: "IN" | "OUT" | "ADJUST" | string;
+  qty: number;
+  previousStock: number;
+  newStock: number;
+  note: string | null;
+  createdAt: string;
+  product: ProductLike;
 };

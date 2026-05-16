@@ -1,5 +1,7 @@
 "use client";
 
+import { EmptyState } from "@/components/ui/empty-state";
+import { fetchJson } from "@/lib/fetch-json";
 import { DAILY_LIMIT_G, DAILY_LIMIT_UD } from "@/lib/sales-rules";
 import type { MemberSummary, ProductSummary } from "@/lib/types";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -53,6 +55,7 @@ export default function SalesPage() {
   const [members, setMembers] = useState<MemberSummary[]>([]);
   const [products, setProducts] = useState<ProductSummary[]>([]);
   const [today, setToday] = useState<TodayTotals>(emptyToday);
+  const [error, setError] = useState("");
   const [memberId, setMemberId] = useState("");
   const [memberStatus, setMemberStatus] = useState<MemberOperationalStatus | null>(null);
   const [memberSearch, setMemberSearch] = useState("");
@@ -72,17 +75,22 @@ export default function SalesPage() {
   useEffect(() => {
     let cancelled = false;
 
-    void Promise.all([fetch("/api/members"), fetch("/api/products")]).then(
-      async ([membersRes, productsRes]) => {
-        const membersData: MemberSummary[] = await membersRes.json();
-        const productsData: ProductSummary[] = await productsRes.json();
-
+    void Promise.all([
+      fetchJson<MemberSummary[]>("/api/members"),
+      fetchJson<ProductSummary[]>("/api/products"),
+    ])
+      .then(([membersData, productsData]) => {
         if (!cancelled) {
           setMembers(membersData);
           setProducts(productsData);
+          setError("");
         }
-      }
-    );
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Error cargando datos");
+        }
+      });
 
     return () => {
       cancelled = true;
@@ -95,17 +103,23 @@ export default function SalesPage() {
     let cancelled = false;
 
     void Promise.all([
-      fetch(`/api/members/${memberId}/today`),
-      fetch(`/api/members/${memberId}/operational-status`),
-    ]).then(async ([todayRes, statusRes]) => {
-      const todayData: TodayTotals = await todayRes.json();
-      const statusData: MemberOperationalStatus = await statusRes.json();
-
-      if (!cancelled) {
-        setToday(todayData);
-        setMemberStatus(statusData);
-      }
-    });
+      fetchJson<TodayTotals>(`/api/members/${memberId}/today`),
+      fetchJson<MemberOperationalStatus>(
+        `/api/members/${memberId}/operational-status`
+      ),
+    ])
+      .then(([todayData, statusData]) => {
+        if (!cancelled) {
+          setToday(todayData);
+          setMemberStatus(statusData);
+          setError("");
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Error cargando socio");
+        }
+      });
 
     return () => {
       cancelled = true;
@@ -259,14 +273,12 @@ export default function SalesPage() {
 
     setCart([]);
 
-    const refreshedProducts: ProductSummary[] = await fetch("/api/products").then((r) =>
-      r.json()
-    );
+    const refreshedProducts = await fetchJson<ProductSummary[]>("/api/products");
     setProducts(refreshedProducts);
 
-    const refreshedToday: TodayTotals = await fetch(
+    const refreshedToday = await fetchJson<TodayTotals>(
       `/api/members/${memberId}/today`
-    ).then((r) => r.json());
+    );
     setToday(refreshedToday);
 
     setMemberId("");
@@ -323,6 +335,8 @@ export default function SalesPage() {
           <strong>{visibleToday.units.toFixed(0)} ud</strong> / {DAILY_LIMIT_UD} ud
         </div>
       </div>
+
+      {error && <EmptyState message={error} className="mb-4" />}
 
       <form onSubmit={handleRfidSubmit} className="rounded border p-3 space-y-2">
         <label className="block text-sm font-medium">Escanear chapita</label>
@@ -516,9 +530,7 @@ export default function SalesPage() {
           <h2 className="mb-3 text-lg font-bold">Carrito</h2>
 
           {cartLines.length === 0 && (
-            <div className="rounded bg-gray-50 p-3 text-sm text-gray-500">
-              Anade productos para registrar una retirada.
-            </div>
+            <EmptyState message="AÃ±ade productos para registrar una retirada." />
           )}
 
           <div className="space-y-3">

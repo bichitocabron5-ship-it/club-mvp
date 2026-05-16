@@ -24,8 +24,21 @@ const adminPaths = [
   "/suppliers",
 ];
 
+const publicPaths = [
+  "/login",
+  "/sign",
+];
+
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  const isPublic = publicPaths.some(
+    (path) => pathname === path || pathname.startsWith(`${path}/`)
+  );
+
+  if (isPublic) {
+    return NextResponse.next();
+  }
 
   const isProtected = protectedPaths.some(
     (path) => pathname === path || pathname.startsWith(`${path}/`)

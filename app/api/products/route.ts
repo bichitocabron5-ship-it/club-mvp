@@ -1,5 +1,5 @@
 // app/api/products/route.ts
-import { requireAdmin } from "@/lib/auth-server";
+import { requireAdmin, requireAuth } from "@/lib/auth-server";
 import { prisma } from "@/lib/prisma";
 import { normalizeUnit } from "@/lib/sales";
 import { NextResponse } from "next/server";
@@ -15,7 +15,7 @@ const productSchema = z.object({
 });
 
 export async function GET() {
-  const auth = await requireAdmin();
+  const auth = await requireAuth();
   if (!auth.ok) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }

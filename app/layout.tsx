@@ -1,7 +1,6 @@
 import "./globals.css";
-import Link from "next/link";
 import { Providers } from "./providers";
-import { LogoutButton } from "@/components/logout-button";
+import { AppNav } from "@/components/app-nav";
 
 export default function RootLayout({
   children,
@@ -12,24 +11,7 @@ export default function RootLayout({
     <html lang="es">
       <body>
         <Providers>
-          <nav className="bg-gray-900 text-white p-4">
-            <div className="max-w-4xl mx-auto flex gap-4">
-              <Link href="/" className="font-bold">
-                Club MVP
-              </Link>
-
-              <Link href="/access">Acceso</Link>
-              <Link href="/sales">Retiradas</Link>
-              <Link href="/cash">Caja</Link>
-              <Link href="/expenses">Gastos</Link>
-              <Link href="/suppliers">Proveedores</Link>
-              <Link href="/purchases">Compras</Link>
-              <Link href="/products">Productos</Link>
-              <Link href="/stock">Stock</Link>
-              <Link href="/members">Socios</Link>
-              <LogoutButton />
-            </div>
-          </nav>
+          <AppNav />
 
           <div className="max-w-4xl mx-auto p-4">{children}</div>
         </Providers>

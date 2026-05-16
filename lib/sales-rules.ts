@@ -1,7 +1,7 @@
+import type { ProductUnit } from "@/lib/types";
+
 export const DAILY_LIMIT_G = 10;
 export const DAILY_LIMIT_UD = 15;
-
-export type ProductUnit = "G" | "UD";
 
 type ProductWithUnit = {
   unit: string;

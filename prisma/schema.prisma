@@ -165,6 +165,7 @@ model SigningSession {
   status         String    @default("PENDING") // PENDING / SIGNED / CANCELLED
   signatureImage String?   @db.Text
   signedAt       DateTime?
+  expiresAt      DateTime
   createdAt      DateTime  @default(now())
 
   member   Member          @relation(fields: [memberId], references: [id])

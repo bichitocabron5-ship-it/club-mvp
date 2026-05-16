@@ -3,9 +3,20 @@ import "dotenv/config";
 import bcrypt from "bcryptjs";
 import { prisma } from "../lib/prisma";
 
+function requireEnv(name: string) {
+  const value = process.env[name]?.trim();
+
+  if (!value) {
+    throw new Error(`Falta la variable de entorno ${name}`);
+  }
+
+  return value;
+}
+
 async function main() {
-  const email = "staff@club.local";
-  const password = "Staff1234!";
+  const name = process.env.APP_STAFF_NAME?.trim() || "Staff Member";
+  const email = requireEnv("APP_STAFF_EMAIL");
+  const password = requireEnv("APP_STAFF_PASSWORD");
 
   const passwordHash = await bcrypt.hash(password, 12);
 
@@ -17,7 +28,7 @@ async function main() {
       active: true,
     },
     create: {
-      name: "Staff Member",
+      name,
       email,
       passwordHash,
       role: "STAFF",
@@ -25,9 +36,8 @@ async function main() {
     },
   });
 
-  console.log("Staff member created:");
+  console.log("Staff creado/actualizado:");
   console.log(email);
-  console.log(password);
 }
 
 main()
