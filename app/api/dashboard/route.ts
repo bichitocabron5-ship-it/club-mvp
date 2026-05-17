@@ -329,12 +329,12 @@ export async function GET() {
   }));
 
   const supplierDebt = purchases.reduce(
-    (acc, purchase) =>
+    (acc: number, purchase: any) =>
       acc + (Number(purchase.totalAmount) - Number(purchase.paidAmount)),
     0
   );
 
-  const pendingPurchases = purchases.slice(0, 8).map((purchase) => ({
+  const pendingPurchases = purchases.slice(0, 8).map((purchase: any) => ({
     id: purchase.id,
     supplierName: purchase.supplier.name,
     totalAmount: Number(purchase.totalAmount),
