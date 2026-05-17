@@ -119,8 +119,8 @@ export async function GET() {
     ]);
 
   const income = cashMoves
-    .filter((m) => m.type === "income")
-    .reduce((acc, m) => acc + Number(m.amount), 0);
+    .filter((m: any) => m.type === "income")
+    .reduce((acc: number, m: any) => acc + Number(m.amount), 0);
 
   const grossProfit = sales.reduce(
     (acc, sale) => acc + Number(sale.profit || 0),
