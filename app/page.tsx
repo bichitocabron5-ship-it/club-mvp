@@ -17,7 +17,12 @@ export default function DashboardPage() {
       setData(json);
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error cargando dashboard");
+      console.error("[dashboard] Error loading /api/dashboard", err);
+      setError(
+        err instanceof Error
+          ? `No se pudo cargar el dashboard: ${err.message}`
+          : "No se pudo cargar el dashboard"
+      );
     }
   }
 

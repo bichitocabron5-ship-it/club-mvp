@@ -13,6 +13,7 @@ const commonLinks = [
 ];
 
 const adminLinks = [
+  { href: "/admin/users", label: "Admin" },
   { href: "/cash", label: "Caja" },
   { href: "/expenses", label: "Gastos" },
   { href: "/suppliers", label: "Proveedores" },

@@ -4,11 +4,12 @@ type ErrorPayload = {
 
 export async function fetchJson<T>(input: RequestInfo | URL, init?: RequestInit) {
   const response = await fetch(input, init);
-
+  const responseText = await response.text();
+  const trimmedResponse = responseText.trim();
   let data: T | ErrorPayload | null = null;
 
   try {
-    data = await response.json();
+    data = trimmedResponse ? (JSON.parse(trimmedResponse) as T | ErrorPayload) : null;
   } catch {
     data = null;
   }
@@ -20,9 +21,19 @@ export async function fetchJson<T>(input: RequestInfo | URL, init?: RequestInit)
       "error" in data &&
       typeof data.error === "string"
         ? data.error
-        : "Error de red";
+        : trimmedResponse && !trimmedResponse.startsWith("<")
+          ? trimmedResponse
+          : `HTTP ${response.status} ${response.statusText}`.trim();
 
     throw new Error(message);
+  }
+
+  if (!trimmedResponse) {
+    throw new Error(`Respuesta vacía del servidor (${response.status})`);
+  }
+
+  if (data === null) {
+    throw new Error(`Respuesta JSON inválida del servidor (${response.status})`);
   }
 
   return data as T;
