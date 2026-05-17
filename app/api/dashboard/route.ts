@@ -128,35 +128,35 @@ export async function GET() {
   );
 
   const expense = cashMoves
-    .filter((m) => m.type === "expense")
-    .reduce((acc, m) => acc + Number(m.amount), 0);
+    .filter((m: any) => m.type === "expense")
+    .reduce((acc: number, m: any) => acc + Number(m.amount), 0);
 
   const netProfit = grossProfit - expense;
 
   const lowStock = products.filter(
-    (p) => Number(p.stock) <= Number(p.minStock)
+    (p: any) => Number(p.stock) <= Number(p.minStock)
   );
 
-  const activeMembersToday = new Set(sales.map((s) => s.memberId)).size;
+  const activeMembersToday = new Set(sales.map((s: any) => s.memberId)).size;
 
   const insideMembers = members.filter(
-    (m) => m.accessLogs[0]?.type === "IN"
+    (m: any) => m.accessLogs[0]?.type === "IN"
   );
 
   const now = new Date();
 
   const membersWithoutContract = members.filter(
-    (m) => m.contracts.length === 0
+    (m: any) => m.contracts.length === 0
   );
 
   const expiredMembers = members.filter(
-    (m) => m.expiresAt && new Date(m.expiresAt) < now
+    (m: any) => m.expiresAt && new Date(m.expiresAt) < now
   );
 
-  const blockedMembers = members.filter((m) => !m.active);
+  const blockedMembers = members.filter((m: any) => !m.active);
 
   const expensesByCategory = expenses.reduce<Record<string, number>>(
-    (acc, expense) => {
+    (acc: Record<string, number>, expense: any) => {
       acc[expense.category] =
         (acc[expense.category] || 0) + Number(expense.amount);
 
