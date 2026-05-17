@@ -76,7 +76,7 @@ export async function POST(req: Request) {
     );
   }
 
- const productMap = new Map(
+ const productMap = new Map<number, any>(
     products.map((product: any) => [product.id, product])
   );
   const grouped = new Map<number, number>();
@@ -152,7 +152,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       const createdSales = [];
 
       for (const [productId, qty] of grouped.entries()) {
