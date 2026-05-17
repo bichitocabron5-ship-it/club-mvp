@@ -31,7 +31,7 @@ export async function POST(req: Request) {
   const { productId, qty, type, reason } = parsed.data;
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       const product = await tx.product.findUnique({
         where: { id: productId },
       });
