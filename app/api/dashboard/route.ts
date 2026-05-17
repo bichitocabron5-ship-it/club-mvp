@@ -123,7 +123,7 @@ export async function GET() {
     .reduce((acc: number, m: any) => acc + Number(m.amount), 0);
 
   const grossProfit = sales.reduce(
-    (acc, sale) => acc + Number(sale.profit || 0),
+    (acc: number, sale: any) => acc + Number(sale.profit || 0),
     0
   );
 
@@ -206,11 +206,11 @@ export async function GET() {
     .slice(0, 5);
 
   const topProductsByProfit = [...productStats]
-    .sort((a, b) => b.profit - a.profit)
+    .sort((a: any, b: any) => b.profit - a.profit)
     .slice(0, 5);
 
   const worstProductsByProfit = [...productStats]
-    .sort((a, b) => a.profit - b.profit)
+    .sort((a: any, b: any) => a.profit - b.profit)
     .slice(0, 5);
 
   const memberStatsMap = new Map<
@@ -248,7 +248,7 @@ export async function GET() {
   }
 
   const topMembersByAmount = Array.from(memberStatsMap.values())
-    .sort((a, b) => b.totalAmount - a.totalAmount)
+    .sort((a: any, b: any) => b.totalAmount - a.totalAmount)
     .slice(0, 5);
 
   const sevenDaysAgo = new Date(start);
