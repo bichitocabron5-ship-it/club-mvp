@@ -1,6 +1,7 @@
 // app/api/day-closure/route.ts
 import { requireAdmin } from "@/lib/auth-server";
 import { prisma } from "@/lib/prisma";
+import type { CashMove } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 function getTodayRange() {
@@ -41,7 +42,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  const body = await req.json().catch(() => ({}));
+  const body: {
+    countedCash?: unknown;
+    note?: unknown;
+  } = await req.json().catch(() => ({}));
   const countedCash =
     body.countedCash !== undefined ? Number(body.countedCash) : 0;
   const note = body.note ? String(body.note) : null;
@@ -58,7 +62,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const moves = await prisma.cashMove.findMany({
+  const moves: CashMove[] = await prisma.cashMove.findMany({
     where: {
       createdAt: {
         gte: start,
