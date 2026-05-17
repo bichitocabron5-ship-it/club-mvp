@@ -76,7 +76,9 @@ export async function POST(req: Request) {
     );
   }
 
-  const productMap = new Map(products.map((product) => [product.id, product]));
+ const productMap = new Map(
+    products.map((product: any) => [product.id, product])
+  );
   const grouped = new Map<number, number>();
 
   for (const item of items) {
