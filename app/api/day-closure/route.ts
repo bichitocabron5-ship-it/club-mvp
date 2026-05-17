@@ -1,7 +1,6 @@
 // app/api/day-closure/route.ts
 import { requireAdmin } from "@/lib/auth-server";
 import { prisma } from "@/lib/prisma";
-import type { CashMove } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 function getTodayRange() {
@@ -62,7 +61,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const moves: CashMove[] = await prisma.cashMove.findMany({
+  const moves = await prisma.cashMove.findMany({
     where: {
       createdAt: {
         gte: start,
@@ -72,11 +71,11 @@ export async function POST(req: Request) {
   });
 
   const totalIncome = moves
-    .filter((m) => m.type === "income")
+    .filter((m: (typeof moves)[number]) => m.type === "income")
     .reduce((acc, m) => acc + Number(m.amount), 0);
 
   const totalExpense = moves
-    .filter((m) => m.type === "expense")
+    .filter((m: (typeof moves)[number]) => m.type === "expense")
     .reduce((acc, m) => acc + Number(m.amount), 0);
 
   const balance = totalIncome - totalExpense;
