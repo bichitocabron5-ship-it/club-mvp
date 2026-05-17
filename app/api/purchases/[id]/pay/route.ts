@@ -36,7 +36,7 @@ export async function POST(
   const paidMethod = parsed.data.paidMethod || "CASH";
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       const purchase = await tx.purchase.findUnique({
         where: { id: purchaseId },
         include: { supplier: true },
