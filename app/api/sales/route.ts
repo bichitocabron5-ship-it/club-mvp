@@ -106,7 +106,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       const sale = await tx.sale.create({
         data: {
           memberId,
