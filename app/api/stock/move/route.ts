@@ -28,7 +28,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Tipo inválido" }, { status: 400 });
   }
 
-  const result = await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx: any) => {
     const product = await tx.product.findUnique({
       where: { id: productId },
     });
