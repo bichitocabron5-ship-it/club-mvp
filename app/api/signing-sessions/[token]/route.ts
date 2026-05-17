@@ -105,7 +105,7 @@ export async function POST(
 
   const form = parsedBody.data.form || {};
 
-  const session = await prisma.$transaction(async (tx) => {
+  const session = await prisma.$transaction(async (tx: any) => {
     const updatedSession = await tx.signingSession.update({
       where: { token },
       data: {
