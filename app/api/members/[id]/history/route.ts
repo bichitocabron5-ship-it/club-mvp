@@ -40,7 +40,7 @@ export async function GET(
   });
 
   const totalSpent = sales.reduce(
-    (acc, s) => acc + Number(s.totalAmount),
+    (acc: number, s: any) => acc + Number(s.totalAmount),
     0
   );
 
