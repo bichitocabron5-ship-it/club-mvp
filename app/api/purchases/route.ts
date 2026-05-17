@@ -66,7 +66,7 @@ export async function POST(req: Request) {
     paidAmount <= 0 ? "PENDING" : paidAmount >= totalAmount ? "PAID" : "PARTIAL";
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       const supplier = await tx.supplier.findUnique({
         where: { id: supplierId },
       });
