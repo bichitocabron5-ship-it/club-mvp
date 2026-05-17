@@ -22,6 +22,7 @@ const adminPaths = [
   "/purchases",
   "/stock",
   "/suppliers",
+  "/admin",
 ];
 
 const publicPaths = [
