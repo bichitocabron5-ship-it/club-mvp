@@ -7,6 +7,10 @@ const globalForPrisma = globalThis as unknown as {
 
 const adapter = new PrismaPg({
   connectionString: process.env.DATABASE_URL!,
+  // Supabase session poolers have low per-project connection caps in production.
+  // Keep the per-instance pool small to avoid exhausting the shared limit.
+  max: 3,
+  idleTimeoutMillis: 10000,
 });
 
 export const prisma =
