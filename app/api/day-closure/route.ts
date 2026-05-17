@@ -72,11 +72,17 @@ export async function POST(req: Request) {
 
   const totalIncome = moves
     .filter((m: (typeof moves)[number]) => m.type === "income")
-    .reduce((acc, m) => acc + Number(m.amount), 0);
+    .reduce(
+      (acc: number, m: (typeof moves)[number]) => acc + Number(m.amount),
+      0
+    );
 
   const totalExpense = moves
     .filter((m: (typeof moves)[number]) => m.type === "expense")
-    .reduce((acc, m) => acc + Number(m.amount), 0);
+    .reduce(
+      (acc: number, m: (typeof moves)[number]) => acc + Number(m.amount),
+      0
+    );
 
   const balance = totalIncome - totalExpense;
   const expectedCash = balance;
