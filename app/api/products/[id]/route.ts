@@ -2,11 +2,12 @@
 import { requireAdmin } from "@/lib/auth-server";
 import { prisma } from "@/lib/prisma";
 import { normalizeUnit } from "@/lib/sales";
-import { PRODUCT_CATEGORY_VALUES } from "@/lib/types";
+import { PRODUCT_CATEGORY_VALUES, PRODUCT_HASH_TYPE_VALUES } from "@/lib/types";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
 const categorySchema = z.enum(PRODUCT_CATEGORY_VALUES);
+const hashTypeSchema = z.enum(PRODUCT_HASH_TYPE_VALUES);
 
 const productPatchSchema = z
   .object({
@@ -14,6 +15,7 @@ const productPatchSchema = z
     unit: z.string().trim().min(1).optional(),
     price: z.coerce.number().positive().optional(),
     category: categorySchema.optional(),
+    hashType: hashTypeSchema.nullable().optional(),
     minStock: z.coerce.number().min(0).optional(),
     active: z.boolean().optional(),
   })
@@ -43,6 +45,15 @@ export async function PATCH(
     return NextResponse.json({ error: "Datos invalidos" }, { status: 400 });
   }
 
+  const existingProduct = await prisma.product.findUnique({
+    where: { id: productId },
+    select: { category: true },
+  });
+
+  if (!existingProduct) {
+    return NextResponse.json({ error: "Producto no encontrado" }, { status: 404 });
+  }
+
   let unit: "G" | "UD" | undefined;
 
   if (parsed.data.unit !== undefined) {
@@ -58,6 +69,15 @@ export async function PATCH(
     unit = normalizedUnit;
   }
 
+  const nextCategory = parsed.data.category ?? existingProduct.category;
+
+  if (nextCategory !== "HASH" && parsed.data.hashType) {
+    return NextResponse.json(
+      { error: "hashType solo puede usarse con categoria HASH" },
+      { status: 400 }
+    );
+  }
+
   const updated = await prisma.product.update({
     where: { id: productId },
     data: {
@@ -65,6 +85,12 @@ export async function PATCH(
       unit,
       price: parsed.data.price,
       category: parsed.data.category,
+      hashType:
+        nextCategory === "HASH"
+          ? parsed.data.hashType === undefined
+            ? undefined
+            : parsed.data.hashType
+          : null,
       minStock: parsed.data.minStock,
       active: parsed.data.active,
     },

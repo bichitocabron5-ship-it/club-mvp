@@ -2,11 +2,12 @@
 import { requireAdmin, requireAuth } from "@/lib/auth-server";
 import { prisma } from "@/lib/prisma";
 import { normalizeUnit } from "@/lib/sales";
-import { PRODUCT_CATEGORY_VALUES } from "@/lib/types";
+import { PRODUCT_CATEGORY_VALUES, PRODUCT_HASH_TYPE_VALUES } from "@/lib/types";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
 const categorySchema = z.enum(PRODUCT_CATEGORY_VALUES);
+const hashTypeSchema = z.enum(PRODUCT_HASH_TYPE_VALUES);
 
 const productSchema = z.object({
   name: z.string().trim().min(1),
@@ -14,6 +15,7 @@ const productSchema = z.object({
   price: z.coerce.number().positive(),
   stock: z.coerce.number().min(0).optional(),
   category: categorySchema.optional(),
+  hashType: hashTypeSchema.nullable().optional(),
   minStock: z.coerce.number().min(0).optional(),
 });
 
@@ -52,13 +54,23 @@ export async function POST(req: Request) {
     );
   }
 
+  const category = parsed.data.category ?? "CANNABIS";
+
+  if (category !== "HASH" && parsed.data.hashType) {
+    return NextResponse.json(
+      { error: "hashType solo puede usarse con categoria HASH" },
+      { status: 400 }
+    );
+  }
+
   const product = await prisma.product.create({
     data: {
       name: parsed.data.name,
       unit,
       price: parsed.data.price,
       stock: parsed.data.stock ?? 0,
-      category: parsed.data.category ?? "CANNABIS",
+      category,
+      hashType: category === "HASH" ? (parsed.data.hashType ?? null) : null,
       minStock: parsed.data.minStock ?? 5,
     },
   });

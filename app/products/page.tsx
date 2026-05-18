@@ -1,8 +1,16 @@
 // app/products/page.tsx
 "use client";
 
-import { PRODUCT_CATEGORIES } from "@/lib/types";
-import type { ProductCategory, ProductSummary, ProductUnit } from "@/lib/types";
+import {
+  PRODUCT_CATEGORIES,
+  PRODUCT_HASH_TYPES,
+} from "@/lib/types";
+import type {
+  ProductCategory,
+  ProductHashType,
+  ProductSummary,
+  ProductUnit,
+} from "@/lib/types";
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 
@@ -12,6 +20,7 @@ type ProductForm = {
   price: string;
   stock: string;
   category: ProductCategory;
+  hashType: ProductHashType | "";
   minStock: string;
 };
 
@@ -21,8 +30,13 @@ const initialForm: ProductForm = {
   price: "",
   stock: "",
   category: "CANNABIS",
+  hashType: "",
   minStock: "5",
 };
+
+const hashTypeLabelMap = new Map(
+  PRODUCT_HASH_TYPES.map((hashType) => [hashType.value, hashType.label])
+);
 
 function toEditableForm(product: ProductSummary): ProductForm {
   return {
@@ -31,6 +45,7 @@ function toEditableForm(product: ProductSummary): ProductForm {
     price: String(product.price),
     stock: String(product.stock),
     category: product.category,
+    hashType: product.hashType ?? "",
     minStock: String(product.minStock),
   };
 }
@@ -77,6 +92,7 @@ export default function ProductsPage() {
           price: Number(form.price),
           stock: Number(form.stock || 0),
           category: form.category,
+          hashType: form.category === "HASH" ? form.hashType || null : null,
           minStock: Number(form.minStock || 5),
         }),
       });
@@ -114,6 +130,7 @@ export default function ProductsPage() {
       unit: ProductUnit;
       price: number;
       category: ProductCategory;
+      hashType: ProductHashType | null;
       minStock: number;
       active: boolean;
     }>
@@ -150,6 +167,7 @@ export default function ProductsPage() {
       unit: editForm.unit,
       price: Number(editForm.price),
       category: editForm.category,
+      hashType: editForm.category === "HASH" ? editForm.hashType || null : null,
       minStock: Number(editForm.minStock || 0),
     });
 
@@ -218,7 +236,12 @@ export default function ProductsPage() {
             className="rounded border p-3"
             value={form.category}
             onChange={(e) =>
-              setForm({ ...form, category: e.target.value as ProductCategory })
+              setForm({
+                ...form,
+                category: e.target.value as ProductCategory,
+                hashType:
+                  e.target.value === "HASH" ? form.hashType : "",
+              })
             }
           >
             {PRODUCT_CATEGORIES.map((category) => (
@@ -227,6 +250,26 @@ export default function ProductsPage() {
               </option>
             ))}
           </select>
+
+          {form.category === "HASH" ? (
+            <select
+              className="rounded border p-3"
+              value={form.hashType}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  hashType: e.target.value as ProductHashType | "",
+                })
+              }
+            >
+              <option value="">Sin subtipo</option>
+              {PRODUCT_HASH_TYPES.map((hashType) => (
+                <option key={hashType.value} value={hashType.value}>
+                  {hashType.label}
+                </option>
+              ))}
+            </select>
+          ) : null}
 
           <input
             className="rounded border p-3"
@@ -278,6 +321,9 @@ export default function ProductsPage() {
 
                   <div className="mt-1 text-sm text-gray-500">
                     Categoria: {product.category}
+                    {product.hashType
+                      ? ` · Subtipo: ${hashTypeLabelMap.get(product.hashType) ?? product.hashType}`
+                      : ""}
                   </div>
 
                   <div className="mt-1 text-sm text-gray-500">
@@ -330,6 +376,8 @@ export default function ProductsPage() {
                         setEditForm({
                           ...editForm,
                           category: e.target.value as ProductCategory,
+                          hashType:
+                            e.target.value === "HASH" ? editForm.hashType : "",
                         })
                       }
                     >
@@ -340,6 +388,26 @@ export default function ProductsPage() {
                       ))}
                     </select>
                   </div>
+
+                  {editForm.category === "HASH" ? (
+                    <select
+                      className="rounded border p-3"
+                      value={editForm.hashType}
+                      onChange={(e) =>
+                        setEditForm({
+                          ...editForm,
+                          hashType: e.target.value as ProductHashType | "",
+                        })
+                      }
+                    >
+                      <option value="">Sin subtipo</option>
+                      {PRODUCT_HASH_TYPES.map((hashType) => (
+                        <option key={hashType.value} value={hashType.value}>
+                          {hashType.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
 
                   <div className="grid gap-2 md:grid-cols-2">
                     <input

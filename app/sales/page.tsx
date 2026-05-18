@@ -3,7 +3,8 @@
 import { EmptyState } from "@/components/ui/empty-state";
 import { fetchJson } from "@/lib/fetch-json";
 import { DAILY_LIMIT_G, DAILY_LIMIT_UD } from "@/lib/sales-rules";
-import type { MemberSummary, ProductSummary } from "@/lib/types";
+import { PRODUCT_HASH_TYPES } from "@/lib/types";
+import type { MemberSummary, ProductHashType, ProductSummary } from "@/lib/types";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 type TodayTotals = {
@@ -46,6 +47,10 @@ const PRODUCT_CATEGORIES = [
   { value: "MERCH", label: "Merch" },
 ];
 
+const hashTypeLabelMap = new Map(
+  PRODUCT_HASH_TYPES.map((hashType) => [hashType.value, hashType.label])
+);
+
 const emptyToday: TodayTotals = {
   grams: 0,
   units: 0,
@@ -65,6 +70,9 @@ export default function SalesPage() {
   const [rfidInput, setRfidInput] = useState("");
   const [rfidError, setRfidError] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("ALL");
+  const [selectedHashType, setSelectedHashType] = useState<"ALL" | ProductHashType>(
+    "ALL"
+  );
 
   const rfidRef = useRef<HTMLInputElement | null>(null);
 
@@ -128,6 +136,17 @@ export default function SalesPage() {
 
   const visibleToday = memberId ? today : emptyToday;
 
+  const availableHashTypes = useMemo(() => {
+    const present = new Set(
+      products
+        .filter((product) => product.active && product.category === "HASH")
+        .map((product) => product.hashType)
+        .filter((hashType): hashType is ProductHashType => Boolean(hashType))
+    );
+
+    return PRODUCT_HASH_TYPES.filter((hashType) => present.has(hashType.value));
+  }, [products]);
+
   const filteredProducts = useMemo(() => {
     const query = search.trim().toLowerCase();
 
@@ -138,10 +157,14 @@ export default function SalesPage() {
         return product.category === selectedCategory;
       })
       .filter((product) => {
+        if (selectedHashType === "ALL") return true;
+        return product.hashType === selectedHashType;
+      })
+      .filter((product) => {
         if (!query) return true;
         return product.name.toLowerCase().includes(query);
       });
-  }, [products, search, selectedCategory]);
+  }, [products, search, selectedCategory, selectedHashType]);
 
   const filteredMembers = useMemo(() => {
     const q = memberSearch.trim().toLowerCase();
@@ -256,6 +279,14 @@ export default function SalesPage() {
 
   function removeProduct(productId: number) {
     setCart((prev) => prev.filter((item) => item.productId !== productId));
+  }
+
+  function handleCategoryFilter(category: string) {
+    setSelectedCategory(category);
+
+    if (category !== "ALL" && category !== "HASH") {
+      setSelectedHashType("ALL");
+    }
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -492,7 +523,7 @@ export default function SalesPage() {
                 <button
                   key={category.value}
                   type="button"
-                  onClick={() => setSelectedCategory(category.value)}
+                  onClick={() => handleCategoryFilter(category.value)}
                   className={`rounded-full px-4 py-2 text-sm font-bold ${
                     selectedCategory === category.value
                       ? "bg-gray-900 text-white"
@@ -504,6 +535,47 @@ export default function SalesPage() {
               ))}
             </div>
           </div>
+
+          {availableHashTypes.length > 0 ? (
+            <div className="rounded border p-3">
+              <div className="mb-2 text-sm font-medium">Subtipos Hash</div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedHashType("ALL")}
+                  className={`rounded-full px-4 py-2 text-sm font-bold ${
+                    selectedHashType === "ALL"
+                      ? "bg-blue-700 text-white"
+                      : "bg-blue-50 text-blue-700"
+                  }`}
+                >
+                  Todos
+                </button>
+
+                {availableHashTypes.map((hashType) => (
+                  <button
+                    key={hashType.value}
+                    type="button"
+                    onClick={() => {
+                      if (selectedCategory !== "ALL" && selectedCategory !== "HASH") {
+                        setSelectedCategory("HASH");
+                      }
+
+                      setSelectedHashType(hashType.value);
+                    }}
+                    className={`rounded-full px-4 py-2 text-sm font-bold ${
+                      selectedHashType === hashType.value
+                        ? "bg-blue-700 text-white"
+                        : "bg-blue-50 text-blue-700"
+                    }`}
+                  >
+                    {hashType.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
             {filteredProducts.map((product) => {
@@ -523,6 +595,9 @@ export default function SalesPage() {
 
                   <div className="mt-1 text-xs font-bold text-gray-500">
                     {product.category}
+                    {product.hashType
+                      ? ` · ${hashTypeLabelMap.get(product.hashType) ?? product.hashType}`
+                      : ""}
                   </div>
 
                   <div className="mt-2 text-2xl font-bold text-blue-700">

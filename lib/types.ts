@@ -8,10 +8,6 @@ export const PRODUCT_CATEGORY_VALUES = [
   "CBD",
   "RESIN",
   "HASH",
-  "FROZEN",
-  "STATIC",
-  "DRY",
-  "SEMI_DRY",
   "JOINT",
   "DRINK",
   "FOOD",
@@ -19,6 +15,15 @@ export const PRODUCT_CATEGORY_VALUES = [
 ] as const;
 
 export type ProductCategory = (typeof PRODUCT_CATEGORY_VALUES)[number];
+
+export const PRODUCT_HASH_TYPE_VALUES = [
+  "FROZEN",
+  "STATIC",
+  "DRY",
+  "SEMI_DRY",
+] as const;
+
+export type ProductHashType = (typeof PRODUCT_HASH_TYPE_VALUES)[number];
 
 export const PRODUCT_CATEGORIES: ReadonlyArray<{
   value: ProductCategory;
@@ -31,14 +36,20 @@ export const PRODUCT_CATEGORIES: ReadonlyArray<{
   { value: "CBD", label: "CBD" },
   { value: "RESIN", label: "Resin" },
   { value: "HASH", label: "Hash" },
-  { value: "FROZEN", label: "Frozen" },
-  { value: "STATIC", label: "Static" },
-  { value: "DRY", label: "Dry" },
-  { value: "SEMI_DRY", label: "Semi-Dry" },
   { value: "JOINT", label: "Joint" },
   { value: "DRINK", label: "Drink" },
   { value: "FOOD", label: "Food" },
   { value: "MERCH", label: "Merch" },
+] as const;
+
+export const PRODUCT_HASH_TYPES: ReadonlyArray<{
+  value: ProductHashType;
+  label: string;
+}> = [
+  { value: "FROZEN", label: "Frozen" },
+  { value: "STATIC", label: "Static" },
+  { value: "DRY", label: "Dry" },
+  { value: "SEMI_DRY", label: "Semi-Dry" },
 ] as const;
 
 export type ProductLike = {
@@ -72,6 +83,7 @@ export type ProductSummary = {
   price: number;
   stock: number;
   category: ProductCategory;
+  hashType: ProductHashType | null;
   minStock: number;
   active: boolean;
   createdAt?: string;
