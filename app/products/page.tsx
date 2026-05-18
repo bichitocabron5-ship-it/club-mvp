@@ -1,7 +1,9 @@
 // app/products/page.tsx
 "use client";
 
-import type { ProductSummary, ProductUnit } from "@/lib/types";
+import { PRODUCT_CATEGORIES } from "@/lib/types";
+import type { ProductCategory, ProductSummary, ProductUnit } from "@/lib/types";
+import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 
 type ProductForm = {
@@ -9,7 +11,7 @@ type ProductForm = {
   unit: ProductUnit;
   price: string;
   stock: string;
-  category: string;
+  category: ProductCategory;
   minStock: string;
 };
 
@@ -22,9 +24,27 @@ const initialForm: ProductForm = {
   minStock: "5",
 };
 
+function toEditableForm(product: ProductSummary): ProductForm {
+  return {
+    name: product.name,
+    unit: product.unit,
+    price: String(product.price),
+    stock: String(product.stock),
+    category: product.category,
+    minStock: String(product.minStock),
+  };
+}
+
 export default function ProductsPage() {
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "ADMIN";
+
   const [products, setProducts] = useState<ProductSummary[]>([]);
   const [form, setForm] = useState<ProductForm>(initialForm);
+  const [editingProductId, setEditingProductId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState<ProductForm | null>(null);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   async function loadProducts() {
     const res = await fetch("/api/products");
@@ -42,128 +62,222 @@ export default function ProductsPage() {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setSaving(true);
+    setError("");
 
-    await fetch("/api/products", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        name: form.name,
-        unit: form.unit,
-        price: Number(form.price),
-        stock: Number(form.stock || 0),
-        category: form.category,
-        minStock: Number(form.minStock || 5),
-      }),
+    try {
+      const res = await fetch("/api/products", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: form.name,
+          unit: form.unit,
+          price: Number(form.price),
+          stock: Number(form.stock || 0),
+          category: form.category,
+          minStock: Number(form.minStock || 5),
+        }),
+      });
+
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(data?.error || "Error creando producto");
+      }
+
+      setForm(initialForm);
+      await loadProducts();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error creando producto");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function startEditing(product: ProductSummary) {
+    setEditingProductId(product.id);
+    setEditForm(toEditableForm(product));
+    setError("");
+  }
+
+  function cancelEditing() {
+    setEditingProductId(null);
+    setEditForm(null);
+    setError("");
+  }
+
+  async function patchProduct(
+    productId: number,
+    payload: Partial<{
+      name: string;
+      unit: ProductUnit;
+      price: number;
+      category: ProductCategory;
+      minStock: number;
+      active: boolean;
+    }>
+  ) {
+    setSaving(true);
+    setError("");
+
+    try {
+      const res = await fetch(`/api/products/${productId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(data?.error || "Error actualizando producto");
+      }
+
+      await loadProducts();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error actualizando producto");
+      throw err;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveEditing(productId: number) {
+    if (!editForm) return;
+
+    await patchProduct(productId, {
+      name: editForm.name,
+      unit: editForm.unit,
+      price: Number(editForm.price),
+      category: editForm.category,
+      minStock: Number(editForm.minStock || 0),
     });
 
-    setForm(initialForm);
-    await loadProducts();
+    cancelEditing();
+  }
+
+  async function toggleActive(product: ProductSummary) {
+    await patchProduct(product.id, {
+      active: !product.active,
+    });
   }
 
   return (
     <div className="mx-auto max-w-4xl p-6">
       <h1 className="mb-4 text-2xl font-bold">Productos</h1>
 
-      <form onSubmit={handleSubmit} className="mb-6 grid gap-2 rounded border p-4">
-        <input
-          className="rounded border p-3"
-          placeholder="Nombre"
-          value={form.name}
-          onChange={(e) => setForm({ ...form, name: e.target.value })}
-          required
-        />
+      {error ? (
+        <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {error}
+        </div>
+      ) : null}
 
-        <select
-          className="rounded border p-3"
-          value={form.unit}
-          onChange={(e) =>
-            setForm({ ...form, unit: e.target.value as ProductUnit })
-          }
-        >
-          <option value="G">Gramos (g)</option>
-          <option value="UD">Unidades (ud)</option>
-        </select>
+      {isAdmin ? (
+        <form onSubmit={handleSubmit} className="mb-6 grid gap-2 rounded border p-4">
+          <input
+            className="rounded border p-3"
+            placeholder="Nombre"
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            required
+          />
 
-        <input
-          className="rounded border p-3"
-          placeholder="Precio EUR/g o EUR/ud"
-          type="number"
-          step="0.01"
-          value={form.price}
-          onChange={(e) => setForm({ ...form, price: e.target.value })}
-          required
-        />
+          <select
+            className="rounded border p-3"
+            value={form.unit}
+            onChange={(e) =>
+              setForm({ ...form, unit: e.target.value as ProductUnit })
+            }
+          >
+            <option value="G">Gramos (g)</option>
+            <option value="UD">Unidades (ud)</option>
+          </select>
 
-        <input
-          className="rounded border p-3"
-          placeholder="Stock inicial"
-          type="number"
-          step="0.01"
-          value={form.stock}
-          onChange={(e) => setForm({ ...form, stock: e.target.value })}
-        />
+          <input
+            className="rounded border p-3"
+            placeholder="Precio EUR/g o EUR/ud"
+            type="number"
+            min="0"
+            step="0.01"
+            value={form.price}
+            onChange={(e) => setForm({ ...form, price: e.target.value })}
+            required
+          />
 
-        <select
-          className="rounded border p-3"
-          value={form.category}
-          onChange={(e) => setForm({ ...form, category: e.target.value })}
-        >
-          <option value="CANNABIS">Cannabis</option>
-          <option value="SATIVA">Sativa</option>
-          <option value="INDICA">Índica</option>
-          <option value="HYBRID">Híbrida</option>
-          <option value="CBD">CBD</option>
-          <option value="RESIN">Resina</option>
-          <option value="HASH">Hash</option>
-          <option value="JOINT">Joint</option>
-          <option value="DRINK">Bebida</option>
-          <option value="FOOD">Comida</option>
-          <option value="MERCH">Merchandising</option>
-        </select>
+          <input
+            className="rounded border p-3"
+            placeholder="Stock inicial"
+            type="number"
+            min="0"
+            step="0.01"
+            value={form.stock}
+            onChange={(e) => setForm({ ...form, stock: e.target.value })}
+          />
 
-        <input
-          className="rounded border p-3"
-          type="number"
-          min="0"
-          step="0.01"
-          placeholder="Stock mínimo"
-          value={form.minStock}
-          onChange={(e) => setForm({ ...form, minStock: e.target.value })}
-        />
+          <select
+            className="rounded border p-3"
+            value={form.category}
+            onChange={(e) =>
+              setForm({ ...form, category: e.target.value as ProductCategory })
+            }
+          >
+            {PRODUCT_CATEGORIES.map((category) => (
+              <option key={category.value} value={category.value}>
+                {category.label}
+              </option>
+            ))}
+          </select>
 
-        <button className="rounded bg-blue-600 px-4 py-3 font-bold text-white">
-          Crear producto
-        </button>
-      </form>
+          <input
+            className="rounded border p-3"
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="Stock minimo"
+            value={form.minStock}
+            onChange={(e) => setForm({ ...form, minStock: e.target.value })}
+          />
 
-      <div className="space-y-2">
+          <button
+            className="rounded bg-blue-600 px-4 py-3 font-bold text-white disabled:opacity-60"
+            disabled={saving}
+          >
+            Crear producto
+          </button>
+        </form>
+      ) : (
+        <div className="mb-6 rounded border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
+          Vista de catalogo. Solo ADMIN puede crear, editar, activar o desactivar productos.
+        </div>
+      )}
+
+      <div className="space-y-3">
         {products.map((product) => {
           const lowStock = Number(product.stock) <= Number(product.minStock);
+          const isEditing = editingProductId === product.id && editForm !== null;
 
           return (
             <div key={product.id} className="rounded border p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
+                <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <strong>{product.name}</strong>
 
-                    {lowStock && (
+                    {lowStock ? (
                       <span className="rounded bg-red-100 px-2 py-1 text-xs text-red-700">
                         STOCK BAJO
                       </span>
-                    )}
+                    ) : null}
 
-                    {!product.active && (
+                    {!product.active ? (
                       <span className="rounded bg-gray-200 px-2 py-1 text-xs text-gray-700">
                         INACTIVO
                       </span>
-                    )}
+                    ) : null}
                   </div>
 
                   <div className="mt-1 text-sm text-gray-500">
-                    Categoría: {product.category}
+                    Categoria: {product.category}
                   </div>
 
                   <div className="mt-1 text-sm text-gray-500">
@@ -178,67 +292,142 @@ export default function ProductsPage() {
                   </strong>
 
                   <div className="text-sm text-gray-500">
-                    Mínimo: {Number(product.minStock).toFixed(2)} {product.unit}
+                    Minimo: {Number(product.minStock).toFixed(2)} {product.unit}
                   </div>
                 </div>
               </div>
 
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const newPrice = prompt("Nuevo precio:", String(product.price));
-                    if (!newPrice) return;
+              {isEditing && editForm ? (
+                <div className="mt-4 grid gap-2 rounded border border-blue-100 bg-blue-50 p-3">
+                  <input
+                    className="rounded border p-3"
+                    value={editForm.name}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, name: e.target.value })
+                    }
+                    placeholder="Nombre"
+                  />
 
-                    fetch(`/api/products/${product.id}`, {
-                      method: "PATCH",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ price: Number(newPrice) }),
-                    }).then(loadProducts);
-                  }}
-                  className="rounded bg-gray-200 px-3 py-1 text-sm"
-                >
-                  Editar precio
-                </button>
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <select
+                      className="rounded border p-3"
+                      value={editForm.unit}
+                      onChange={(e) =>
+                        setEditForm({
+                          ...editForm,
+                          unit: e.target.value as ProductUnit,
+                        })
+                      }
+                    >
+                      <option value="G">Gramos (g)</option>
+                      <option value="UD">Unidades (ud)</option>
+                    </select>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    const newMinStock = prompt(
-                      "Nuevo stock mínimo:",
-                      String(product.minStock)
-                    );
-                    if (!newMinStock) return;
+                    <select
+                      className="rounded border p-3"
+                      value={editForm.category}
+                      onChange={(e) =>
+                        setEditForm({
+                          ...editForm,
+                          category: e.target.value as ProductCategory,
+                        })
+                      }
+                    >
+                      {PRODUCT_CATEGORIES.map((category) => (
+                        <option key={category.value} value={category.value}>
+                          {category.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                    fetch(`/api/products/${product.id}`, {
-                      method: "PATCH",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ minStock: Number(newMinStock) }),
-                    }).then(loadProducts);
-                  }}
-                  className="rounded bg-gray-200 px-3 py-1 text-sm"
-                >
-                  Editar mínimo
-                </button>
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <input
+                      className="rounded border p-3"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={editForm.price}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, price: e.target.value })
+                      }
+                      placeholder="Precio"
+                    />
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    fetch(`/api/products/${product.id}`, {
-                      method: "PATCH",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ active: !product.active }),
-                    }).then(loadProducts);
-                  }}
-                  className={`rounded px-3 py-1 text-sm ${
-                    product.active
-                      ? "bg-green-200 text-green-800"
-                      : "bg-red-200 text-red-800"
-                  }`}
-                >
-                  {product.active ? "Activo" : "Inactivo"}
-                </button>
-              </div>
+                    <input
+                      className="rounded border p-3"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={editForm.minStock}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, minStock: e.target.value })
+                      }
+                      placeholder="Stock minimo"
+                    />
+                  </div>
+
+                  <div className="text-sm text-gray-600">
+                    Stock actual: {Number(product.stock).toFixed(2)} {product.unit}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void saveEditing(product.id)}
+                      className="rounded bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                      disabled={saving}
+                    >
+                      Guardar
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={cancelEditing}
+                      className="rounded bg-gray-200 px-3 py-2 text-sm"
+                      disabled={saving}
+                    >
+                      Cancelar
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => void toggleActive(product)}
+                      className={`rounded px-3 py-2 text-sm ${
+                        product.active
+                          ? "bg-red-200 text-red-800"
+                          : "bg-green-200 text-green-800"
+                      }`}
+                      disabled={saving}
+                    >
+                      {product.active ? "Desactivar" : "Activar"}
+                    </button>
+                  </div>
+                </div>
+              ) : isAdmin ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => startEditing(product)}
+                    className="rounded bg-gray-200 px-3 py-1 text-sm"
+                  >
+                    Editar
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => void toggleActive(product)}
+                    className={`rounded px-3 py-1 text-sm ${
+                      product.active
+                        ? "bg-red-200 text-red-800"
+                        : "bg-green-200 text-green-800"
+                    }`}
+                    disabled={saving}
+                  >
+                    {product.active ? "Desactivar" : "Activar"}
+                  </button>
+                </div>
+              ) : null}
             </div>
           );
         })}

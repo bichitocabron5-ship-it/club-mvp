@@ -10,6 +10,7 @@ const commonLinks = [
   { href: "/access", label: "Acceso" },
   { href: "/sales", label: "Retiradas" },
   { href: "/members", label: "Socios" },
+  { href: "/products", label: "Productos" },
 ];
 
 const adminLinks = [
@@ -18,7 +19,6 @@ const adminLinks = [
   { href: "/expenses", label: "Gastos" },
   { href: "/suppliers", label: "Proveedores" },
   { href: "/purchases", label: "Compras" },
-  { href: "/products", label: "Productos" },
   { href: "/stock", label: "Stock" },
 ];
 

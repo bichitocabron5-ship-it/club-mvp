@@ -1,5 +1,46 @@
 export type ProductUnit = "G" | "UD";
 
+export const PRODUCT_CATEGORY_VALUES = [
+  "CANNABIS",
+  "SATIVA",
+  "INDICA",
+  "HYBRID",
+  "CBD",
+  "RESIN",
+  "HASH",
+  "FROZEN",
+  "STATIC",
+  "DRY",
+  "SEMI_DRY",
+  "JOINT",
+  "DRINK",
+  "FOOD",
+  "MERCH",
+] as const;
+
+export type ProductCategory = (typeof PRODUCT_CATEGORY_VALUES)[number];
+
+export const PRODUCT_CATEGORIES: ReadonlyArray<{
+  value: ProductCategory;
+  label: string;
+}> = [
+  { value: "CANNABIS", label: "Cannabis" },
+  { value: "SATIVA", label: "Sativa" },
+  { value: "INDICA", label: "Indica" },
+  { value: "HYBRID", label: "Hibrida" },
+  { value: "CBD", label: "CBD" },
+  { value: "RESIN", label: "Resin" },
+  { value: "HASH", label: "Hash" },
+  { value: "FROZEN", label: "Frozen" },
+  { value: "STATIC", label: "Static" },
+  { value: "DRY", label: "Dry" },
+  { value: "SEMI_DRY", label: "Semi-Dry" },
+  { value: "JOINT", label: "Joint" },
+  { value: "DRINK", label: "Drink" },
+  { value: "FOOD", label: "Food" },
+  { value: "MERCH", label: "Merch" },
+] as const;
+
 export type ProductLike = {
   id: number;
   name: string;
@@ -30,7 +71,7 @@ export type ProductSummary = {
   unit: ProductUnit;
   price: number;
   stock: number;
-  category: string;
+  category: ProductCategory;
   minStock: number;
   active: boolean;
   createdAt?: string;

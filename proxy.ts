@@ -19,7 +19,6 @@ const protectedPaths = [
 const adminPaths = [
   "/cash",
   "/expenses",
-  "/products",
   "/purchases",
   "/stock",
   "/suppliers",

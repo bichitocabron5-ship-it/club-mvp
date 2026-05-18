@@ -2,15 +2,18 @@
 import { requireAdmin, requireAuth } from "@/lib/auth-server";
 import { prisma } from "@/lib/prisma";
 import { normalizeUnit } from "@/lib/sales";
+import { PRODUCT_CATEGORY_VALUES } from "@/lib/types";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+
+const categorySchema = z.enum(PRODUCT_CATEGORY_VALUES);
 
 const productSchema = z.object({
   name: z.string().trim().min(1),
   unit: z.string().trim().min(1),
   price: z.coerce.number().positive(),
   stock: z.coerce.number().min(0).optional(),
-  category: z.string().trim().min(1).optional(),
+  category: categorySchema.optional(),
   minStock: z.coerce.number().min(0).optional(),
 });
 
@@ -55,7 +58,7 @@ export async function POST(req: Request) {
       unit,
       price: parsed.data.price,
       stock: parsed.data.stock ?? 0,
-      category: parsed.data.category || "CANNABIS",
+      category: parsed.data.category ?? "CANNABIS",
       minStock: parsed.data.minStock ?? 5,
     },
   });
