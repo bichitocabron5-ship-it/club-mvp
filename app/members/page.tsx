@@ -71,7 +71,8 @@ export default function MembersPage() {
 
     const matchesSearch =
       m.fullName.toLowerCase().includes(query) ||
-      m.dni.toLowerCase().includes(query);
+      m.dni.toLowerCase().includes(query) ||
+      String(m.memberNumber ?? "").toLowerCase().includes(query);
 
     const now = new Date();
 
@@ -108,7 +109,7 @@ export default function MembersPage() {
       <form onSubmit={handleSubmit} className="mb-6 grid gap-2 rounded border p-4">
         <input
           className="w-full rounded border p-3"
-          placeholder="Buscar por nombre o DNI"
+          placeholder="Buscar por numero, nombre o DNI"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -188,7 +189,7 @@ export default function MembersPage() {
               <div className="cursor-pointer rounded border p-3 hover:bg-gray-50">
                 <div className="font-medium">{member.fullName}</div>
                 <div className="text-sm text-gray-500">
-                  {member.dni}
+                  Nº {member.memberNumber ?? member.id} · {member.dni}
                   {member.phone ? ` · ${member.phone}` : ""}
                 </div>
                 <div className="mt-1 text-xs text-gray-500">

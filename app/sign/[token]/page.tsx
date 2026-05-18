@@ -128,7 +128,8 @@ export default function SignPage() {
           Socio: <strong>{session.member.fullName}</strong>
         </p>
         <p className="text-sm text-gray-600">
-          Nº de socio provisional: <strong>{session.member.id}</strong>
+          Nº de socio:{" "}
+          <strong>{session.member.memberNumber ?? session.member.id}</strong>
         </p>
         <p className="text-sm text-gray-500">
           Documento provisional pendiente de PDF oficial.

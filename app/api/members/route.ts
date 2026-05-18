@@ -1,10 +1,17 @@
 // app/api/members/route.ts
 import { requireAuth } from "@/lib/auth-server";
+import {
+  getNextMemberNumber,
+  isUniqueConstraintError,
+  normalizeMemberNumber,
+  validateMemberNumber,
+} from "@/lib/member-number";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
 const memberSchema = z.object({
+  memberNumber: z.string().trim().optional().nullable().or(z.literal("")),
   fullName: z.string().trim().min(1),
   dni: z.string().trim().min(1),
   phone: z.string().trim().optional().or(z.literal("")),
@@ -52,18 +59,83 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Datos invalidos" }, { status: 400 });
   }
 
-  const member = await prisma.member.create({
-    data: {
-      fullName: parsed.data.fullName,
-      dni: parsed.data.dni,
-      phone: parsed.data.phone || null,
-      email: parsed.data.email || null,
-      active: parsed.data.active ?? true,
-      expiresAt: parsed.data.expiresAt
-        ? new Date(parsed.data.expiresAt)
-        : null,
-    },
-  });
+  const normalizedMemberNumber = normalizeMemberNumber(parsed.data.memberNumber);
+  const validatedMemberNumber = validateMemberNumber(normalizedMemberNumber);
 
-  return NextResponse.json(member);
+  if (!validatedMemberNumber.ok) {
+    return NextResponse.json({ error: validatedMemberNumber.error }, { status: 400 });
+  }
+
+  const baseData = {
+    fullName: parsed.data.fullName,
+    dni: parsed.data.dni,
+    phone: parsed.data.phone || null,
+    email: parsed.data.email || null,
+    active: parsed.data.active ?? true,
+    expiresAt: parsed.data.expiresAt ? new Date(parsed.data.expiresAt) : null,
+  };
+
+  try {
+    if (validatedMemberNumber.value) {
+      const member = await prisma.member.create({
+        data: {
+          ...baseData,
+          memberNumber: validatedMemberNumber.value,
+        },
+      });
+
+      return NextResponse.json(member);
+    }
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        const member = await prisma.$transaction(async (tx) => {
+          const memberNumber = await getNextMemberNumber(tx);
+
+          return tx.member.create({
+            data: {
+              ...baseData,
+              memberNumber,
+            },
+          });
+        });
+
+        return NextResponse.json(member);
+      } catch (error) {
+        if (isUniqueConstraintError(error, "memberNumber")) {
+          continue;
+        }
+
+        if (isUniqueConstraintError(error, "dni")) {
+          return NextResponse.json(
+            { error: "No se pudo crear. El DNI ya existe." },
+            { status: 400 }
+          );
+        }
+
+        throw error;
+      }
+    }
+
+    return NextResponse.json(
+      { error: "No se pudo asignar un numero de socio unico. Reintenta." },
+      { status: 409 }
+    );
+  } catch (error) {
+    if (isUniqueConstraintError(error, "memberNumber")) {
+      return NextResponse.json(
+        { error: "El numero de socio ya existe." },
+        { status: 400 }
+      );
+    }
+
+    if (isUniqueConstraintError(error, "dni")) {
+      return NextResponse.json(
+        { error: "No se pudo crear. El DNI ya existe." },
+        { status: 400 }
+      );
+    }
+
+    return NextResponse.json({ error: "No se pudo crear el socio." }, { status: 500 });
+  }
 }

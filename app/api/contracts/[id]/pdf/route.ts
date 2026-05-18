@@ -236,7 +236,9 @@ export async function GET(
   }
 
   const pdfBytes = await pdfDoc.save();
-  const filePath = `contracts/member-${contract.memberId}/contract-${contract.id}.pdf`;
+  const pdfMemberIdentifier = (contract.member.memberNumber || String(contract.member.id))
+    .replace(/[^a-zA-Z0-9_-]/g, "-");
+  const filePath = `contracts/member-${pdfMemberIdentifier}/contract-${contract.id}.pdf`;
 
   const upload = await supabaseAdmin.storage
     .from("signed-contracts")

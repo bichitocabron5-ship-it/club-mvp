@@ -25,6 +25,7 @@ export default function MemberDetail() {
   const [rfidMessage, setRfidMessage] = useState("");
 
   const [editForm, setEditForm] = useState({
+    memberNumber: "",
     fullName: "",
     dni: "",
     phone: "",
@@ -57,6 +58,9 @@ export default function MemberDetail() {
 
         if (historyData.member) {
           setEditForm({
+            memberNumber: historyData.member.memberNumber
+              ? String(historyData.member.memberNumber)
+              : "",
             fullName: historyData.member.fullName || "",
             dni: historyData.member.dni || "",
             phone: historyData.member.phone || "",
@@ -175,7 +179,7 @@ export default function MemberDetail() {
             <div>
               <div className="text-sm text-gray-500">Número de socio</div>
               <div className="text-2xl font-semibold">
-                Nº socio provisional {visibleMemberNumber}
+                Nº socio {visibleMemberNumber}
               </div>
             </div>
 
@@ -365,6 +369,15 @@ export default function MemberDetail() {
 
               {authReady && isAdmin && (
                 <>
+                  <input
+                    className="w-full border p-2"
+                    placeholder="Numero de socio"
+                    value={editForm.memberNumber}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, memberNumber: e.target.value })
+                    }
+                  />
+
                   <div className="border-t pt-3">
                     <h3 className="font-semibold">Perfil comercial</h3>
                   </div>

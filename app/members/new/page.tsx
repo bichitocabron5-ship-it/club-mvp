@@ -250,7 +250,7 @@ export default function NewMemberPage() {
               <div>
                 <div className="text-sm text-gray-600">Número de socio</div>
                 <div className="text-lg font-semibold">
-                  Nº socio provisional {visibleMemberNumber}
+                  Nº socio {visibleMemberNumber}
                 </div>
               </div>
             </div>
@@ -406,7 +406,7 @@ export default function NewMemberPage() {
               <div className="rounded border bg-gray-50 p-3">
                 <div className="text-sm text-gray-500">Socio</div>
                 <div className="font-semibold">
-                  Creado con Nº provisional {visibleMemberNumber}
+                  Creado con Nº {visibleMemberNumber}
                 </div>
               </div>
 

@@ -1,10 +1,16 @@
 // app/api/members/[id]/route.ts
 import { requireAuth } from "@/lib/auth-server";
+import {
+  isUniqueConstraintError,
+  normalizeMemberNumber,
+  validateMemberNumber,
+} from "@/lib/member-number";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
 const adminOnlyFields = [
+  "memberNumber",
   "fullName",
   "dni",
   "expiresAt",
@@ -15,6 +21,7 @@ const adminOnlyFields = [
 ] as const;
 
 const memberUpdateSchema = z.object({
+  memberNumber: z.string().trim().optional().nullable(),
   fullName: z.string().trim().min(1).optional(),
   dni: z.string().trim().min(1).optional(),
   phone: z.string().trim().optional().nullable(),
@@ -50,6 +57,13 @@ export async function PATCH(
   }
 
   const data = parsed.data;
+  const normalizedMemberNumber = normalizeMemberNumber(data.memberNumber);
+  const validatedMemberNumber = validateMemberNumber(normalizedMemberNumber);
+
+  if (!validatedMemberNumber.ok) {
+    return NextResponse.json({ error: validatedMemberNumber.error }, { status: 400 });
+  }
+
   const existingMember = await prisma.member.findUnique({
     where: { id: memberId },
   });
@@ -73,6 +87,8 @@ export async function PATCH(
       : null;
 
     const attemptedSensitiveChange =
+      (normalizedMemberNumber !== undefined &&
+        normalizedMemberNumber !== (existingMember.memberNumber ?? "")) ||
       (data.fullName !== undefined && data.fullName !== existingMember.fullName) ||
       (data.dni !== undefined && data.dni !== existingMember.dni) ||
       (data.rfidCode !== undefined &&
@@ -98,6 +114,11 @@ export async function PATCH(
     const member = await prisma.member.update({
       where: { id: memberId },
       data: {
+        memberNumber: isAdmin
+          ? validatedMemberNumber.value === null
+            ? undefined
+            : validatedMemberNumber.value
+          : undefined,
         fullName: isAdmin ? data.fullName : undefined,
         dni: isAdmin ? data.dni : undefined,
         phone: data.phone === "" ? null : data.phone,
@@ -125,9 +146,16 @@ export async function PATCH(
     });
 
     return NextResponse.json(member);
-  } catch {
+  } catch (error) {
+    if (isUniqueConstraintError(error, "memberNumber")) {
+      return NextResponse.json(
+        { error: "El numero de socio ya existe." },
+        { status: 400 }
+      );
+    }
+
     return NextResponse.json(
-      { error: "No se pudo actualizar. Revisa DNI/RFID duplicados." },
+      { error: "No se pudo actualizar. Revisa numero de socio, DNI o RFID duplicados." },
       { status: 400 }
     );
   }
