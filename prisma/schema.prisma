@@ -8,16 +8,19 @@ datasource db {
 }
 
 model Member {
-  id        Int       @id @default(autoincrement())
-  fullName  String
-  dni       String    @unique
-  phone     String?
-  email     String?
-  active    Boolean   @default(true)
-  joinedAt  DateTime  @default(now())
-  expiresAt DateTime?
-  rfidCode  String?   @unique
-  createdAt DateTime  @default(now())
+  id                Int       @id @default(autoincrement())
+  fullName          String
+  dni               String    @unique
+  phone             String?
+  email             String?
+  active            Boolean   @default(true)
+  joinedAt          DateTime  @default(now())
+  expiresAt         DateTime?
+  rfidCode          String?   @unique
+  createdAt         DateTime  @default(now())
+  commercialProfile String    @default("STANDARD")
+  discountPercent   Float     @default(0)
+  commercialNotes   String?
 
   sales           Sale[]
   contracts       MemberContract[]
@@ -42,6 +45,8 @@ model AppUser {
   role         String   @default("STAFF") // ADMIN | STAFF
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
+
+  appliedSales Sale[]   @relation("SaleAppliedByUser")
 }
 
 model Product {
@@ -77,18 +82,26 @@ model StockMove {
 }
 
 model Sale {
-  id          Int      @id @default(autoincrement())
-  memberId    Int
-  productId   Int
-  qty         Float
-  totalAmount Float
-  unitCost    Float    @default(0)
-  profit      Float    @default(0)
-  note        String?
-  createdAt   DateTime @default(now())
+  id              Int      @id @default(autoincrement())
+  memberId        Int
+  productId       Int
+  qty             Float
+  totalAmount     Float
+  unitCost        Float    @default(0)
+  profit          Float    @default(0)
+  note            String?
+  createdAt       DateTime @default(now())
+  originalAmount  Float?
+  discountPercent Float    @default(0)
+  discountAmount  Float    @default(0)
+  finalAmount     Float?
+  discountReason  String?
+  discountSource  String   @default("NONE") // NONE | MEMBER_PROFILE | MANUAL
+  appliedByUserId Int?
 
-  member  Member  @relation(fields: [memberId], references: [id])
-  product Product @relation(fields: [productId], references: [id])
+  member        Member   @relation(fields: [memberId], references: [id])
+  product       Product  @relation(fields: [productId], references: [id])
+  appliedByUser AppUser? @relation("SaleAppliedByUser", fields: [appliedByUserId], references: [id])
 }
 
 model CashMove {

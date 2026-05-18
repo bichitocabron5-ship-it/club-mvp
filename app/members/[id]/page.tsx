@@ -7,12 +7,15 @@ import type {
   MemberHistoryData,
 } from "@/lib/types";
 import Image from "next/image";
+import { useSession } from "next-auth/react";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 export default function MemberDetail() {
   const params = useParams<{ id: string }>();
   const id = params.id;
+  const { data: session, status } = useSession();
+  const isAdmin = session?.user?.role === "ADMIN";
 
   const [data, setData] = useState<MemberHistoryData | null>(null);
   const [contracts, setContracts] = useState<MemberContractRecord[]>([]);
@@ -27,6 +30,9 @@ export default function MemberDetail() {
     email: "",
     expiresAt: "",
     rfidCode: "",
+    commercialProfile: "STANDARD",
+    discountPercent: "0",
+    commercialNotes: "",
   });
 
   useEffect(() => {
@@ -58,6 +64,9 @@ export default function MemberDetail() {
               ? historyData.member.expiresAt.slice(0, 10)
               : "",
             rfidCode: historyData.member.rfidCode || "",
+            commercialProfile: historyData.member.commercialProfile || "STANDARD",
+            discountPercent: String(historyData.member.discountPercent ?? 0),
+            commercialNotes: historyData.member.commercialNotes || "",
           });
         }
       }
@@ -69,6 +78,8 @@ export default function MemberDetail() {
   }, [id]);
 
   if (!data) return <div>Cargando...</div>;
+
+  const authReady = status !== "loading";
 
   type MemberStatusPayload = {
     active?: boolean;
@@ -101,7 +112,13 @@ export default function MemberDetail() {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(editForm),
+      body: JSON.stringify({
+        ...editForm,
+        discountPercent:
+          editForm.discountPercent === ""
+            ? 0
+            : Number(editForm.discountPercent),
+      }),
     });
 
     if (!res.ok) {
@@ -184,6 +201,24 @@ export default function MemberDetail() {
             {data.member.joinedAt
               ? new Date(data.member.joinedAt).toLocaleDateString()
               : "Sin fecha"}
+          </div>
+
+          <div className="mt-4 rounded border bg-gray-50 p-4">
+            <div className="mb-2 text-sm text-gray-500">Perfil comercial</div>
+
+            <div className="flex flex-wrap gap-2">
+              <span className="rounded bg-gray-900 px-3 py-1 text-white">
+                {data.member.commercialProfile}
+              </span>
+
+              <span className="rounded bg-blue-100 px-3 py-1 text-blue-700">
+                {Number(data.member.discountPercent || 0).toFixed(2)}% descuento
+              </span>
+            </div>
+
+            <div className="mt-3 text-sm text-gray-600">
+              {data.member.commercialNotes || "Sin notas comerciales"}
+            </div>
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
@@ -282,6 +317,58 @@ export default function MemberDetail() {
                     }
                   />
 
+                  {authReady && isAdmin && (
+                    <>
+                      <div className="border-t pt-3">
+                        <h3 className="font-semibold">Perfil comercial</h3>
+                      </div>
+
+                      <select
+                        className="w-full border p-2"
+                        value={editForm.commercialProfile}
+                        onChange={(e) =>
+                          setEditForm({
+                            ...editForm,
+                            commercialProfile: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="STANDARD">STANDARD</option>
+                        <option value="VIP">VIP</option>
+                        <option value="STAFF">STAFF</option>
+                      </select>
+
+                      <input
+                        className="w-full border p-2"
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        placeholder="Descuento %"
+                        value={editForm.discountPercent}
+                        onChange={(e) =>
+                          setEditForm({
+                            ...editForm,
+                            discountPercent: e.target.value,
+                          })
+                        }
+                      />
+
+                      <textarea
+                        className="w-full border p-2"
+                        rows={3}
+                        placeholder="Notas comerciales"
+                        value={editForm.commercialNotes}
+                        onChange={(e) =>
+                          setEditForm({
+                            ...editForm,
+                            commercialNotes: e.target.value,
+                          })
+                        }
+                      />
+                    </>
+                  )}
+
                   <button
                     type="button"
                     onClick={() => setAssigningRfid(true)}
@@ -305,7 +392,9 @@ export default function MemberDetail() {
                 )}
                 
                   <button
-                    onClick={saveMember}
+                    onClick={() => {
+                      void saveMember();
+                    }}
                     className="w-full rounded bg-blue-600 p-3 text-white font-bold"
                   >
                     Guardar cambios
@@ -435,12 +524,23 @@ export default function MemberDetail() {
               <div className="text-sm text-gray-500">
                 {sale.qty} {sale.product.unit}
               </div>
+              {sale.discountAmount > 0 && (
+                <div className="text-xs text-blue-700">
+                  {sale.discountReason}: -{Number(sale.discountAmount).toFixed(2)} EUR
+                </div>
+              )}
             </div>
 
             <div className="text-right">
               <div className="font-semibold">
                 {Number(sale.totalAmount).toFixed(2)} EUR
               </div>
+              {sale.originalAmount !== null &&
+                Number(sale.originalAmount) !== Number(sale.totalAmount) && (
+                  <div className="text-xs text-gray-500 line-through">
+                    {Number(sale.originalAmount).toFixed(2)} EUR
+                  </div>
+                )}
               <div className="text-xs text-gray-500">
                 {new Date(sale.createdAt).toLocaleString()}
               </div>

@@ -4,7 +4,15 @@ import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-const adminOnlyFields = ["fullName", "dni", "expiresAt", "rfidCode"] as const;
+const adminOnlyFields = [
+  "fullName",
+  "dni",
+  "expiresAt",
+  "rfidCode",
+  "commercialProfile",
+  "discountPercent",
+  "commercialNotes",
+] as const;
 
 const memberUpdateSchema = z.object({
   fullName: z.string().trim().min(1).optional(),
@@ -13,6 +21,9 @@ const memberUpdateSchema = z.object({
   email: z.string().trim().optional().nullable(),
   expiresAt: z.string().optional().nullable(),
   rfidCode: z.string().trim().optional().nullable(),
+  commercialProfile: z.string().trim().min(1).optional(),
+  discountPercent: z.number().min(0).max(100).optional(),
+  commercialNotes: z.string().trim().optional().nullable(),
 });
 
 export async function PATCH(
@@ -66,7 +77,14 @@ export async function PATCH(
       (data.dni !== undefined && data.dni !== existingMember.dni) ||
       (data.rfidCode !== undefined &&
         (data.rfidCode === "" ? null : data.rfidCode) !== existingMember.rfidCode) ||
-      (normalizedExpiresAt !== undefined && normalizedExpiresAt !== currentExpiresAt);
+      (normalizedExpiresAt !== undefined && normalizedExpiresAt !== currentExpiresAt) ||
+      (data.commercialProfile !== undefined &&
+        data.commercialProfile !== existingMember.commercialProfile) ||
+      (data.discountPercent !== undefined &&
+        data.discountPercent !== Number(existingMember.discountPercent || 0)) ||
+      (data.commercialNotes !== undefined &&
+        (data.commercialNotes === "" ? null : data.commercialNotes) !==
+          existingMember.commercialNotes);
 
     if (attemptedSensitiveChange) {
       return NextResponse.json(
@@ -95,6 +113,13 @@ export async function PATCH(
           ? data.rfidCode === ""
             ? null
             : data.rfidCode
+          : undefined,
+        commercialProfile: isAdmin ? data.commercialProfile : undefined,
+        discountPercent: isAdmin ? data.discountPercent : undefined,
+        commercialNotes: isAdmin
+          ? data.commercialNotes === ""
+            ? null
+            : data.commercialNotes
           : undefined,
       },
     });

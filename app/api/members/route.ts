@@ -30,7 +30,7 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
   });
 
-  const result = members.map((member: any) => ({
+  const result = members.map((member) => ({
     ...member,
     hasContract: member.contracts.length > 0,
   }));

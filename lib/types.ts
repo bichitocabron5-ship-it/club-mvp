@@ -11,12 +11,16 @@ export type MemberSummary = {
   fullName: string;
   dni: string;
   phone: string | null;
+  email?: string | null;
   active: boolean;
   hasContract: boolean;
   joinedAt: string;
   expiresAt: string | null;
   createdAt: string;
   rfidCode: string | null;
+  commercialProfile: string;
+  discountPercent: number;
+  commercialNotes?: string | null;
 };
 
 export type ProductSummary = {
@@ -56,6 +60,12 @@ export type DashboardSale = {
   id: number;
   qty: number;
   totalAmount: number;
+  originalAmount?: number | null;
+  discountAmount?: number;
+  discountPercent?: number;
+  finalAmount?: number | null;
+  discountReason?: string | null;
+  discountSource?: string;
   createdAt: string;
   member: {
     fullName: string;
@@ -183,6 +193,12 @@ export type MemberHistorySale = {
   id: number;
   qty: number;
   totalAmount: number;
+  originalAmount: number | null;
+  discountPercent: number;
+  discountAmount: number;
+  finalAmount: number | null;
+  discountReason: string | null;
+  discountSource: string;
   createdAt: string;
   product: {
     name: string;
@@ -202,6 +218,9 @@ export type MemberHistoryData = {
     expiresAt: string | null;
     rfidCode: string | null;
     createdAt: string;
+    commercialProfile: string;
+    discountPercent: number;
+    commercialNotes: string | null;
   };
   sales: MemberHistorySale[];
   totalSpent: number;

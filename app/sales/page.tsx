@@ -161,19 +161,33 @@ export default function SalesPage() {
       const product = products.find((candidate) => candidate.id === item.productId);
       const price = product ? Number(product.price) : 0;
       const stock = product ? Number(product.stock) : 0;
-      const lineTotal = item.qty * price;
+      const originalAmount = item.qty * price;
+      const discountPercent = Number(memberStatus?.member.discountPercent || 0);
+      const discountAmount = originalAmount * (discountPercent / 100);
+      const finalAmount = originalAmount - discountAmount;
 
       return {
         ...item,
         product,
         price,
         stock,
-        lineTotal,
+        originalAmount,
+        discountPercent,
+        discountAmount,
+        finalAmount,
       };
     });
-  }, [cart, products]);
+  }, [cart, memberStatus, products]);
 
-  const cartTotal = cartLines.reduce((acc, line) => acc + line.lineTotal, 0);
+  const cartOriginalTotal = cartLines.reduce(
+    (acc, line) => acc + line.originalAmount,
+    0
+  );
+  const cartDiscountTotal = cartLines.reduce(
+    (acc, line) => acc + line.discountAmount,
+    0
+  );
+  const cartTotal = cartLines.reduce((acc, line) => acc + line.finalAmount, 0);
 
   const cartG = cartLines.reduce((acc, line) => {
     if (line.product?.unit === "G") return acc + line.qty;
@@ -439,6 +453,15 @@ export default function SalesPage() {
                         Membresía vigente
                       </span>
                     )}
+
+                    <span className="rounded bg-gray-900 px-3 py-1 text-white">
+                      {memberStatus.member.commercialProfile}
+                    </span>
+
+                    <span className="rounded bg-blue-100 px-3 py-1 text-blue-700">
+                      {Number(memberStatus.member.discountPercent || 0).toFixed(2)}%
+                      descuento
+                    </span>
                   </div>
 
                   {!memberStatus.canWithdraw && (
@@ -590,8 +613,14 @@ export default function SalesPage() {
                   <div>
                     <label className="text-xs text-gray-500">Total linea</label>
                     <div className="rounded border bg-gray-50 p-2">
-                      {line.lineTotal.toFixed(2)} EUR
+                      {line.finalAmount.toFixed(2)} EUR
                     </div>
+                    {line.discountAmount > 0 && (
+                      <div className="mt-1 text-xs text-blue-700">
+                        Antes: {line.originalAmount.toFixed(2)} EUR · descuento{" "}
+                        {line.discountAmount.toFixed(2)} EUR
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -605,7 +634,15 @@ export default function SalesPage() {
           </div>
 
           <div className="mt-4 rounded bg-gray-900 p-4 text-white">
-            <div className="text-sm opacity-80">Total retirada</div>
+            <div className="text-sm opacity-80">Subtotal original</div>
+            <div className="text-2xl font-bold">
+              {cartOriginalTotal.toFixed(2)} EUR
+            </div>
+            <div className="mt-3 text-sm opacity-80">Descuento</div>
+            <div className="text-2xl font-bold text-blue-200">
+              -{cartDiscountTotal.toFixed(2)} EUR
+            </div>
+            <div className="mt-3 text-sm opacity-80">Total retirada</div>
             <div className="text-5xl font-black">{cartTotal.toFixed(2)} EUR</div>
           </div>
 

@@ -6,8 +6,10 @@ import {
   DAILY_LIMIT_UD,
   getDailyTotals,
   getErrorMessage,
+  getMemberSalePricing,
   getSaleMemberStatus,
   getTodayRange,
+  normalizeDiscountPercent,
   normalizeUnit,
 } from "@/lib/sales";
 import { NextResponse } from "next/server";
@@ -42,6 +44,22 @@ export async function POST(req: Request) {
     );
   }
 
+  const { member } = memberStatus;
+  const appliedByUserId = Number(auth.session.user.id);
+
+  if (Number.isNaN(appliedByUserId)) {
+    return NextResponse.json({ error: "Usuario invalido" }, { status: 400 });
+  }
+
+  try {
+    normalizeDiscountPercent(Number(member.discountPercent || 0));
+  } catch (error) {
+    return NextResponse.json(
+      { error: getErrorMessage(error, "Descuento de socio invalido") },
+      { status: 400 }
+    );
+  }
+
   const product = await prisma.product.findUnique({
     where: { id: productId },
   });
@@ -66,7 +84,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const total = qty * product.price;
+  const pricing = getMemberSalePricing(qty, Number(product.price), member);
   const { start, day } = getTodayRange();
 
   const todayClosed = await prisma.dayClosure.findUnique({
@@ -106,13 +124,22 @@ export async function POST(req: Request) {
   }
 
   try {
-    const result = await prisma.$transaction(async (tx: any) => {
+    const result = await prisma.$transaction(async (tx) => {
       const sale = await tx.sale.create({
         data: {
           memberId,
           productId,
           qty,
-          totalAmount: total,
+          totalAmount: pricing.finalAmount,
+          originalAmount: pricing.originalAmount,
+          discountPercent: pricing.discountPercent,
+          discountAmount: pricing.discountAmount,
+          finalAmount: pricing.finalAmount,
+          discountReason: pricing.discountReason,
+          discountSource: pricing.discountSource,
+          appliedByUserId,
+          unitCost: Number(product.averageCost || 0),
+          profit: pricing.finalAmount - qty * Number(product.averageCost || 0),
         },
       });
 
@@ -137,7 +164,7 @@ export async function POST(req: Request) {
       await tx.cashMove.create({
         data: {
           type: "income",
-          amount: total,
+          amount: pricing.finalAmount,
           note: `Retirada producto ${product.name}`,
         },
       });

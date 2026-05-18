@@ -5,8 +5,10 @@ import {
   DAILY_LIMIT_UD,
   getDailyTotals,
   getErrorMessage,
+  getMemberSalePricing,
   getSaleMemberStatus,
   getTodayRange,
+  normalizeDiscountPercent,
   normalizeUnit,
 } from "@/lib/sales";
 import { NextResponse } from "next/server";
@@ -61,6 +63,21 @@ export async function POST(req: Request) {
   }
 
   const { member } = memberStatus;
+  const appliedByUserId = Number(auth.session.user.id);
+
+  if (Number.isNaN(appliedByUserId)) {
+    return NextResponse.json({ error: "Usuario invalido" }, { status: 400 });
+  }
+
+  try {
+    normalizeDiscountPercent(Number(member.discountPercent || 0));
+  } catch (error) {
+    return NextResponse.json(
+      { error: getErrorMessage(error, "Descuento de socio invalido") },
+      { status: 400 }
+    );
+  }
+
   const productIds = items.map((item) => item.productId);
 
   const products = await prisma.product.findMany({
@@ -76,8 +93,10 @@ export async function POST(req: Request) {
     );
   }
 
- const productMap = new Map<number, any>(
-    products.map((product: any) => [product.id, product])
+  type ProductRecord = (typeof products)[number];
+
+  const productMap = new Map<number, ProductRecord>(
+    products.map((product) => [product.id, product])
   );
   const grouped = new Map<number, number>();
 
@@ -87,7 +106,8 @@ export async function POST(req: Request) {
 
   let cartG = 0;
   let cartUD = 0;
-  let totalAmount = 0;
+  let totalOriginalAmount = 0;
+  let totalFinalAmount = 0;
 
   for (const [productId, qty] of grouped.entries()) {
     const product = productMap.get(productId);
@@ -122,7 +142,9 @@ export async function POST(req: Request) {
     if (unit === "G") cartG += qty;
     if (unit === "UD") cartUD += qty;
 
-    totalAmount += qty * Number(product.price);
+    const pricing = getMemberSalePricing(qty, Number(product.price), member);
+    totalOriginalAmount += pricing.originalAmount;
+    totalFinalAmount += pricing.finalAmount;
   }
 
   const salesToday = await prisma.sale.findMany({
@@ -152,15 +174,15 @@ export async function POST(req: Request) {
   }
 
   try {
-    const result = await prisma.$transaction(async (tx: any) => {
+    const result = await prisma.$transaction(async (tx) => {
       const createdSales = [];
 
       for (const [productId, qty] of grouped.entries()) {
         const product = productMap.get(productId)!;
-        const lineTotal = qty * Number(product.price);
+        const pricing = getMemberSalePricing(qty, Number(product.price), member);
 
         const unitCost = Number(product.averageCost || 0);
-        const profit = lineTotal - qty * unitCost;
+        const profit = pricing.finalAmount - qty * unitCost;
 
         const previousStock = Number(product.stock);
         const newStock = previousStock - qty;
@@ -188,10 +210,17 @@ export async function POST(req: Request) {
             memberId,
             productId,
             qty,
-            totalAmount: lineTotal,
+            totalAmount: pricing.finalAmount,
             unitCost,
             profit,
             note: "Retirada en carrito",
+            originalAmount: pricing.originalAmount,
+            discountPercent: pricing.discountPercent,
+            discountAmount: pricing.discountAmount,
+            finalAmount: pricing.finalAmount,
+            discountReason: pricing.discountReason,
+            discountSource: pricing.discountSource,
+            appliedByUserId,
           },
         });
       
@@ -212,14 +241,15 @@ export async function POST(req: Request) {
       await tx.cashMove.create({
         data: {
           type: "income",
-          amount: totalAmount,
+          amount: totalFinalAmount,
           note: `Retirada multiple - ${member.fullName}`,
         },
       });
 
       return {
         sales: createdSales,
-        totalAmount,
+        totalAmount: totalFinalAmount,
+        originalAmount: totalOriginalAmount,
       };
     });
 
