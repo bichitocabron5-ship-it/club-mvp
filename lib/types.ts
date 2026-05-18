@@ -65,6 +65,8 @@ export type MemberSummary = {
   dni: string;
   phone: string | null;
   email?: string | null;
+  dniFrontUrl?: string | null;
+  dniBackUrl?: string | null;
   active: boolean;
   hasContract: boolean;
   joinedAt: string;
@@ -273,6 +275,8 @@ export type MemberHistoryData = {
     dni: string;
     phone: string | null;
     email: string | null;
+    dniFrontUrl: string | null;
+    dniBackUrl: string | null;
     active: boolean;
     joinedAt: string | null;
     expiresAt: string | null;

@@ -6,6 +6,7 @@ import type {
   MemberContractRecord,
   MemberHistoryData,
 } from "@/lib/types";
+import { MemberDocumentsCard } from "@/components/member-documents-card";
 import Image from "next/image";
 import { useSession } from "next-auth/react";
 import { useParams } from "next/navigation";
@@ -482,6 +483,12 @@ export default function MemberDetail() {
       >
         Contrato / Firma
       </a>
+
+      <MemberDocumentsCard
+        memberId={id}
+        initialFrontUrl={data.member.dniFrontUrl}
+        initialBackUrl={data.member.dniBackUrl}
+      />
 
       <div className="mt-6">
         <h2 className="mb-3 text-xl font-bold">Contratos firmados</h2>
