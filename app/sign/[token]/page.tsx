@@ -62,7 +62,7 @@ export default function SignPage() {
         birthPlace: "",
         birthDate: "",
         phone: sessionData.member?.phone || "",
-        email: "",
+        email: sessionData.member?.email || "",
         consumptionGrams: "30",
       });
     });
@@ -126,6 +126,9 @@ export default function SignPage() {
       <div className="mb-4 rounded border bg-gray-50 p-4">
         <p>
           Socio: <strong>{session.member.fullName}</strong>
+        </p>
+        <p className="text-sm text-gray-600">
+          Nº de socio provisional: <strong>{session.member.id}</strong>
         </p>
         <p className="text-sm text-gray-500">
           Documento provisional pendiente de PDF oficial.

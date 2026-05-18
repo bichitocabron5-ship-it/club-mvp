@@ -8,6 +8,7 @@ export type ProductLike = {
 
 export type MemberSummary = {
   id: number;
+  memberNumber?: string | number | null;
   fullName: string;
   dni: string;
   phone: string | null;
@@ -183,6 +184,11 @@ export type MemberContractRecord = {
   id: number;
   fullName: string;
   dni: string;
+  address?: string | null;
+  birthPlace?: string | null;
+  birthDate?: string | null;
+  phone?: string | null;
+  email?: string | null;
   consumptionGrams: number | null;
   signatureImage: string;
   signedAt: string;
@@ -209,6 +215,7 @@ export type MemberHistorySale = {
 export type MemberHistoryData = {
   member: {
     id: number;
+    memberNumber?: string | number | null;
     fullName: string;
     dni: string;
     phone: string | null;

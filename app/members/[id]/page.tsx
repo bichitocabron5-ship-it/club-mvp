@@ -22,6 +22,7 @@ export default function MemberDetail() {
   const [accessLogs, setAccessLogs] = useState<AccessLogRecord[]>([]);
   const [editing, setEditing] = useState(false);
   const [assigningRfid, setAssigningRfid] = useState(false);
+  const [rfidMessage, setRfidMessage] = useState("");
 
   const [editForm, setEditForm] = useState({
     fullName: "",
@@ -77,9 +78,17 @@ export default function MemberDetail() {
     };
   }, [id]);
 
+  useEffect(() => {
+    if (!rfidMessage) return;
+
+    const timeout = setTimeout(() => setRfidMessage(""), 4000);
+    return () => clearTimeout(timeout);
+  }, [rfidMessage]);
+
   if (!data) return <div>Cargando...</div>;
 
   const authReady = status !== "loading";
+  const visibleMemberNumber = data.member.memberNumber ?? data.member.id;
 
   type MemberStatusPayload = {
     active?: boolean;
@@ -128,8 +137,6 @@ export default function MemberDetail() {
     }
 
     setEditing(false);
-
-    // recargar datos
     window.location.reload();
   }
 
@@ -153,47 +160,85 @@ export default function MemberDetail() {
       return;
     }
 
-    setEditForm({ ...editForm, rfidCode: cleanCode });
+    setEditForm((current) => ({ ...current, rfidCode: cleanCode }));
     setAssigningRfid(false);
-    alert("Chapita asignada correctamente");
+    setRfidMessage(`Chapita asignada correctamente: ${cleanCode}`);
   }
 
   return (
     <main>
-      <h1 className="mb-4 text-xl font-bold">Historial del socio</h1>
+      <h1 className="mb-4 text-xl font-bold">Ficha del socio</h1>
 
       {data.member && (
         <div className="mb-4 rounded border p-4">
-          <div className="mb-2 text-sm text-gray-500">Estado del socio</div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <div className="text-sm text-gray-500">Número de socio</div>
+              <div className="text-2xl font-semibold">
+                Nº socio provisional {visibleMemberNumber}
+              </div>
+            </div>
 
-          <div className="flex flex-wrap gap-2">
-            <span
-              className={
-                data.member.active
-                  ? "rounded bg-green-100 px-3 py-1 text-green-700"
-                  : "rounded bg-red-100 px-3 py-1 text-red-700"
-              }
-            >
-            {data.member.active ? "Activo" : "Bloqueado"}
-            </span>
+            <div>
+              <div className="text-sm text-gray-500">Datos personales</div>
+              <div className="font-semibold">{data.member.fullName}</div>
+              <div className="text-sm text-gray-700">{data.member.dni}</div>
+            </div>
+          </div>
 
-            {data.member.expiresAt && new Date(data.member.expiresAt) < new Date() && (
-              <span className="rounded bg-red-100 px-3 py-1 text-red-700">
-                Membresía caducada
+          <div className="mt-4 grid gap-3 rounded border bg-gray-50 p-4 md:grid-cols-2">
+            <div>
+              <div className="text-sm text-gray-500">Teléfono</div>
+              <div className="font-medium">{data.member.phone || "No indicado"}</div>
+            </div>
+            <div>
+              <div className="text-sm text-gray-500">Email</div>
+              <div className="font-medium">{data.member.email || "No indicado"}</div>
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <div className="mb-2 text-sm text-gray-500">Estado del socio</div>
+
+            <div className="flex flex-wrap gap-2">
+              <span
+                className={
+                  data.member.active
+                    ? "rounded bg-green-100 px-3 py-1 text-green-700"
+                    : "rounded bg-red-100 px-3 py-1 text-red-700"
+                }
+              >
+                {data.member.active ? "Activo" : "Bloqueado"}
               </span>
-            )}
 
-            {data.member.expiresAt && new Date(data.member.expiresAt) >= new Date() && (
-              <span className="rounded bg-blue-100 px-3 py-1 text-blue-700">
-                Válido hasta {new Date(data.member.expiresAt).toLocaleDateString()}
-              </span>
-            )}
+              {data.member.expiresAt && new Date(data.member.expiresAt) < new Date() && (
+                <span className="rounded bg-red-100 px-3 py-1 text-red-700">
+                  Membresía caducada
+                </span>
+              )}
 
-            {!data.member.expiresAt && (
-              <span className="rounded bg-yellow-100 px-3 py-1 text-yellow-700">
-                Sin fecha de vencimiento
-              </span>
-            )}
+              {data.member.expiresAt && new Date(data.member.expiresAt) >= new Date() && (
+                <span className="rounded bg-blue-100 px-3 py-1 text-blue-700">
+                  Válido hasta {new Date(data.member.expiresAt).toLocaleDateString()}
+                </span>
+              )}
+
+              {!data.member.expiresAt && (
+                <span className="rounded bg-yellow-100 px-3 py-1 text-yellow-700">
+                  Sin fecha de vencimiento
+                </span>
+              )}
+
+              {data.member.rfidCode ? (
+                <span className="rounded bg-blue-100 px-3 py-1 text-blue-700">
+                  RFID {data.member.rfidCode}
+                </span>
+              ) : (
+                <span className="rounded bg-yellow-100 px-3 py-1 text-yellow-700">
+                  RFID pendiente
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="mt-3 text-sm text-gray-500">
@@ -254,154 +299,167 @@ export default function MemberDetail() {
 
             <button
               onClick={() => setEditing(!editing)}
-              className="mt-3 rounded bg-gray-900 px-4 py-2 text-white"
+              className="rounded bg-gray-900 px-4 py-2 text-white"
             >
               {editing ? "Cancelar" : "Editar socio"}
             </button>
+          </div>
 
-              {editing && (
-                <div className="mt-4 rounded border p-4 space-y-3">
-                  <h2 className="font-bold">Editar socio</h2>
+          {editing && (
+            <div className="mt-4 space-y-3 rounded border p-4">
+              <h2 className="font-bold">Editar socio</h2>
+
+              <input
+                className="w-full border p-2"
+                placeholder="Nombre"
+                value={editForm.fullName}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, fullName: e.target.value })
+                }
+              />
+
+              <input
+                className="w-full border p-2"
+                placeholder="DNI"
+                value={editForm.dni}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, dni: e.target.value })
+                }
+              />
+
+              <input
+                className="w-full border p-2"
+                placeholder="Teléfono"
+                value={editForm.phone}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, phone: e.target.value })
+                }
+              />
+
+              <input
+                className="w-full border p-2"
+                placeholder="Email"
+                value={editForm.email}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, email: e.target.value })
+                }
+              />
+
+              <input
+                className="w-full border p-2"
+                type="date"
+                value={editForm.expiresAt}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, expiresAt: e.target.value })
+                }
+              />
+
+              <input
+                className="w-full border p-2"
+                placeholder="RFID"
+                value={editForm.rfidCode}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, rfidCode: e.target.value })
+                }
+              />
+
+              {authReady && isAdmin && (
+                <>
+                  <div className="border-t pt-3">
+                    <h3 className="font-semibold">Perfil comercial</h3>
+                  </div>
+
+                  <select
+                    className="w-full border p-2"
+                    value={editForm.commercialProfile}
+                    onChange={(e) =>
+                      setEditForm({
+                        ...editForm,
+                        commercialProfile: e.target.value,
+                      })
+                    }
+                  >
+                    <option value="STANDARD">STANDARD</option>
+                    <option value="VIP">VIP</option>
+                    <option value="STAFF">STAFF</option>
+                  </select>
 
                   <input
                     className="w-full border p-2"
-                    placeholder="Nombre"
-                    value={editForm.fullName}
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    placeholder="Descuento %"
+                    value={editForm.discountPercent}
                     onChange={(e) =>
-                      setEditForm({ ...editForm, fullName: e.target.value })
+                      setEditForm({
+                        ...editForm,
+                        discountPercent: e.target.value,
+                      })
                     }
                   />
 
-                  <input
+                  <textarea
                     className="w-full border p-2"
-                    placeholder="DNI"
-                    value={editForm.dni}
+                    rows={3}
+                    placeholder="Notas comerciales"
+                    value={editForm.commercialNotes}
                     onChange={(e) =>
-                      setEditForm({ ...editForm, dni: e.target.value })
+                      setEditForm({
+                        ...editForm,
+                        commercialNotes: e.target.value,
+                      })
                     }
                   />
+                </>
+              )}
 
-                  <input
-                    className="w-full border p-2"
-                    placeholder="Teléfono"
-                    value={editForm.phone}
-                    onChange={(e) =>
-                      setEditForm({ ...editForm, phone: e.target.value })
-                    }
-                  />
-
-                  <input
-                    className="w-full border p-2"
-                    placeholder="Email"
-                    value={editForm.email}
-                    onChange={(e) =>
-                      setEditForm({ ...editForm, email: e.target.value })
-                    }
-                  />
-
-                  <input
-                    className="w-full border p-2"
-                    type="date"
-                    value={editForm.expiresAt}
-                    onChange={(e) =>
-                      setEditForm({ ...editForm, expiresAt: e.target.value })
-                    }
-                  />
-
-                  <input
-                    className="w-full border p-2"
-                    placeholder="RFID"
-                    value={editForm.rfidCode}
-                    onChange={(e) =>
-                      setEditForm({ ...editForm, rfidCode: e.target.value })
-                    }
-                  />
-
-                  {authReady && isAdmin && (
-                    <>
-                      <div className="border-t pt-3">
-                        <h3 className="font-semibold">Perfil comercial</h3>
-                      </div>
-
-                      <select
-                        className="w-full border p-2"
-                        value={editForm.commercialProfile}
-                        onChange={(e) =>
-                          setEditForm({
-                            ...editForm,
-                            commercialProfile: e.target.value,
-                          })
-                        }
-                      >
-                        <option value="STANDARD">STANDARD</option>
-                        <option value="VIP">VIP</option>
-                        <option value="STAFF">STAFF</option>
-                      </select>
-
-                      <input
-                        className="w-full border p-2"
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="0.01"
-                        placeholder="Descuento %"
-                        value={editForm.discountPercent}
-                        onChange={(e) =>
-                          setEditForm({
-                            ...editForm,
-                            discountPercent: e.target.value,
-                          })
-                        }
-                      />
-
-                      <textarea
-                        className="w-full border p-2"
-                        rows={3}
-                        placeholder="Notas comerciales"
-                        value={editForm.commercialNotes}
-                        onChange={(e) =>
-                          setEditForm({
-                            ...editForm,
-                            commercialNotes: e.target.value,
-                          })
-                        }
-                      />
-                    </>
-                  )}
-
+              {rfidMessage && (
+                <div className="flex items-center justify-between gap-3 rounded border border-green-200 bg-green-50 p-3 text-green-700">
+                  <span>{rfidMessage}</span>
                   <button
                     type="button"
-                    onClick={() => setAssigningRfid(true)}
-                    className="w-full rounded bg-gray-900 p-3 font-bold text-white"
+                    onClick={() => setRfidMessage("")}
+                    className="rounded border border-green-300 px-3 py-1 text-sm"
                   >
-                    Asignar RFID escaneando
-                  </button>
-
-                {assigningRfid && (
-                  <input
-                    autoFocus
-                    className="w-full border border-blue-500 p-3"
-                    placeholder="Pasa la chapita ahora..."
-                    onChange={(e) => {
-                      const value = e.target.value.trim();
-                      if (value) {
-                        void saveScannedRfid(value);
-                      }
-                    }}
-                  />
-                )}
-                
-                  <button
-                    onClick={() => {
-                      void saveMember();
-                    }}
-                    className="w-full rounded bg-blue-600 p-3 text-white font-bold"
-                  >
-                    Guardar cambios
+                    Cerrar
                   </button>
                 </div>
               )}
-          </div>
+
+              <button
+                type="button"
+                onClick={() => setAssigningRfid(true)}
+                className="w-full rounded bg-gray-900 p-3 font-bold text-white"
+              >
+                Asignar RFID escaneando
+              </button>
+
+              {assigningRfid && (
+                <input
+                  autoFocus
+                  className="w-full border border-blue-500 p-3"
+                  placeholder="Pasa la chapita ahora..."
+                  onChange={(e) => {
+                    const value = e.target.value.trim();
+                    if (value) {
+                      void saveScannedRfid(value);
+                    }
+                  }}
+                />
+              )}
+
+              <button
+                onClick={() => {
+                  void saveMember();
+                }}
+                className="w-full rounded bg-blue-600 p-3 font-bold text-white"
+              >
+                Guardar cambios
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -430,8 +488,28 @@ export default function MemberDetail() {
                 <strong>{contract.fullName}</strong> - {contract.dni}
               </div>
 
+              {(contract.phone || contract.email) && (
+                <div className="mt-2 grid gap-2 text-sm text-gray-700 md:grid-cols-2">
+                  <div>Teléfono: {contract.phone || "No indicado"}</div>
+                  <div>Email: {contract.email || "No indicado"}</div>
+                </div>
+              )}
+
+              {(contract.address || contract.birthPlace || contract.birthDate) && (
+                <div className="mt-2 grid gap-2 text-sm text-gray-700 md:grid-cols-2">
+                  <div>Domicilio: {contract.address || "No indicado"}</div>
+                  <div>Lugar de nacimiento: {contract.birthPlace || "No indicado"}</div>
+                  <div>
+                    Fecha de nacimiento:{" "}
+                    {contract.birthDate
+                      ? new Date(contract.birthDate).toLocaleDateString()
+                      : "No indicada"}
+                  </div>
+                </div>
+              )}
+
               {contract.consumptionGrams && (
-                <div className="text-sm">
+                <div className="mt-2 text-sm">
                   Consumo mensual: {contract.consumptionGrams}g
                 </div>
               )}
@@ -504,7 +582,7 @@ export default function MemberDetail() {
         </div>
       </div>
 
-      <div className="mb-4 grid grid-cols-2 gap-2">
+      <div className="mb-4 mt-6 grid grid-cols-2 gap-2">
         <div className="rounded border p-3">
           <div className="text-sm text-gray-500">Retiradas</div>
           <strong>{data.count}</strong>

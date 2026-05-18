@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from "react";
 
 type CreatedMember = {
   id: number;
+  memberNumber?: string | number | null;
   fullName: string;
   dni: string;
   phone: string | null;
@@ -26,6 +27,7 @@ export default function NewMemberPage() {
   const [assigningRfid, setAssigningRfid] = useState(false);
   const [loading, setLoading] = useState(false);
   const [contractSigned, setContractSigned] = useState(false);
+  const [rfidMessage, setRfidMessage] = useState("");
 
   const [form, setForm] = useState({
     fullName: "",
@@ -34,6 +36,8 @@ export default function NewMemberPage() {
     email: "",
     expiresAt: "",
   });
+
+  const visibleMemberNumber = createdMember?.memberNumber ?? createdMember?.id ?? null;
 
   async function createMember(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -91,7 +95,7 @@ export default function NewMemberPage() {
     const updated: CreatedMember = await res.json();
     setCreatedMember(updated);
     setAssigningRfid(false);
-    alert("RFID asignado correctamente");
+    setRfidMessage(`Chapita asignada correctamente: ${updated.rfidCode}`);
   }
 
   async function createSigningSession() {
@@ -143,6 +147,13 @@ export default function NewMemberPage() {
     return () => clearInterval(interval);
   }, [signingSession?.token, contractSigned]);
 
+  useEffect(() => {
+    if (!rfidMessage) return;
+
+    const timeout = setTimeout(() => setRfidMessage(""), 4000);
+    return () => clearTimeout(timeout);
+  }, [rfidMessage]);
+
   const isReady =
     createdMember &&
     createdMember.active &&
@@ -159,12 +170,16 @@ export default function NewMemberPage() {
     <main className="mx-auto max-w-4xl p-4 md:p-6">
       <PageHeader
         title="Alta de socio"
-        description="Flujo guiado: datos, RFID y firma de contrato."
+        description="Flujo guiado y corto: datos del socio, chapita y firma."
       />
 
       {!createdMember && (
         <form onSubmit={createMember} className="space-y-3 rounded border p-4">
           <h2 className="text-lg font-bold">1. Datos personales</h2>
+          <p className="text-sm text-gray-600">
+            Introduce los datos mínimos del alta. Teléfono y email quedarán
+            disponibles también para la firma y la ficha del socio.
+          </p>
 
           <input
             className="w-full rounded border p-3"
@@ -212,7 +227,7 @@ export default function NewMemberPage() {
             disabled={loading}
             className="w-full rounded bg-blue-600 p-3 font-bold text-white disabled:opacity-40"
           >
-            {loading ? "Creando..." : "Crear socio"}
+            {loading ? "Creando socio..." : "Crear socio y continuar"}
           </button>
         </form>
       )}
@@ -224,8 +239,20 @@ export default function NewMemberPage() {
               Socio creado correctamente
             </h2>
 
-            <div className="mt-2">
-              <strong>{createdMember.fullName}</strong> — {createdMember.dni}
+            <div className="mt-2 grid gap-3 md:grid-cols-2">
+              <div>
+                <div className="text-sm text-gray-600">Socio</div>
+                <div>
+                  <strong>{createdMember.fullName}</strong> - {createdMember.dni}
+                </div>
+              </div>
+
+              <div>
+                <div className="text-sm text-gray-600">Número de socio</div>
+                <div className="text-lg font-semibold">
+                  Nº socio provisional {visibleMemberNumber}
+                </div>
+              </div>
             </div>
 
             <div className="mt-2 flex flex-wrap gap-2 text-sm">
@@ -235,8 +262,7 @@ export default function NewMemberPage() {
 
               {createdMember.expiresAt ? (
                 <span className="rounded bg-blue-100 px-3 py-1 text-blue-700">
-                  Vence:{" "}
-                  {new Date(createdMember.expiresAt).toLocaleDateString()}
+                  Vence: {new Date(createdMember.expiresAt).toLocaleDateString()}
                 </span>
               ) : (
                 <span className="rounded bg-yellow-100 px-3 py-1 text-yellow-700">
@@ -254,10 +280,36 @@ export default function NewMemberPage() {
                 </span>
               )}
             </div>
+
+            <div className="mt-3 grid gap-2 text-sm text-gray-700 md:grid-cols-2">
+              <div>
+                Teléfono: <strong>{createdMember.phone || "No indicado"}</strong>
+              </div>
+              <div>
+                Email: <strong>{createdMember.email || "No indicado"}</strong>
+              </div>
+            </div>
           </section>
 
           <section className="rounded border p-4">
             <h2 className="mb-3 text-lg font-bold">2. Asignar RFID</h2>
+            <p className="mb-3 text-sm text-gray-600">
+              Escanea la chapita del socio ahora o continúa más tarde desde su
+              ficha.
+            </p>
+
+            {rfidMessage && (
+              <div className="mb-3 flex items-center justify-between gap-3 rounded border border-green-200 bg-green-50 p-3 text-green-700">
+                <span>{rfidMessage}</span>
+                <button
+                  type="button"
+                  onClick={() => setRfidMessage("")}
+                  className="rounded border border-green-300 px-3 py-1 text-sm"
+                >
+                  Cerrar
+                </button>
+              </div>
+            )}
 
             {createdMember.rfidCode ? (
               <div className="rounded bg-green-50 p-3 text-green-700">
@@ -296,6 +348,10 @@ export default function NewMemberPage() {
 
           <section className="rounded border p-4">
             <h2 className="mb-3 text-lg font-bold">3. Firma de contrato</h2>
+            <p className="mb-3 text-sm text-gray-600">
+              La sesión de firma abrirá los datos del socio ya cargados para no
+              volver a escribirlos.
+            </p>
 
             {!signingSession && (
               <button
@@ -310,10 +366,10 @@ export default function NewMemberPage() {
             {signingSession && (
               <div className="space-y-3">
                 <div className="rounded bg-gray-50 p-3">
-                 Estado:{" "}
-                <strong className={contractSigned ? "text-green-700" : ""}>
-                  {contractSigned ? "FIRMADO" : signingSession.status}
-                </strong>
+                  Estado:{" "}
+                  <strong className={contractSigned ? "text-green-700" : ""}>
+                    {contractSigned ? "FIRMADO" : signingSession.status}
+                  </strong>
                 </div>
 
                 <div>
@@ -335,7 +391,7 @@ export default function NewMemberPage() {
                   />
 
                   <p className="mt-2 text-sm text-gray-500">
-                    En la tablet cambia localhost por la IP local del ordenador
+                    En la tablet cambia `localhost` por la IP local del ordenador
                     si hace falta.
                   </p>
                 </div>
@@ -345,6 +401,44 @@ export default function NewMemberPage() {
 
           <section className="rounded border p-4">
             <h2 className="mb-3 text-lg font-bold">Estado final</h2>
+
+            <div className="mb-4 grid gap-3 md:grid-cols-2">
+              <div className="rounded border bg-gray-50 p-3">
+                <div className="text-sm text-gray-500">Socio</div>
+                <div className="font-semibold">
+                  Creado con Nº provisional {visibleMemberNumber}
+                </div>
+              </div>
+
+              <div className="rounded border bg-gray-50 p-3">
+                <div className="text-sm text-gray-500">Contrato</div>
+                <div className="font-semibold">
+                  {contractSigned
+                    ? "Firmado"
+                    : signingSession
+                      ? "Pendiente de firma"
+                      : "Sin iniciar"}
+                </div>
+              </div>
+
+              <div className="rounded border bg-gray-50 p-3">
+                <div className="text-sm text-gray-500">RFID</div>
+                <div className="font-semibold">
+                  {createdMember.rfidCode
+                    ? `Asignado: ${createdMember.rfidCode}`
+                    : "Pendiente"}
+                </div>
+              </div>
+
+              <div className="rounded border bg-gray-50 p-3">
+                <div className="text-sm text-gray-500">Contacto</div>
+                <div className="font-semibold">
+                  {createdMember.phone || createdMember.email
+                    ? `${createdMember.phone || "Sin teléfono"} · ${createdMember.email || "Sin email"}`
+                    : "Sin datos de contacto"}
+                </div>
+              </div>
+            </div>
 
             {!isReady && (
               <div className="mb-4 space-y-2">
@@ -382,7 +476,7 @@ export default function NewMemberPage() {
 
             <div className="flex flex-wrap gap-2">
               <Link
-                href={`/members/${createdMember?.id}`}
+                href={`/members/${createdMember.id}`}
                 className="rounded bg-green-600 px-4 py-3 font-bold text-white"
               >
                 Ver ficha
@@ -416,6 +510,7 @@ export default function NewMemberPage() {
                   setSigningSession(null);
                   setContractSigned(false);
                   setAssigningRfid(false);
+                  setRfidMessage("");
                   setForm({
                     fullName: "",
                     dni: "",

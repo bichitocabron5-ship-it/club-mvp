@@ -8,6 +8,7 @@ const memberSchema = z.object({
   fullName: z.string().trim().min(1),
   dni: z.string().trim().min(1),
   phone: z.string().trim().optional().or(z.literal("")),
+  email: z.string().trim().optional().or(z.literal("")),
   active: z.coerce.boolean().optional(),
   expiresAt: z.string().optional().or(z.literal("")),
 });
@@ -56,6 +57,7 @@ export async function POST(req: Request) {
       fullName: parsed.data.fullName,
       dni: parsed.data.dni,
       phone: parsed.data.phone || null,
+      email: parsed.data.email || null,
       active: parsed.data.active ?? true,
       expiresAt: parsed.data.expiresAt
         ? new Date(parsed.data.expiresAt)

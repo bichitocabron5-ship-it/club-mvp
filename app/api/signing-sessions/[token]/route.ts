@@ -104,8 +104,22 @@ export async function POST(
   }
 
   const form = parsedBody.data.form || {};
+  const mergedFullName = form.fullName || existingSession.member.fullName;
+  const mergedDni = form.dni || existingSession.member.dni;
+  const mergedPhone = form.phone || existingSession.member.phone || null;
+  const mergedEmail = form.email || existingSession.member.email || null;
 
   const session = await prisma.$transaction(async (tx) => {
+    await tx.member.update({
+      where: { id: existingSession.memberId },
+      data: {
+        fullName: mergedFullName,
+        dni: mergedDni,
+        phone: mergedPhone,
+        email: mergedEmail,
+      },
+    });
+
     const updatedSession = await tx.signingSession.update({
       where: { token },
       data: {
@@ -123,13 +137,13 @@ export async function POST(
         memberId: updatedSession.memberId,
         signingSessionId: updatedSession.id,
 
-        fullName: form.fullName || updatedSession.member.fullName,
-        dni: form.dni || updatedSession.member.dni,
+        fullName: mergedFullName,
+        dni: mergedDni,
         address: form.address || null,
         birthPlace: form.birthPlace || null,
         birthDate: form.birthDate ? new Date(form.birthDate) : null,
-        phone: form.phone || updatedSession.member.phone || null,
-        email: form.email || null,
+        phone: mergedPhone,
+        email: mergedEmail,
         consumptionGrams: form.consumptionGrams
           ? Number(form.consumptionGrams)
           : null,
