@@ -16,6 +16,7 @@ import "dotenv/config";
 import { prisma } from "../lib/prisma";
 
 const REQUIRED_CONFIRMATION = "YES_DELETE_TEST_DATA";
+const DRY_RUN_ENABLED = process.env.CLEANUP_DRY_RUN === "true";
 
 type CleanupSummary = {
   sales: number;
@@ -33,6 +34,12 @@ type CleanupSummary = {
   productsReset: number;
 };
 
+type CleanupPlan = {
+  action: string;
+  target: keyof CleanupSummary;
+  count: number;
+};
+
 function assertExplicitConfirmation() {
   if (process.env.CONFIRM_CLEANUP !== REQUIRED_CONFIRMATION) {
     throw new Error(
@@ -41,10 +48,17 @@ function assertExplicitConfirmation() {
   }
 }
 
-function printSummary(summary: CleanupSummary) {
+function printSummary(summary: CleanupSummary, plan: CleanupPlan[]) {
   console.log("");
+  if (DRY_RUN_ENABLED) {
+    console.log("MODO DRY-RUN: no se ha borrado ni actualizado ningun dato.");
+  }
   console.log("Resumen de limpieza:");
   console.table(summary);
+  console.log("Acciones:");
+  for (const step of plan) {
+    console.log(`- ${step.action}: ${step.target} (${step.count})`);
+  }
   console.log("Conservado:");
   console.log("- AppUser");
   console.log("- Product (catalogo, con stock y averageCost reseteados a 0)");
@@ -57,6 +71,54 @@ async function main() {
   assertExplicitConfirmation();
 
   const summary = await prisma.$transaction(async (tx) => {
+    if (DRY_RUN_ENABLED) {
+      const [
+        memberContracts,
+        signingSessions,
+        accessLogs,
+        sales,
+        cashMoves,
+        dayClosures,
+        expenses,
+        purchaseItems,
+        purchases,
+        stockMoves,
+        suppliers,
+        members,
+        productsReset,
+      ] = await Promise.all([
+        tx.memberContract.count(),
+        tx.signingSession.count(),
+        tx.accessLog.count(),
+        tx.sale.count(),
+        tx.cashMove.count(),
+        tx.dayClosure.count(),
+        tx.expense.count(),
+        tx.purchaseItem.count(),
+        tx.purchase.count(),
+        tx.stockMove.count(),
+        tx.supplier.count(),
+        tx.member.count(),
+        tx.product.count(),
+      ]);
+
+      return {
+        sales,
+        cashMoves,
+        dayClosures,
+        expenses,
+        purchaseItems,
+        purchases,
+        suppliers,
+        stockMoves,
+        memberContracts,
+        signingSessions,
+        accessLogs,
+        members,
+        productsReset,
+      } satisfies CleanupSummary;
+    }
+
     // Orden explicito para respetar relaciones y evitar violaciones FK.
     const memberContracts = await tx.memberContract.deleteMany();
     const signingSessions = await tx.signingSession.deleteMany();
@@ -97,7 +159,77 @@ async function main() {
     } satisfies CleanupSummary;
   });
 
-  printSummary(summary);
+  const plan: CleanupPlan[] = [
+    {
+      action: DRY_RUN_ENABLED ? "Borraria registros de" : "Borrados registros de",
+      target: "memberContracts",
+      count: summary.memberContracts,
+    },
+    {
+      action: DRY_RUN_ENABLED ? "Borraria registros de" : "Borrados registros de",
+      target: "signingSessions",
+      count: summary.signingSessions,
+    },
+    {
+      action: DRY_RUN_ENABLED ? "Borraria registros de" : "Borrados registros de",
+      target: "accessLogs",
+      count: summary.accessLogs,
+    },
+    {
+      action: DRY_RUN_ENABLED ? "Borraria registros de" : "Borrados registros de",
+      target: "sales",
+      count: summary.sales,
+    },
+    {
+      action: DRY_RUN_ENABLED ? "Borraria registros de" : "Borrados registros de",
+      target: "cashMoves",
+      count: summary.cashMoves,
+    },
+    {
+      action: DRY_RUN_ENABLED ? "Borraria registros de" : "Borrados registros de",
+      target: "dayClosures",
+      count: summary.dayClosures,
+    },
+    {
+      action: DRY_RUN_ENABLED ? "Borraria registros de" : "Borrados registros de",
+      target: "expenses",
+      count: summary.expenses,
+    },
+    {
+      action: DRY_RUN_ENABLED ? "Borraria registros de" : "Borrados registros de",
+      target: "purchaseItems",
+      count: summary.purchaseItems,
+    },
+    {
+      action: DRY_RUN_ENABLED ? "Borraria registros de" : "Borrados registros de",
+      target: "purchases",
+      count: summary.purchases,
+    },
+    {
+      action: DRY_RUN_ENABLED ? "Borraria registros de" : "Borrados registros de",
+      target: "stockMoves",
+      count: summary.stockMoves,
+    },
+    {
+      action: DRY_RUN_ENABLED ? "Borraria registros de" : "Borrados registros de",
+      target: "suppliers",
+      count: summary.suppliers,
+    },
+    {
+      action: DRY_RUN_ENABLED ? "Borraria registros de" : "Borrados registros de",
+      target: "members",
+      count: summary.members,
+    },
+    {
+      action: DRY_RUN_ENABLED
+        ? "Resetearia stock y averageCost de"
+        : "Reseteados stock y averageCost de",
+      target: "productsReset",
+      count: summary.productsReset,
+    },
+  ];
+
+  printSummary(summary, plan);
 }
 
 main()
