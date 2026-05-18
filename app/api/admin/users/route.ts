@@ -3,6 +3,11 @@ import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import {
+  appUserPublicSelect,
+  assertEmailAvailable,
+  assertMemberLinkAvailable,
+} from "@/lib/admin-users";
 import { requireAdmin } from "@/lib/auth-server";
 import { prisma } from "@/lib/prisma";
 
@@ -11,6 +16,7 @@ const createUserSchema = z.object({
   email: z.string().trim().email(),
   password: z.string().min(8),
   role: z.enum(["ADMIN", "STAFF"]),
+  memberId: z.number().int().positive().nullable().optional(),
 });
 
 export async function GET() {
@@ -22,14 +28,7 @@ export async function GET() {
 
   const users = await prisma.appUser.findMany({
     orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      active: true,
-      createdAt: true,
-    },
+    select: appUserPublicSelect,
   });
 
   return NextResponse.json(users);
@@ -49,25 +48,31 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Datos inválidos" }, { status: 400 });
   }
 
+  const email = parsed.data.email.trim().toLowerCase();
+
+  try {
+    await assertEmailAvailable(email);
+    await assertMemberLinkAvailable(parsed.data.memberId ?? null);
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "No se pudo crear" },
+      { status: 400 }
+    );
+  }
+
   const passwordHash = await bcrypt.hash(parsed.data.password, 12);
 
   try {
     const user = await prisma.appUser.create({
       data: {
         name: parsed.data.name,
-        email: parsed.data.email,
+        email,
         passwordHash,
         role: parsed.data.role,
         active: true,
+        memberId: parsed.data.memberId ?? null,
       },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        active: true,
-        createdAt: true,
-      },
+      select: appUserPublicSelect,
     });
 
     return NextResponse.json(user);

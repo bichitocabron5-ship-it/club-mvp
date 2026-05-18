@@ -26,6 +26,7 @@ model Member {
   contracts       MemberContract[]
   signingSessions SigningSession[]
   accessLogs      AccessLog[]
+  appUser         AppUser?
 }
 
 model AccessLog {
@@ -45,7 +46,9 @@ model AppUser {
   role         String   @default("STAFF") // ADMIN | STAFF
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
+  memberId     Int?     @unique
 
+  member       Member?  @relation(fields: [memberId], references: [id])
   appliedSales Sale[]   @relation("SaleAppliedByUser")
 }
 
