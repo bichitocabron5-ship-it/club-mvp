@@ -40,7 +40,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Datos inválidos" }, { status: 400 });
   }
 
-  const expense = await prisma.$transaction(async (tx: any) => {
+  const expense = await prisma.$transaction(async (tx) => {
     const created = await tx.expense.create({
       data: {
         category: parsed.data.category,

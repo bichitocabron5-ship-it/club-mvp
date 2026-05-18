@@ -17,12 +17,14 @@ export async function GET() {
     },
   });
 
+  type MemberWithAccessLog = (typeof members)[number];
+
   const inside = members
-  .filter((member: any) => member.accessLogs[0]?.type === "IN")
-  .map((member: any) => ({
-    id: member.id,
-    fullName: member.fullName,
-  }));
+    .filter((member: MemberWithAccessLog) => member.accessLogs[0]?.type === "IN")
+    .map((member: MemberWithAccessLog) => ({
+      id: member.id,
+      fullName: member.fullName,
+    }));
 
   return NextResponse.json({
     count: inside.length,
