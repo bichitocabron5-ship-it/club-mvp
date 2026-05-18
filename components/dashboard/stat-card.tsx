@@ -10,8 +10,10 @@ export function StatCard({
   valueClassName?: string;
 }) {
   return (
-    <div className={`rounded border p-4 ${className}`.trim()}>
-      <div className="text-sm text-gray-500">{label}</div>
+    <div className={`app-panel rounded-3xl p-4 md:p-5 ${className}`.trim()}>
+      <div className="text-xs font-semibold uppercase tracking-[0.18em] app-muted">
+        {label}
+      </div>
       <div className={valueClassName}>{value}</div>
     </div>
   );

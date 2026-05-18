@@ -181,19 +181,24 @@ export default function ProductsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl p-6">
-      <h1 className="mb-4 text-2xl font-bold">Productos</h1>
+    <main className="mx-auto max-w-7xl p-4 md:p-6">
+      <div className="mb-6">
+        <h1 className="text-3xl font-black tracking-tight">Productos</h1>
+        <p className="mt-2 text-sm app-muted">
+          Catálogo y edición con mejor lectura en escritorio y tablet.
+        </p>
+      </div>
 
       {error ? (
-        <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           {error}
         </div>
       ) : null}
 
       {isAdmin ? (
-        <form onSubmit={handleSubmit} className="mb-6 grid gap-2 rounded border p-4">
+        <form onSubmit={handleSubmit} className="app-panel mb-6 grid gap-3 rounded-3xl p-4 md:grid-cols-2 xl:grid-cols-3">
           <input
-            className="rounded border p-3"
+            className="rounded-2xl border border-black/10 bg-white/80 p-3"
             placeholder="Nombre"
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -201,7 +206,7 @@ export default function ProductsPage() {
           />
 
           <select
-            className="rounded border p-3"
+            className="rounded-2xl border border-black/10 bg-white/80 p-3"
             value={form.unit}
             onChange={(e) =>
               setForm({ ...form, unit: e.target.value as ProductUnit })
@@ -212,7 +217,7 @@ export default function ProductsPage() {
           </select>
 
           <input
-            className="rounded border p-3"
+            className="rounded-2xl border border-black/10 bg-white/80 p-3"
             placeholder="Precio EUR/g o EUR/ud"
             type="number"
             min="0"
@@ -223,7 +228,7 @@ export default function ProductsPage() {
           />
 
           <input
-            className="rounded border p-3"
+            className="rounded-2xl border border-black/10 bg-white/80 p-3"
             placeholder="Stock inicial"
             type="number"
             min="0"
@@ -233,7 +238,7 @@ export default function ProductsPage() {
           />
 
           <select
-            className="rounded border p-3"
+            className="rounded-2xl border border-black/10 bg-white/80 p-3"
             value={form.category}
             onChange={(e) =>
               setForm({
@@ -253,7 +258,7 @@ export default function ProductsPage() {
 
           {form.category === "HASH" ? (
             <select
-              className="rounded border p-3"
+              className="rounded-2xl border border-black/10 bg-white/80 p-3"
               value={form.hashType}
               onChange={(e) =>
                 setForm({
@@ -272,7 +277,7 @@ export default function ProductsPage() {
           ) : null}
 
           <input
-            className="rounded border p-3"
+            className="rounded-2xl border border-black/10 bg-white/80 p-3"
             type="number"
             min="0"
             step="0.01"
@@ -282,25 +287,25 @@ export default function ProductsPage() {
           />
 
           <button
-            className="rounded bg-blue-600 px-4 py-3 font-bold text-white disabled:opacity-60"
+            className="app-button-primary rounded-2xl px-4 py-3 font-bold disabled:opacity-60 md:col-span-2 xl:col-span-3"
             disabled={saving}
           >
             Crear producto
           </button>
         </form>
       ) : (
-        <div className="mb-6 rounded border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
+        <div className="app-panel mb-6 rounded-3xl p-4 text-sm app-muted">
           Vista de catalogo. Solo ADMIN puede crear, editar, activar o desactivar productos.
         </div>
       )}
 
-      <div className="space-y-3">
+      <div className="grid gap-3 xl:grid-cols-2">
         {products.map((product) => {
           const lowStock = Number(product.stock) <= Number(product.minStock);
           const isEditing = editingProductId === product.id && editForm !== null;
 
           return (
-            <div key={product.id} className="rounded border p-4">
+            <div key={product.id} className="app-panel rounded-3xl p-4 md:p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
@@ -344,9 +349,9 @@ export default function ProductsPage() {
               </div>
 
               {isEditing && editForm ? (
-                <div className="mt-4 grid gap-2 rounded border border-blue-100 bg-blue-50 p-3">
+                <div className="mt-4 grid gap-2 rounded-2xl border border-blue-100 bg-blue-50 p-3">
                   <input
-                    className="rounded border p-3"
+                    className="rounded-2xl border border-black/10 bg-white p-3"
                     value={editForm.name}
                     onChange={(e) =>
                       setEditForm({ ...editForm, name: e.target.value })
@@ -356,7 +361,7 @@ export default function ProductsPage() {
 
                   <div className="grid gap-2 md:grid-cols-2">
                     <select
-                      className="rounded border p-3"
+                      className="rounded-2xl border border-black/10 bg-white p-3"
                       value={editForm.unit}
                       onChange={(e) =>
                         setEditForm({
@@ -370,7 +375,7 @@ export default function ProductsPage() {
                     </select>
 
                     <select
-                      className="rounded border p-3"
+                      className="rounded-2xl border border-black/10 bg-white p-3"
                       value={editForm.category}
                       onChange={(e) =>
                         setEditForm({
@@ -391,7 +396,7 @@ export default function ProductsPage() {
 
                   {editForm.category === "HASH" ? (
                     <select
-                      className="rounded border p-3"
+                      className="rounded-2xl border border-black/10 bg-white p-3"
                       value={editForm.hashType}
                       onChange={(e) =>
                         setEditForm({
@@ -411,7 +416,7 @@ export default function ProductsPage() {
 
                   <div className="grid gap-2 md:grid-cols-2">
                     <input
-                      className="rounded border p-3"
+                      className="rounded-2xl border border-black/10 bg-white p-3"
                       type="number"
                       min="0"
                       step="0.01"
@@ -443,7 +448,7 @@ export default function ProductsPage() {
                     <button
                       type="button"
                       onClick={() => void saveEditing(product.id)}
-                      className="rounded bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                      className="app-button-primary rounded-full px-3 py-2 text-sm font-semibold disabled:opacity-60"
                       disabled={saving}
                     >
                       Guardar
@@ -452,7 +457,7 @@ export default function ProductsPage() {
                     <button
                       type="button"
                       onClick={cancelEditing}
-                      className="rounded bg-gray-200 px-3 py-2 text-sm"
+                      className="app-button-secondary rounded-full px-3 py-2 text-sm"
                       disabled={saving}
                     >
                       Cancelar
@@ -461,7 +466,7 @@ export default function ProductsPage() {
                     <button
                       type="button"
                       onClick={() => void toggleActive(product)}
-                      className={`rounded px-3 py-2 text-sm ${
+                      className={`rounded-full px-3 py-2 text-sm ${
                         product.active
                           ? "bg-red-200 text-red-800"
                           : "bg-green-200 text-green-800"
@@ -477,7 +482,7 @@ export default function ProductsPage() {
                   <button
                     type="button"
                     onClick={() => startEditing(product)}
-                    className="rounded bg-gray-200 px-3 py-1 text-sm"
+                    className="app-button-secondary rounded-full px-3 py-2 text-sm"
                   >
                     Editar
                   </button>
@@ -485,7 +490,7 @@ export default function ProductsPage() {
                   <button
                     type="button"
                     onClick={() => void toggleActive(product)}
-                    className={`rounded px-3 py-1 text-sm ${
+                    className={`rounded-full px-3 py-2 text-sm ${
                       product.active
                         ? "bg-red-200 text-red-800"
                         : "bg-green-200 text-green-800"
@@ -500,6 +505,6 @@ export default function ProductsPage() {
           );
         })}
       </div>
-    </div>
+    </main>
   );
 }

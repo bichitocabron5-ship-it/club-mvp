@@ -365,16 +365,16 @@ export default function SalesPage() {
   }
 
   return (
-    <main className="mx-auto max-w-6xl p-4 md:p-6">
-      <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+    <main className="mx-auto max-w-7xl p-4 md:p-6">
+      <div className="mb-6 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">TPV de retiradas</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-3xl font-black tracking-tight">TPV de retiradas</h1>
+          <p className="text-sm app-muted">
             Modo mostrador/tablet · carrito multi-producto
           </p>
         </div>
 
-        <div className="rounded border bg-blue-50 p-3 text-sm">
+        <div className="app-panel rounded-2xl p-3 text-sm">
           Hoy: <strong>{visibleToday.grams.toFixed(2)} g</strong> / {DAILY_LIMIT_G} g
           {" · "}
           <strong>{visibleToday.units.toFixed(0)} ud</strong> / {DAILY_LIMIT_UD} ud
@@ -383,11 +383,11 @@ export default function SalesPage() {
 
       {error && <EmptyState message={error} className="mb-4" />}
 
-      <form onSubmit={handleRfidSubmit} className="rounded border p-3 space-y-2">
+      <form onSubmit={handleRfidSubmit} className="app-panel mb-4 space-y-2 rounded-3xl p-4">
         <label className="block text-sm font-medium">Escanear chapita</label>
 
         <input
-          className="w-full rounded border p-3 text-base"
+          className="w-full rounded-2xl border border-black/10 bg-white/80 p-3 text-base"
           placeholder="Pasa la chapita por el lector..."
           value={rfidInput}
           onChange={(e) => setRfidInput(e.target.value)}
@@ -397,26 +397,26 @@ export default function SalesPage() {
         />
 
         {rfidError && (
-          <div className="rounded bg-red-100 p-2 text-sm text-red-700">
+            <div className="rounded-2xl bg-red-100 p-2 text-sm text-red-700">
             {rfidError}
           </div>
         )}
       </form>
 
-      <form onSubmit={handleSubmit} className="grid gap-4 lg:grid-cols-[1fr_380px]">
+      <form onSubmit={handleSubmit} className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.7fr)]">
         <section className="space-y-4">
-          <div className="rounded border p-3 space-y-3">
+          <div className="app-panel rounded-3xl p-4 space-y-3">
             <label className="block text-sm font-medium">Socio</label>
 
             <input
-              className="w-full rounded border p-3 text-base"
+              className="w-full rounded-2xl border border-black/10 bg-white/80 p-3 text-base"
               placeholder="Buscar socio por nombre o DNI..."
               value={memberSearch}
               onChange={(e) => setMemberSearch(e.target.value)}
             />
 
             <select
-              className="w-full rounded border p-3 text-base"
+              className="w-full rounded-2xl border border-black/10 bg-white/80 p-3 text-base"
               value={memberId}
               onChange={(e) => {
                 setMemberId(e.target.value);
@@ -443,7 +443,7 @@ export default function SalesPage() {
                   setMemberStatus(null);
                   rfidRef.current?.focus();
                 }}
-                className="rounded border px-3 py-2 text-sm"
+                className="app-button-secondary rounded-full px-4 py-2 text-sm font-semibold"
               >
                 Cambiar socio
               </button>
@@ -451,7 +451,7 @@ export default function SalesPage() {
           </div>
 
               {memberStatus && (
-                <div className="rounded border p-3 text-sm">
+                <div className="app-panel rounded-3xl p-4 text-sm">
                   <div className="mb-2 font-semibold">Estado del socio</div>
 
                   <div className="flex flex-wrap gap-2">
@@ -503,19 +503,19 @@ export default function SalesPage() {
                 </div>
               )}
 
-          <div className="rounded border p-3">
+          <div className="app-panel rounded-3xl p-4">
             <label className="mb-1 block text-sm font-medium">
               Buscar producto
             </label>
             <input
-              className="w-full rounded border p-3 text-base"
+              className="w-full rounded-2xl border border-black/10 bg-white/80 p-3 text-base"
               placeholder="Buscar por nombre..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
 
-          <div className="rounded border p-3">
+          <div className="app-panel rounded-3xl p-4">
             <div className="mb-2 text-sm font-medium">Categorías rápidas</div>
 
             <div className="flex flex-wrap gap-2">
@@ -537,7 +537,7 @@ export default function SalesPage() {
           </div>
 
           {availableHashTypes.length > 0 ? (
-            <div className="rounded border p-3">
+            <div className="app-panel rounded-3xl p-4">
               <div className="mb-2 text-sm font-medium">Subtipos Hash</div>
 
               <div className="flex flex-wrap gap-2">
@@ -624,7 +624,7 @@ export default function SalesPage() {
           </div>
         </section>
 
-        <aside className="rounded border p-4 lg:sticky lg:top-4 lg:self-start">
+        <aside className="app-panel-strong rounded-3xl p-4 xl:sticky xl:top-24 xl:self-start">
           <h2 className="mb-3 text-lg font-bold">Carrito</h2>
 
           {cartLines.length === 0 && (
@@ -633,7 +633,7 @@ export default function SalesPage() {
 
           <div className="space-y-3">
             {cartLines.map((line) => (
-              <div key={line.productId} className="rounded border p-3">
+              <div key={line.productId} className="rounded-2xl border border-black/8 bg-white/82 p-3">
                 <div className="flex justify-between gap-2">
                   <div>
                     <div className="font-medium">{line.product?.name}</div>
@@ -667,7 +667,7 @@ export default function SalesPage() {
                       </button>
 
                       <input
-                        className="h-11 w-24 rounded border p-2 text-center text-lg font-bold"
+                        className="h-11 w-24 rounded-2xl border border-black/10 bg-white p-2 text-center text-lg font-bold"
                         type="number"
                         step={line.product?.unit === "UD" ? "1" : "0.01"}
                         min="0"
@@ -678,7 +678,7 @@ export default function SalesPage() {
                       <button
                         type="button"
                         onClick={() => updateQty(line.productId, String(line.qty + 1))}
-                        className="h-11 w-11 rounded bg-gray-900 text-xl font-bold text-white"
+                        className="h-11 w-11 rounded-2xl bg-gray-900 text-xl font-bold text-white"
                       >
                         +
                       </button>
@@ -687,7 +687,7 @@ export default function SalesPage() {
 
                   <div>
                     <label className="text-xs text-gray-500">Total linea</label>
-                    <div className="rounded border bg-gray-50 p-2">
+                    <div className="rounded-2xl border border-black/8 bg-gray-50 p-2">
                       {line.finalAmount.toFixed(2)} EUR
                     </div>
                     {line.discountAmount > 0 && (
@@ -700,7 +700,7 @@ export default function SalesPage() {
                 </div>
 
                 {line.qty > line.stock && (
-                  <div className="mt-2 rounded bg-red-100 p-2 text-sm text-red-700">
+                  <div className="mt-2 rounded-2xl bg-red-100 p-2 text-sm text-red-700">
                     Stock insuficiente.
                   </div>
                 )}
@@ -708,7 +708,7 @@ export default function SalesPage() {
             ))}
           </div>
 
-          <div className="mt-4 rounded bg-gray-900 p-4 text-white">
+          <div className="mt-4 rounded-3xl bg-gray-900 p-4 text-white">
             <div className="text-sm opacity-80">Subtotal original</div>
             <div className="text-2xl font-bold">
               {cartOriginalTotal.toFixed(2)} EUR
@@ -721,7 +721,7 @@ export default function SalesPage() {
             <div className="text-5xl font-black">{cartTotal.toFixed(2)} EUR</div>
           </div>
 
-          <div className="mt-3 rounded border p-3 text-sm">
+          <div className="mt-3 rounded-2xl border border-black/8 bg-white/80 p-3 text-sm">
             Con carrito:{" "}
             <strong className={overGrams ? "text-red-600" : "text-green-700"}>
               {gramsAfter.toFixed(2)} g
@@ -733,26 +733,26 @@ export default function SalesPage() {
           </div>
 
           {overGrams && (
-            <div className="mt-3 rounded bg-red-100 p-3 text-sm text-red-700">
+            <div className="mt-3 rounded-2xl bg-red-100 p-3 text-sm text-red-700">
               Se supera el limite diario de {DAILY_LIMIT_G} g.
             </div>
           )}
 
           {overUnits && (
-            <div className="mt-3 rounded bg-red-100 p-3 text-sm text-red-700">
+            <div className="mt-3 rounded-2xl bg-red-100 p-3 text-sm text-red-700">
               Se supera el limite diario de {DAILY_LIMIT_UD} ud.
             </div>
           )}
 
           {stockProblems.length > 0 && (
-            <div className="mt-3 rounded bg-red-100 p-3 text-sm text-red-700">
+            <div className="mt-3 rounded-2xl bg-red-100 p-3 text-sm text-red-700">
               Hay productos sin stock suficiente.
             </div>
           )}
 
           <button
             disabled={invalid}
-            className="mt-4 w-full rounded-xl bg-blue-600 p-6 text-2xl font-black text-white shadow-lg disabled:opacity-40"
+            className="app-button-primary mt-4 w-full rounded-3xl p-6 text-2xl font-black shadow-lg disabled:opacity-40"
           >
             {loading ? "Registrando..." : "COBRAR / REGISTRAR"}
           </button>

@@ -89,7 +89,7 @@ export default function MemberDetail() {
     return () => clearTimeout(timeout);
   }, [rfidMessage]);
 
-  if (!data) return <div>Cargando...</div>;
+  if (!data) return <div className="p-6 app-muted">Cargando...</div>;
 
   const authReady = status !== "loading";
   const visibleMemberNumber = data.member.memberNumber ?? data.member.id;
@@ -170,11 +170,11 @@ export default function MemberDetail() {
   }
 
   return (
-    <main>
-      <h1 className="mb-4 text-xl font-bold">Ficha del socio</h1>
+    <main className="mx-auto max-w-7xl p-4 md:p-6">
+      <h1 className="mb-6 text-3xl font-black tracking-tight">Ficha del socio</h1>
 
       {data.member && (
-        <div className="mb-4 rounded border p-4">
+        <div className="app-panel mb-4 rounded-3xl p-4 md:p-5">
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <div className="text-sm text-gray-500">Número de socio</div>
@@ -190,7 +190,7 @@ export default function MemberDetail() {
             </div>
           </div>
 
-          <div className="mt-4 grid gap-3 rounded border bg-gray-50 p-4 md:grid-cols-2">
+          <div className="mt-4 grid gap-3 rounded-2xl border border-black/8 bg-gray-50 p-4 md:grid-cols-2">
             <div>
               <div className="text-sm text-gray-500">Teléfono</div>
               <div className="font-medium">{data.member.phone || "No indicado"}</div>
@@ -256,7 +256,7 @@ export default function MemberDetail() {
             <div className="mb-2 text-sm text-gray-500">Perfil comercial</div>
 
             <div className="flex flex-wrap gap-2">
-              <span className="rounded bg-gray-900 px-3 py-1 text-white">
+              <span className="rounded-full bg-gray-900 px-3 py-1 text-white">
                 {data.member.commercialProfile}
               </span>
 
@@ -274,14 +274,14 @@ export default function MemberDetail() {
             {data.member.active ? (
               <button
                 onClick={() => updateMemberStatus({ active: false })}
-                className="rounded bg-red-600 px-4 py-2 text-white"
+                className="app-button-danger rounded-full px-4 py-2 text-white"
               >
                 Bloquear socio
               </button>
             ) : (
               <button
                 onClick={() => updateMemberStatus({ active: true })}
-                className="rounded bg-green-600 px-4 py-2 text-white"
+                className="rounded-full bg-green-600 px-4 py-2 text-white"
               >
                 Activar socio
               </button>
@@ -289,32 +289,32 @@ export default function MemberDetail() {
 
             <button
               onClick={() => updateMemberStatus({ renewOneYear: true })}
-              className="rounded bg-blue-600 px-4 py-2 text-white"
+              className="app-button-primary rounded-full px-4 py-2 text-white"
             >
               Renovar 1 año
             </button>
 
             <button
               onClick={() => updateMemberStatus({ clearExpiration: true })}
-              className="rounded border px-4 py-2"
+              className="app-button-secondary rounded-full px-4 py-2"
             >
               Quitar vencimiento
             </button>
 
             <button
               onClick={() => setEditing(!editing)}
-              className="rounded bg-gray-900 px-4 py-2 text-white"
+              className="rounded-full bg-gray-900 px-4 py-2 text-white"
             >
               {editing ? "Cancelar" : "Editar socio"}
             </button>
           </div>
 
           {editing && (
-            <div className="mt-4 space-y-3 rounded border p-4">
+            <div className="mt-4 space-y-3 rounded-3xl border border-black/8 bg-white/82 p-4">
               <h2 className="font-bold">Editar socio</h2>
 
               <input
-                className="w-full border p-2"
+                className="w-full rounded-2xl border border-black/10 bg-white p-3"
                 placeholder="Nombre"
                 value={editForm.fullName}
                 onChange={(e) =>
@@ -323,7 +323,7 @@ export default function MemberDetail() {
               />
 
               <input
-                className="w-full border p-2"
+                className="w-full rounded-2xl border border-black/10 bg-white p-3"
                 placeholder="DNI"
                 value={editForm.dni}
                 onChange={(e) =>
@@ -332,7 +332,7 @@ export default function MemberDetail() {
               />
 
               <input
-                className="w-full border p-2"
+                className="w-full rounded-2xl border border-black/10 bg-white p-3"
                 placeholder="Teléfono"
                 value={editForm.phone}
                 onChange={(e) =>
@@ -341,7 +341,7 @@ export default function MemberDetail() {
               />
 
               <input
-                className="w-full border p-2"
+                className="w-full rounded-2xl border border-black/10 bg-white p-3"
                 placeholder="Email"
                 value={editForm.email}
                 onChange={(e) =>
@@ -350,7 +350,7 @@ export default function MemberDetail() {
               />
 
               <input
-                className="w-full border p-2"
+                className="w-full rounded-2xl border border-black/10 bg-white p-3"
                 type="date"
                 value={editForm.expiresAt}
                 onChange={(e) =>
@@ -359,7 +359,7 @@ export default function MemberDetail() {
               />
 
               <input
-                className="w-full border p-2"
+                className="w-full rounded-2xl border border-black/10 bg-white p-3"
                 placeholder="RFID"
                 value={editForm.rfidCode}
                 onChange={(e) =>
@@ -370,7 +370,7 @@ export default function MemberDetail() {
               {authReady && isAdmin && (
                 <>
                   <input
-                    className="w-full border p-2"
+                    className="w-full rounded-2xl border border-black/10 bg-white p-3"
                     placeholder="Numero de socio"
                     value={editForm.memberNumber}
                     onChange={(e) =>
@@ -383,7 +383,7 @@ export default function MemberDetail() {
                   </div>
 
                   <select
-                    className="w-full border p-2"
+                    className="w-full rounded-2xl border border-black/10 bg-white p-3"
                     value={editForm.commercialProfile}
                     onChange={(e) =>
                       setEditForm({
@@ -398,7 +398,7 @@ export default function MemberDetail() {
                   </select>
 
                   <input
-                    className="w-full border p-2"
+                    className="w-full rounded-2xl border border-black/10 bg-white p-3"
                     type="number"
                     min="0"
                     max="100"
@@ -414,7 +414,7 @@ export default function MemberDetail() {
                   />
 
                   <textarea
-                    className="w-full border p-2"
+                    className="w-full rounded-2xl border border-black/10 bg-white p-3"
                     rows={3}
                     placeholder="Notas comerciales"
                     value={editForm.commercialNotes}
@@ -434,7 +434,7 @@ export default function MemberDetail() {
                   <button
                     type="button"
                     onClick={() => setRfidMessage("")}
-                    className="rounded border border-green-300 px-3 py-1 text-sm"
+                    className="app-button-secondary rounded-full px-3 py-1 text-sm"
                   >
                     Cerrar
                   </button>
@@ -444,7 +444,7 @@ export default function MemberDetail() {
               <button
                 type="button"
                 onClick={() => setAssigningRfid(true)}
-                className="w-full rounded bg-gray-900 p-3 font-bold text-white"
+                className="rounded-full bg-gray-900 px-4 py-3 font-bold text-white"
               >
                 Asignar RFID escaneando
               </button>
@@ -452,7 +452,7 @@ export default function MemberDetail() {
               {assigningRfid && (
                 <input
                   autoFocus
-                  className="w-full border border-blue-500 p-3"
+                  className="w-full rounded-2xl border border-blue-500 bg-white p-3"
                   placeholder="Pasa la chapita ahora..."
                   onChange={(e) => {
                     const value = e.target.value.trim();
@@ -467,7 +467,7 @@ export default function MemberDetail() {
                 onClick={() => {
                   void saveMember();
                 }}
-                className="w-full rounded bg-blue-600 p-3 font-bold text-white"
+                className="app-button-primary w-full rounded-2xl p-3 font-bold text-white"
               >
                 Guardar cambios
               </button>
@@ -478,7 +478,7 @@ export default function MemberDetail() {
 
       <a
         href={`/members/${id}/contract`}
-        className="mb-4 inline-block rounded bg-blue-600 px-4 py-2 text-white"
+        className="mb-4 inline-flex rounded-full bg-blue-600 px-4 py-2 text-white"
       >
         Contrato / Firma
       </a>
@@ -492,7 +492,7 @@ export default function MemberDetail() {
 
         <div className="space-y-4">
           {contracts.map((contract) => (
-            <div key={contract.id} className="rounded border bg-gray-50 p-4">
+            <div key={contract.id} className="app-panel rounded-3xl p-4">
               <div className="text-sm text-gray-500">
                 Firmado el {new Date(contract.signedAt).toLocaleString()}
               </div>
@@ -542,7 +542,7 @@ export default function MemberDetail() {
                 <a
                   href={contract.signedPdfUrl}
                   target="_blank"
-                  className="ml-2 mt-3 inline-block rounded bg-green-600 px-4 py-2 text-white"
+                  className="ml-2 mt-3 inline-block rounded-full bg-green-600 px-4 py-2 text-white"
                   rel="noreferrer"
                 >
                   Abrir PDF guardado
@@ -552,7 +552,7 @@ export default function MemberDetail() {
               <a
                 href={`/api/contracts/${contract.id}/pdf`}
                 target="_blank"
-                className="mt-3 inline-block rounded bg-blue-600 px-4 py-2 text-white"
+                className="mt-3 inline-block rounded-full bg-blue-600 px-4 py-2 text-white"
                 rel="noreferrer"
               >
                 Ver PDF firmado
@@ -573,7 +573,7 @@ export default function MemberDetail() {
           {accessLogs.map((log) => (
             <div
               key={log.id}
-              className="flex items-center justify-between rounded border p-3"
+            className="app-panel flex items-center justify-between rounded-2xl p-3"
             >
               <div>
                 <span
@@ -595,13 +595,13 @@ export default function MemberDetail() {
         </div>
       </div>
 
-      <div className="mb-4 mt-6 grid grid-cols-2 gap-2">
-        <div className="rounded border p-3">
+      <div className="mb-4 mt-6 grid gap-3 sm:grid-cols-2">
+        <div className="app-panel rounded-3xl p-3">
           <div className="text-sm text-gray-500">Retiradas</div>
           <strong>{data.count}</strong>
         </div>
 
-        <div className="rounded border p-3">
+        <div className="app-panel rounded-3xl p-3">
           <div className="text-sm text-gray-500">Total</div>
           <strong>{Number(data.totalSpent).toFixed(2)} EUR</strong>
         </div>
@@ -609,7 +609,7 @@ export default function MemberDetail() {
 
       <div className="space-y-2">
         {data.sales.map((sale) => (
-          <div key={sale.id} className="flex justify-between rounded border p-3">
+          <div key={sale.id} className="app-panel flex flex-col gap-2 rounded-3xl p-4 md:flex-row md:justify-between">
             <div>
               <div>{sale.product.name}</div>
               <div className="text-sm text-gray-500">

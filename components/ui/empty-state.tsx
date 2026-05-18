@@ -6,7 +6,9 @@ export function EmptyState({
   className?: string;
 }) {
   return (
-    <div className={`rounded bg-gray-50 p-3 text-sm text-gray-500 ${className}`.trim()}>
+    <div
+      className={`app-panel rounded-2xl p-4 text-sm leading-6 app-muted ${className}`.trim()}
+    >
       {message}
     </div>
   );

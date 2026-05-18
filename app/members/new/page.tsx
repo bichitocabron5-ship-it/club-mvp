@@ -167,14 +167,14 @@ export default function NewMemberPage() {
   };
 
   return (
-    <main className="mx-auto max-w-4xl p-4 md:p-6">
+    <main className="mx-auto max-w-5xl p-4 md:p-6">
       <PageHeader
         title="Alta de socio"
         description="Flujo guiado y corto: datos del socio, chapita y firma."
       />
 
       {!createdMember && (
-        <form onSubmit={createMember} className="space-y-3 rounded border p-4">
+        <form onSubmit={createMember} className="app-panel-strong space-y-3 rounded-3xl p-4 md:p-5">
           <h2 className="text-lg font-bold">1. Datos personales</h2>
           <p className="text-sm text-gray-600">
             Introduce los datos mínimos del alta. Teléfono y email quedarán
@@ -182,7 +182,7 @@ export default function NewMemberPage() {
           </p>
 
           <input
-            className="w-full rounded border p-3"
+            className="w-full rounded-2xl border border-black/10 bg-white/80 p-3"
             placeholder="Nombre completo"
             value={form.fullName}
             onChange={(e) => setForm({ ...form, fullName: e.target.value })}
@@ -190,7 +190,7 @@ export default function NewMemberPage() {
           />
 
           <input
-            className="w-full rounded border p-3"
+            className="w-full rounded-2xl border border-black/10 bg-white/80 p-3"
             placeholder="DNI"
             value={form.dni}
             onChange={(e) => setForm({ ...form, dni: e.target.value })}
@@ -198,14 +198,14 @@ export default function NewMemberPage() {
           />
 
           <input
-            className="w-full rounded border p-3"
+            className="w-full rounded-2xl border border-black/10 bg-white/80 p-3"
             placeholder="Teléfono"
             value={form.phone}
             onChange={(e) => setForm({ ...form, phone: e.target.value })}
           />
 
           <input
-            className="w-full rounded border p-3"
+            className="w-full rounded-2xl border border-black/10 bg-white/80 p-3"
             placeholder="Email"
             value={form.email}
             onChange={(e) => setForm({ ...form, email: e.target.value })}
@@ -216,7 +216,7 @@ export default function NewMemberPage() {
               Fecha de vencimiento
             </label>
             <input
-              className="w-full rounded border p-3"
+              className="w-full rounded-2xl border border-black/10 bg-white/80 p-3"
               type="date"
               value={form.expiresAt}
               onChange={(e) => setForm({ ...form, expiresAt: e.target.value })}
@@ -225,7 +225,7 @@ export default function NewMemberPage() {
 
           <button
             disabled={loading}
-            className="w-full rounded bg-blue-600 p-3 font-bold text-white disabled:opacity-40"
+            className="app-button-primary w-full rounded-2xl p-3 font-bold disabled:opacity-40"
           >
             {loading ? "Creando socio..." : "Crear socio y continuar"}
           </button>
@@ -234,7 +234,7 @@ export default function NewMemberPage() {
 
       {createdMember && (
         <div className="space-y-4">
-          <section className="rounded border bg-green-50 p-4">
+          <section className="rounded-3xl border border-green-200 bg-green-50/95 p-4 md:p-5">
             <h2 className="text-lg font-bold text-green-800">
               Socio creado correctamente
             </h2>
@@ -291,7 +291,7 @@ export default function NewMemberPage() {
             </div>
           </section>
 
-          <section className="rounded border p-4">
+          <section className="app-panel rounded-3xl p-4 md:p-5">
             <h2 className="mb-3 text-lg font-bold">2. Asignar RFID</h2>
             <p className="mb-3 text-sm text-gray-600">
               Escanea la chapita del socio ahora o continúa más tarde desde su
@@ -304,7 +304,7 @@ export default function NewMemberPage() {
                 <button
                   type="button"
                   onClick={() => setRfidMessage("")}
-                  className="rounded border border-green-300 px-3 py-1 text-sm"
+                  className="app-button-secondary rounded-full px-3 py-1 text-sm"
                 >
                   Cerrar
                 </button>
@@ -312,7 +312,7 @@ export default function NewMemberPage() {
             )}
 
             {createdMember.rfidCode ? (
-              <div className="rounded bg-green-50 p-3 text-green-700">
+                <div className="rounded-2xl bg-green-50 p-3 text-green-700">
                 Chapita asignada: <strong>{createdMember.rfidCode}</strong>
               </div>
             ) : (
@@ -323,7 +323,7 @@ export default function NewMemberPage() {
                     setAssigningRfid(true);
                     setTimeout(() => rfidRef.current?.focus(), 0);
                   }}
-                  className="rounded bg-gray-900 px-4 py-3 font-bold text-white"
+                  className="app-button-primary rounded-full px-4 py-3 font-bold"
                 >
                   Asignar RFID escaneando
                 </button>
@@ -332,7 +332,7 @@ export default function NewMemberPage() {
                   <input
                     ref={rfidRef}
                     autoFocus
-                    className="mt-3 w-full rounded border border-blue-500 p-4 text-xl"
+                    className="mt-3 w-full rounded-2xl border border-blue-500 bg-white p-4 text-xl"
                     placeholder="Pasa la chapita ahora..."
                     onChange={(e) => {
                       const value = e.target.value.trim();
@@ -346,7 +346,7 @@ export default function NewMemberPage() {
             )}
           </section>
 
-          <section className="rounded border p-4">
+          <section className="app-panel rounded-3xl p-4 md:p-5">
             <h2 className="mb-3 text-lg font-bold">3. Firma de contrato</h2>
             <p className="mb-3 text-sm text-gray-600">
               La sesión de firma abrirá los datos del socio ya cargados para no
@@ -357,7 +357,7 @@ export default function NewMemberPage() {
               <button
                 type="button"
                 onClick={createSigningSession}
-                className="rounded bg-blue-600 px-4 py-3 font-bold text-white"
+                className="app-button-primary rounded-full px-4 py-3 font-bold"
               >
                 Crear sesión de firma
               </button>
@@ -365,7 +365,7 @@ export default function NewMemberPage() {
 
             {signingSession && (
               <div className="space-y-3">
-                <div className="rounded bg-gray-50 p-3">
+                <div className="rounded-2xl bg-gray-50 p-3">
                   Estado:{" "}
                   <strong className={contractSigned ? "text-green-700" : ""}>
                     {contractSigned ? "FIRMADO" : signingSession.status}
@@ -378,13 +378,13 @@ export default function NewMemberPage() {
                   </label>
 
                   {contractSigned && (
-                    <div className="rounded bg-green-100 p-3 font-bold text-green-700">
+                    <div className="rounded-2xl bg-green-100 p-3 font-bold text-green-700">
                       Contrato firmado correctamente.
                     </div>
                   )}
 
                   <input
-                    className="w-full rounded border p-3"
+                    className="w-full rounded-2xl border border-black/10 bg-white/80 p-3"
                     value={signUrl || ""}
                     readOnly
                     onFocus={(e) => e.currentTarget.select()}
@@ -399,18 +399,18 @@ export default function NewMemberPage() {
             )}
           </section>
 
-          <section className="rounded border p-4">
+          <section className="app-panel rounded-3xl p-4 md:p-5">
             <h2 className="mb-3 text-lg font-bold">Estado final</h2>
 
             <div className="mb-4 grid gap-3 md:grid-cols-2">
-              <div className="rounded border bg-gray-50 p-3">
+              <div className="rounded-2xl border border-black/8 bg-gray-50 p-3">
                 <div className="text-sm text-gray-500">Socio</div>
                 <div className="font-semibold">
                   Creado con Nº {visibleMemberNumber}
                 </div>
               </div>
 
-              <div className="rounded border bg-gray-50 p-3">
+              <div className="rounded-2xl border border-black/8 bg-gray-50 p-3">
                 <div className="text-sm text-gray-500">Contrato</div>
                 <div className="font-semibold">
                   {contractSigned
@@ -421,7 +421,7 @@ export default function NewMemberPage() {
                 </div>
               </div>
 
-              <div className="rounded border bg-gray-50 p-3">
+              <div className="rounded-2xl border border-black/8 bg-gray-50 p-3">
                 <div className="text-sm text-gray-500">RFID</div>
                 <div className="font-semibold">
                   {createdMember.rfidCode
@@ -430,7 +430,7 @@ export default function NewMemberPage() {
                 </div>
               </div>
 
-              <div className="rounded border bg-gray-50 p-3">
+              <div className="rounded-2xl border border-black/8 bg-gray-50 p-3">
                 <div className="text-sm text-gray-500">Contacto</div>
                 <div className="font-semibold">
                   {createdMember.phone || createdMember.email
@@ -469,7 +469,7 @@ export default function NewMemberPage() {
             )}
 
             {isReady && (
-              <div className="mb-4 rounded bg-green-100 p-4 font-bold text-green-800">
+                <div className="mb-4 rounded-2xl bg-green-100 p-4 font-bold text-green-800">
                 Socio listo para operar
               </div>
             )}
@@ -477,28 +477,28 @@ export default function NewMemberPage() {
             <div className="flex flex-wrap gap-2">
               <Link
                 href={`/members/${createdMember.id}`}
-                className="rounded bg-green-600 px-4 py-3 font-bold text-white"
+                className="rounded-full bg-green-600 px-4 py-3 font-bold text-white"
               >
                 Ver ficha
               </Link>
 
               <Link
                 href="/sales"
-                className="rounded bg-blue-600 px-4 py-3 font-bold text-white"
+                className="app-button-primary rounded-full px-4 py-3 font-bold"
               >
                 Ir al TPV
               </Link>
 
               <Link
                 href="/access"
-                className="rounded bg-gray-900 px-4 py-3 font-bold text-white"
+                className="rounded-full bg-gray-900 px-4 py-3 font-bold text-white"
               >
                 Control de acceso
               </Link>
 
               <Link
                 href="/members"
-                className="rounded border px-4 py-3 font-bold"
+                className="app-button-secondary rounded-full px-4 py-3 font-bold"
               >
                 Volver a socios
               </Link>
@@ -519,7 +519,7 @@ export default function NewMemberPage() {
                     expiresAt: "",
                   });
                 }}
-                className="rounded border px-4 py-3 font-bold"
+                className="app-button-secondary rounded-full px-4 py-3 font-bold"
               >
                 Crear otro socio
               </button>

@@ -1,8 +1,16 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f3f0e8;
+  --foreground: #1f241d;
+  --surface: rgba(255, 255, 255, 0.82);
+  --surface-strong: rgba(255, 255, 255, 0.94);
+  --border: rgba(63, 77, 54, 0.14);
+  --muted: #5d6758;
+  --brand: #2f5d50;
+  --brand-strong: #1f4036;
+  --accent: #a7c957;
+  --danger: #b64b4b;
 }
 
 @theme inline {
@@ -14,13 +22,132 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #f3f0e8;
+    --foreground: #1f241d;
   }
 }
 
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+}
+
 body {
-  background: var(--background);
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(167, 201, 87, 0.2), transparent 28%),
+    radial-gradient(circle at top right, rgba(47, 93, 80, 0.12), transparent 24%),
+    linear-gradient(180deg, #f7f4ed 0%, var(--background) 55%, #ebe7dc 100%);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: "Segoe UI Variable", "Segoe UI", Helvetica, sans-serif;
+}
+
+a,
+button,
+input,
+select,
+textarea {
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+input,
+select,
+textarea {
+  min-width: 0;
+}
+
+.app-shell {
+  padding: 1rem 1rem 3rem;
+}
+
+.app-shell__inner {
+  margin: 0 auto;
+  width: 100%;
+  max-width: 80rem;
+}
+
+.app-panel {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 18px 50px rgba(37, 44, 34, 0.08);
+}
+
+.app-panel-strong {
+  border: 1px solid rgba(63, 77, 54, 0.18);
+  background: var(--surface-strong);
+  box-shadow: 0 22px 60px rgba(37, 44, 34, 0.12);
+}
+
+.app-muted {
+  color: var(--muted);
+}
+
+.app-button-primary {
+  background: linear-gradient(135deg, var(--brand) 0%, var(--brand-strong) 100%);
+  color: white;
+  box-shadow: 0 10px 24px rgba(31, 64, 54, 0.2);
+}
+
+.app-button-primary:hover {
+  transform: translateY(-1px);
+}
+
+.app-button-secondary {
+  border: 1px solid rgba(31, 64, 54, 0.16);
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--foreground);
+}
+
+.app-button-ghost {
+  background: rgba(47, 93, 80, 0.08);
+  color: var(--brand-strong);
+}
+
+.app-button-danger {
+  background: var(--danger);
+  color: white;
+}
+
+.app-badge {
+  border: 1px solid transparent;
+  font-weight: 700;
+}
+
+.app-badge-positive {
+  border-color: rgba(54, 108, 64, 0.14);
+  background: rgba(224, 243, 228, 0.95);
+  color: #2c6a3c;
+}
+
+.app-badge-warning {
+  border-color: rgba(171, 129, 51, 0.14);
+  background: rgba(255, 243, 210, 0.96);
+  color: #94661b;
+}
+
+.app-badge-danger {
+  border-color: rgba(182, 75, 75, 0.14);
+  background: rgba(253, 232, 232, 0.96);
+  color: #a53939;
+}
+
+.app-badge-info {
+  border-color: rgba(47, 93, 80, 0.14);
+  background: rgba(224, 239, 235, 0.96);
+  color: #285345;
+}
+
+@media (min-width: 768px) {
+  .app-shell {
+    padding: 1.5rem 1.5rem 4rem;
+  }
 }

@@ -96,19 +96,26 @@ export default function MembersPage() {
   });
 
   return (
-    <main>
-      <h1 className="mb-4 text-2xl font-bold">Socios</h1>
+    <main className="mx-auto max-w-7xl p-4 md:p-6">
+      <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h1 className="text-3xl font-black tracking-tight">Socios</h1>
+          <p className="mt-2 text-sm app-muted">
+            Búsqueda, filtros y alta rápida sin cambiar el flujo operativo.
+          </p>
+        </div>
 
-      <Link
-        href="/members/new"
-        className="mb-4 inline-block rounded bg-blue-600 px-4 py-2 text-white"
-      >
-        Alta de socio
-      </Link>
+        <Link
+          href="/members/new"
+          className="app-button-primary inline-flex rounded-full px-5 py-3 text-sm font-bold"
+        >
+          Alta de socio
+        </Link>
+      </div>
 
-      <form onSubmit={handleSubmit} className="mb-6 grid gap-2 rounded border p-4">
+      <form onSubmit={handleSubmit} className="app-panel mb-6 grid gap-3 rounded-3xl p-4 md:p-5">
         <input
-          className="w-full rounded border p-3"
+          className="w-full rounded-2xl border border-black/10 bg-white/80 p-3"
           placeholder="Buscar por numero, nombre o DNI"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -125,10 +132,10 @@ export default function MembersPage() {
             <button
               key={f.key}
               onClick={() => setFilter(f.key as MemberFilter)}
-              className={`rounded px-4 py-2 text-sm font-bold ${
+              className={`rounded-full px-4 py-2 text-sm font-bold ${
                 filter === f.key
-                  ? "bg-gray-900 text-white"
-                  : "bg-gray-100 text-gray-700"
+                  ? "app-button-primary text-white"
+                  : "app-button-secondary"
               }`}
             >
               {f.label}
@@ -136,49 +143,53 @@ export default function MembersPage() {
           ))}
         </div>
 
-        <input
-          className="border p-2"
-          placeholder="Nombre completo"
-          value={form.fullName}
-          onChange={(e) => setForm({ ...form, fullName: e.target.value })}
-          required
-        />
-
-        <input
-          className="border p-2"
-          placeholder="DNI"
-          value={form.dni}
-          onChange={(e) => setForm({ ...form, dni: e.target.value })}
-          required
-        />
-
-        <input
-          className="border p-2"
-          placeholder="Telefono"
-          value={form.phone}
-          onChange={(e) => setForm({ ...form, phone: e.target.value })}
-        />
-
-        <label className="flex items-center gap-2 text-sm">
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.8fr)_auto_auto]">
           <input
-            type="checkbox"
-            checked={form.active}
-            onChange={(e) => setForm({ ...form, active: e.target.checked })}
+            className="rounded-2xl border border-black/10 bg-white/80 p-3"
+            placeholder="Nombre completo"
+            value={form.fullName}
+            onChange={(e) => setForm({ ...form, fullName: e.target.value })}
+            required
           />
-          Socio activo
-        </label>
 
-        <input
-          className="border p-2"
-          type="date"
-          value={form.expiresAt}
-          onChange={(e) => setForm({ ...form, expiresAt: e.target.value })}
-        />
+          <input
+            className="rounded-2xl border border-black/10 bg-white/80 p-3"
+            placeholder="DNI"
+            value={form.dni}
+            onChange={(e) => setForm({ ...form, dni: e.target.value })}
+            required
+          />
 
-        <button className="bg-blue-600 px-4 py-2 text-white">Crear socio</button>
+          <input
+            className="rounded-2xl border border-black/10 bg-white/80 p-3"
+            placeholder="Telefono"
+            value={form.phone}
+            onChange={(e) => setForm({ ...form, phone: e.target.value })}
+          />
+
+          <label className="flex items-center gap-2 rounded-2xl border border-black/10 bg-white/80 px-4 py-3 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={form.active}
+              onChange={(e) => setForm({ ...form, active: e.target.checked })}
+            />
+            Socio activo
+          </label>
+
+          <input
+            className="rounded-2xl border border-black/10 bg-white/80 p-3"
+            type="date"
+            value={form.expiresAt}
+            onChange={(e) => setForm({ ...form, expiresAt: e.target.value })}
+          />
+        </div>
+
+        <button className="app-button-primary w-full rounded-2xl px-4 py-3 font-bold md:w-auto">
+          Crear socio
+        </button>
       </form>
 
-      <div className="space-y-2">
+      <div className="grid gap-3 lg:grid-cols-2">
         {filteredMembers.map((member) => {
           const expired =
             Boolean(member.expiresAt) &&
@@ -186,20 +197,20 @@ export default function MembersPage() {
 
           return (
             <Link key={member.id} href={`/members/${member.id}`}>
-              <div className="cursor-pointer rounded border p-3 hover:bg-gray-50">
+              <div className="app-panel cursor-pointer rounded-3xl p-4 hover:bg-white/90">
                 <div className="font-medium">{member.fullName}</div>
-                <div className="text-sm text-gray-500">
+                <div className="text-sm app-muted">
                   Nº {member.memberNumber ?? member.id} · {member.dni}
                   {member.phone ? ` · ${member.phone}` : ""}
                 </div>
-                <div className="mt-1 text-xs text-gray-500">
+                <div className="mt-1 text-xs app-muted">
                   {member.active ? "Activo" : "Inactivo"}
                   {expired ? " · Caducado" : ""}
                   {member.expiresAt
                     ? ` · Caduca ${new Date(member.expiresAt).toLocaleDateString()}`
                     : ""}
                 </div>
-                <div className="flex items-center justify-between border p-3 rounded">
+                <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-black/8 bg-white/72 p-3 md:flex-row md:items-center md:justify-between">
                   <div>
                     <div className="font-semibold">{member.fullName}</div>
                     <div className="text-sm text-gray-500">{member.dni}</div>
@@ -207,29 +218,29 @@ export default function MembersPage() {
 
                   <div className="mt-2 flex flex-wrap gap-2 text-xs">
                     {member.active ? (
-                      <span className="rounded bg-green-100 px-2 py-1 text-green-700">
+                      <span className="app-badge app-badge-positive rounded-full px-3 py-1">
                         ACTIVO
                       </span>
                     ) : (
-                      <span className="rounded bg-red-100 px-2 py-1 text-red-700">
+                      <span className="app-badge app-badge-danger rounded-full px-3 py-1">
                         BLOQUEADO
                       </span>
                     )}
 
                     {member.expiresAt && new Date(member.expiresAt) < new Date() && (
-                      <span className="rounded bg-red-100 px-2 py-1 text-red-700">
+                      <span className="app-badge app-badge-danger rounded-full px-3 py-1">
                         CADUCADO
                       </span>
                     )}
 
                     {!member.hasContract && (
-                      <span className="rounded bg-yellow-100 px-2 py-1 text-yellow-700">
+                      <span className="app-badge app-badge-warning rounded-full px-3 py-1">
                         SIN CONTRATO
                       </span>
                     )}
 
                     {member.rfidCode && (
-                      <span className="rounded bg-blue-100 px-2 py-1 text-blue-700">
+                      <span className="app-badge app-badge-info rounded-full px-3 py-1">
                         RFID
                       </span>
                     )}

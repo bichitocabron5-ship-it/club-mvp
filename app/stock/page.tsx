@@ -143,7 +143,7 @@ export default function StockPage() {
   }
 
   return (
-    <main className="mx-auto max-w-6xl p-4 md:p-6">
+    <main className="mx-auto max-w-7xl p-4 md:p-6">
       <PageHeader
         title="Stock"
         description="Entradas, salidas, ajustes e historial de movimientos."
@@ -153,19 +153,19 @@ export default function StockPage() {
 
       <a
         href="/stock/history"
-        className="mb-4 inline-block rounded bg-gray-900 px-4 py-2 text-white"
+        className="mb-4 inline-flex rounded-full bg-gray-900 px-4 py-2 text-white"
       >
         Ver historial de stock
       </a>
 
-      <div className="grid gap-4 lg:grid-cols-[380px_1fr]">
+      <div className="grid gap-4 xl:grid-cols-[minmax(340px,0.75fr)_minmax(0,1.25fr)]">
         <section className="space-y-4">
-          <div className="rounded border p-4">
+          <div className="app-panel rounded-3xl p-4 md:p-5">
             <h2 className="mb-3 text-lg font-bold">Nuevo movimiento</h2>
 
             <form onSubmit={handleSubmit} className="space-y-3">
               <select
-                className="w-full rounded border p-3"
+                className="w-full rounded-2xl border border-black/10 bg-white/80 p-3"
                 value={form.productId}
                 onChange={(e) => setForm({ ...form, productId: e.target.value })}
                 required
@@ -179,7 +179,7 @@ export default function StockPage() {
               </select>
 
               {selectedProduct && (
-                <div className="rounded bg-gray-50 p-3 text-sm">
+                <div className="rounded-2xl bg-gray-50 p-3 text-sm">
                   Stock actual:{" "}
                   <strong>
                     {Number(selectedProduct.stock).toFixed(2)} {selectedProduct.unit}
@@ -188,7 +188,7 @@ export default function StockPage() {
               )}
 
               <select
-                className="w-full rounded border p-3"
+                className="w-full rounded-2xl border border-black/10 bg-white/80 p-3"
                 value={form.type}
                 onChange={(e) => setForm({ ...form, type: e.target.value })}
               >
@@ -198,7 +198,7 @@ export default function StockPage() {
               </select>
 
               <input
-                className="w-full rounded border p-3"
+                className="w-full rounded-2xl border border-black/10 bg-white/80 p-3"
                 type="number"
                 step={selectedProduct?.unit === "UD" ? "1" : "0.01"}
                 min="0"
@@ -213,7 +213,7 @@ export default function StockPage() {
               />
 
               <input
-                className="w-full rounded border p-3"
+                className="w-full rounded-2xl border border-black/10 bg-white/80 p-3"
                 placeholder="Nota / motivo"
                 value={form.note}
                 onChange={(e) => setForm({ ...form, note: e.target.value })}
@@ -221,19 +221,19 @@ export default function StockPage() {
 
               <button
                 disabled={loading}
-                className="w-full rounded bg-blue-600 p-3 font-bold text-white disabled:opacity-40"
+                className="app-button-primary w-full rounded-2xl p-3 font-bold disabled:opacity-40"
               >
                 {loading ? "Guardando..." : "Registrar movimiento"}
               </button>
             </form>
           </div>
 
-          <div className="rounded border p-4">
+          <div className="app-panel rounded-3xl p-4 md:p-5">
             <h3 className="mb-3 font-bold">Ajuste manual</h3>
 
             <div className="grid gap-2">
               <select
-                className="rounded border p-2"
+                className="rounded-2xl border border-black/10 bg-white/80 p-2"
                 value={adjustType}
                 onChange={(e) => setAdjustType(e.target.value as "ADD" | "REMOVE")}
               >
@@ -242,7 +242,7 @@ export default function StockPage() {
               </select>
 
               <input
-                className="rounded border p-2"
+                className="rounded-2xl border border-black/10 bg-white/80 p-2"
                 type="number"
                 min="0"
                 step="0.01"
@@ -252,7 +252,7 @@ export default function StockPage() {
               />
 
               <input
-                className="rounded border p-2"
+                className="rounded-2xl border border-black/10 bg-white/80 p-2"
                 placeholder="Motivo obligatorio"
                 value={adjustReason}
                 onChange={(e) => setAdjustReason(e.target.value)}
@@ -261,21 +261,21 @@ export default function StockPage() {
               <button
                 type="button"
                 onClick={() => void adjustStock()}
-                className="rounded bg-orange-600 p-2 font-bold text-white"
+                className="rounded-2xl bg-orange-600 p-3 font-bold text-white"
               >
                 Registrar ajuste
               </button>
             </div>
           </div>
 
-          <div className="rounded border p-4">
+          <div className="app-panel rounded-3xl p-4 md:p-5">
             <h2 className="mb-3 text-lg font-bold">Stock actual</h2>
 
             <div className="space-y-2">
               {products.map((p) => (
                 <div
                   key={p.id}
-                  className="flex items-center justify-between rounded border p-3"
+                  className="flex items-center justify-between rounded-2xl border border-black/8 bg-white/72 p-3"
                 >
                   <div>
                     <div className="font-semibold">{p.name}</div>
@@ -297,7 +297,7 @@ export default function StockPage() {
           </div>
         </section>
 
-        <section className="rounded border p-4">
+        <section className="app-panel rounded-3xl p-4 md:p-5">
           <h2 className="mb-3 text-lg font-bold">Historial de movimientos</h2>
 
           {moves.length === 0 && (
@@ -306,7 +306,7 @@ export default function StockPage() {
 
           <div className="space-y-2">
             {moves.map((move) => (
-              <div key={move.id} className="rounded border p-3">
+              <div key={move.id} className="rounded-2xl border border-black/8 bg-white/72 p-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <div className="font-semibold">{move.product.name}</div>
@@ -346,7 +346,7 @@ export default function StockPage() {
                 </div>
 
                 {move.note && (
-                  <div className="mt-2 rounded bg-gray-50 p-2 text-sm text-gray-600">
+                  <div className="mt-2 rounded-2xl bg-gray-50 p-2 text-sm text-gray-600">
                     {move.note}
                   </div>
                 )}

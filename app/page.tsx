@@ -36,7 +36,7 @@ export default function DashboardPage() {
 
   if (error) {
     return (
-      <main className="mx-auto max-w-6xl p-4 md:p-6">
+      <main className="mx-auto max-w-7xl p-4 md:p-6">
         <PageHeader
           title="Dashboard"
           description="Resumen operativo del club en tiempo real."
@@ -47,7 +47,7 @@ export default function DashboardPage() {
   }
 
   if (!data) {
-    return <main className="p-6">Cargando dashboard...</main>;
+    return <main className="p-6 app-muted">Cargando dashboard...</main>;
   }
 
   const hasAlerts =
@@ -57,13 +57,13 @@ export default function DashboardPage() {
     data.alerts.lowStock > 0;
 
   return (
-    <main className="mx-auto max-w-6xl p-4 md:p-6">
+    <main className="mx-auto max-w-7xl p-4 md:p-6">
       <PageHeader
         title="Dashboard"
         description="Resumen operativo del club en tiempo real."
       />
 
-      <section className="mb-6 grid gap-3 md:grid-cols-5">
+      <section className="mb-6 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         <StatCard
           label="Ingresos hoy"
           value={`${Number(data.income).toFixed(2)} EUR`}
@@ -81,8 +81,8 @@ export default function DashboardPage() {
         />
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-3">
-        <div className="rounded border p-4">
+      <section className="grid gap-4 xl:grid-cols-3">
+        <div className="app-panel rounded-3xl p-4 md:p-5">
           <h2 className="mb-3 text-lg font-bold">Top ventas</h2>
           <div className="space-y-2">
             {data.topProductsByRevenue.map((p) => (
@@ -99,7 +99,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="rounded border p-4">
+        <div className="app-panel rounded-3xl p-4 md:p-5">
           <h2 className="mb-3 text-lg font-bold">Más rentables</h2>
           <div className="space-y-2">
             {data.topProductsByProfit.map((p) => (
@@ -114,7 +114,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="rounded border p-4">
+        <div className="app-panel rounded-3xl p-4 md:p-5">
           <h2 className="mb-3 text-lg font-bold">Menor margen</h2>
           <div className="space-y-2">
             {data.worstProductsByProfit.map((p) => (
@@ -130,7 +130,7 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      <section className="mb-6 grid gap-3 md:grid-cols-6">
+      <section className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
         <StatCard
           label="Ingresos"
           value={`${Number(data.income).toFixed(2)} EUR`}
@@ -176,11 +176,11 @@ export default function DashboardPage() {
         />
       </section>
 
-      <section className="mb-6 rounded border p-4">
+      <section className="app-panel rounded-3xl p-4 md:p-5">
         <h2 className="mb-3 text-lg font-bold">Finanzas últimos 7 días</h2>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[680px] text-sm">
             <thead>
               <tr className="border-b text-left">
                 <th className="p-2">Día</th>
@@ -223,7 +223,7 @@ export default function DashboardPage() {
       </section>
 
       {hasAlerts && (
-        <section className="mb-6 rounded border border-red-300 bg-red-50 p-4">
+        <section className="mb-6 rounded-3xl border border-red-200 bg-red-50/95 p-4 md:p-5">
           <h2 className="mb-3 text-lg font-bold text-red-800">
             Alertas operativas
           </h2>
@@ -251,8 +251,8 @@ export default function DashboardPage() {
         </section>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section className="rounded border p-4">
+      <div className="grid gap-4 xl:grid-cols-2">
+        <section className="app-panel rounded-3xl p-4 md:p-5">
           <h2 className="mb-3 text-lg font-bold">Últimas retiradas</h2>
           {data.lastSales.length === 0 && (
             <EmptyState message="Sin retiradas hoy." />
@@ -278,7 +278,7 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        <section className="rounded border p-4">
+        <section className="app-panel rounded-3xl p-4 md:p-5">
           <h2 className="mb-3 text-lg font-bold">Top socios hoy</h2>
           {data.topMembersByAmount.length === 0 && (
             <EmptyState message="Sin actividad de socios hoy." />
@@ -307,7 +307,7 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        <section className="rounded border p-4">
+        <section className="app-panel rounded-3xl p-4 md:p-5">
           <h2 className="mb-3 text-lg font-bold">Últimos accesos</h2>
           {data.lastAccessLogs.length === 0 && (
             <EmptyState message="Sin accesos registrados." />
@@ -339,7 +339,7 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        <section className="rounded border p-4">
+        <section className="app-panel rounded-3xl p-4 md:p-5">
           <h2 className="mb-3 text-lg font-bold">Gastos por categoría</h2>
           {Object.keys(data.expensesByCategory).length === 0 && (
             <EmptyState message="Sin gastos hoy." />
@@ -359,7 +359,7 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        <section className="rounded border p-4">
+        <section className="app-panel rounded-3xl p-4 md:p-5">
           <h2 className="mb-3 text-lg font-bold">Compras pendientes</h2>
           {data.pendingPurchases.length === 0 && (
             <EmptyState message="No hay deuda pendiente." />
@@ -397,7 +397,7 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        <section className="rounded border p-4">
+        <section className="app-panel rounded-3xl p-4 md:p-5">
           <h2 className="mb-3 text-lg font-bold">Últimos cierres</h2>
           {data.recentClosures.length === 0 && (
             <EmptyState message="No hay cierres registrados." />
@@ -446,7 +446,7 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        <section className="rounded border p-4">
+        <section className="app-panel rounded-3xl p-4 md:p-5">
           <h2 className="mb-3 text-lg font-bold">Últimos gastos</h2>
           {data.expensesToday.length === 0 && (
             <EmptyState message="Sin gastos registrados hoy." />
@@ -474,7 +474,7 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        <section className="rounded border p-4 lg:col-span-2">
+        <section className="app-panel rounded-3xl p-4 md:p-5 xl:col-span-2">
           <h2 className="mb-3 text-lg font-bold">Stock bajo</h2>
           {data.lowStock.length === 0 && (
             <EmptyState message="Sin alertas de stock." />

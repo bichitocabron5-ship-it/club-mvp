@@ -88,11 +88,16 @@ export default function CashPage() {
   }
 
   return (
-    <main className="mx-auto max-w-2xl p-6">
-      <h1 className="mb-4 text-xl font-bold">Caja</h1>
+    <main className="mx-auto max-w-5xl p-4 md:p-6">
+      <div className="mb-6">
+        <h1 className="text-3xl font-black tracking-tight">Caja</h1>
+        <p className="mt-2 text-sm app-muted">
+          Cierre diario y movimientos con mejor lectura en móvil y escritorio.
+        </p>
+      </div>
 
       {closed && (
-        <div className="mb-4 rounded bg-green-100 p-3 text-green-700">
+        <div className="mb-4 rounded-3xl bg-green-100 p-4 text-green-700">
           <div className="font-bold">Día cerrado</div>
           <div>
             Esperado:{" "}
@@ -117,24 +122,24 @@ export default function CashPage() {
         </div>
       )}
 
-      <div className="mb-4 grid grid-cols-3 gap-2 text-center">
-        <div className="rounded border p-3">
+      <div className="mb-4 grid gap-3 text-center sm:grid-cols-3">
+        <div className="app-panel rounded-3xl p-3">
           <div className="text-sm text-gray-500">Ingresos</div>
           <strong>{income.toFixed(2)} EUR</strong>
         </div>
-        <div className="rounded border p-3">
+        <div className="app-panel rounded-3xl p-3">
           <div className="text-sm text-gray-500">Gastos</div>
           <strong>{expense.toFixed(2)} EUR</strong>
         </div>
-        <div className="rounded border p-3">
+        <div className="app-panel rounded-3xl p-3">
           <div className="text-sm text-gray-500">Esperado</div>
           <strong>{balance.toFixed(2)} EUR</strong>
         </div>
       </div>
 
       {!closed && (
-        <div className="mb-6 rounded border p-3">
-          <div className="mb-3 rounded bg-gray-50 p-3 text-sm">
+        <div className="app-panel mb-6 rounded-3xl p-4">
+          <div className="mb-3 rounded-2xl bg-gray-50 p-3 text-sm">
             <div>
               Efectivo esperado: <strong>{balance.toFixed(2)} EUR</strong>
             </div>
@@ -147,7 +152,7 @@ export default function CashPage() {
           </div>
 
           <input
-            className="mb-2 w-full border p-2"
+            className="mb-2 w-full rounded-2xl border border-black/10 bg-white/80 p-3"
             type="number"
             step="0.01"
             placeholder="Efectivo contado"
@@ -156,13 +161,16 @@ export default function CashPage() {
           />
 
           <input
-            className="mb-2 w-full border p-2"
+            className="mb-2 w-full rounded-2xl border border-black/10 bg-white/80 p-3"
             placeholder="Nota de cierre opcional"
             value={note}
             onChange={(e) => setNote(e.target.value)}
           />
 
-          <button onClick={closeDay} className="w-full bg-red-600 p-2 text-white">
+          <button
+            onClick={closeDay}
+            className="app-button-danger w-full rounded-2xl p-3 font-bold text-white"
+          >
             Cerrar día
           </button>
         </div>
@@ -170,9 +178,9 @@ export default function CashPage() {
 
       <h2 className="mb-2 font-semibold">Movimientos de hoy</h2>
 
-      <div className="space-y-2">
+      <div className="space-y-3">
         {todayMoves.map((move) => (
-          <div key={move.id} className="flex justify-between rounded border p-3">
+          <div key={move.id} className="app-panel flex flex-col gap-2 rounded-3xl p-4 md:flex-row md:items-center md:justify-between">
             <div>
               <div className="text-sm text-gray-600">
                 {new Date(move.createdAt).toLocaleString()}
