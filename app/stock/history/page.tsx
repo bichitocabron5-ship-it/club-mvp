@@ -76,6 +76,7 @@ export default function StockHistoryPage() {
     if (type === "IN") return "Entrada";
     if (type === "OUT") return "Salida";
     if (type === "ADJUST") return "Ajuste";
+    if (type === "INVENTORY_ADJUSTMENT") return "Conteo";
     return type;
   }
 
@@ -83,6 +84,7 @@ export default function StockHistoryPage() {
     if (type === "IN") return "bg-green-100 text-green-700";
     if (type === "OUT") return "bg-red-100 text-red-700";
     if (type === "ADJUST") return "bg-blue-100 text-blue-700";
+    if (type === "INVENTORY_ADJUSTMENT") return "bg-amber-100 text-amber-700";
     return "bg-gray-100 text-gray-700";
   }
 
@@ -134,6 +136,7 @@ export default function StockHistoryPage() {
           <option value="IN">Entradas</option>
           <option value="OUT">Salidas</option>
           <option value="ADJUST">Ajustes</option>
+          <option value="INVENTORY_ADJUSTMENT">Conteos</option>
         </select>
 
         <button

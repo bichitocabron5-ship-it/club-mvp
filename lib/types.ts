@@ -325,11 +325,89 @@ export type AccessLogRecord = {
 export type StockMoveRecord = {
   id: number;
   productId: number;
-  type: "IN" | "OUT" | "ADJUST" | string;
+  type: "IN" | "OUT" | "ADJUST" | "INVENTORY_ADJUSTMENT" | string;
   qty: number;
   previousStock: number;
   newStock: number;
   note: string | null;
   createdAt: string;
   product: ProductLike;
+};
+
+export type InventoryCountType = "PARTIAL" | "FULL" | "CLOSING" | "AUDIT";
+export type InventoryCountStatus = "OPEN" | "CONFIRMED" | "CANCELLED";
+
+export type InventoryCountListItem = {
+  id: number;
+  status: InventoryCountStatus | string;
+  type: InventoryCountType | string;
+  notes: string | null;
+  createdAt: string;
+  confirmedAt: string | null;
+  cancelledAt: string | null;
+  createdByUserId: number | null;
+  confirmedByUserId: number | null;
+  createdByUser: {
+    id: number;
+    name: string;
+    email: string;
+  } | null;
+  confirmedByUser: {
+    id: number;
+    name: string;
+    email: string;
+  } | null;
+  summary: {
+    totalItems: number;
+    countedItems: number;
+    differenceItems: number;
+    pendingItems: number;
+  };
+};
+
+export type InventoryCountDetailItem = {
+  id: number;
+  inventoryCountId: number;
+  productId: number;
+  expectedQty: number;
+  countedQty: number | null;
+  differenceQty: number | null;
+  note: string | null;
+  createdAt: string;
+  product: {
+    id: number;
+    name: string;
+    unit: ProductUnit | string;
+    stock: number;
+    active: boolean;
+  };
+};
+
+export type InventoryCountDetail = {
+  id: number;
+  status: InventoryCountStatus | string;
+  type: InventoryCountType | string;
+  notes: string | null;
+  createdAt: string;
+  confirmedAt: string | null;
+  cancelledAt: string | null;
+  createdByUserId: number | null;
+  confirmedByUserId: number | null;
+  createdByUser: {
+    id: number;
+    name: string;
+    email: string;
+  } | null;
+  confirmedByUser: {
+    id: number;
+    name: string;
+    email: string;
+  } | null;
+  items: InventoryCountDetailItem[];
+  summary: {
+    totalItems: number;
+    countedItems: number;
+    differenceItems: number;
+    pendingItems: number;
+  };
 };

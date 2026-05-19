@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { fetchJson } from "@/lib/fetch-json";
@@ -89,6 +90,7 @@ export default function StockPage() {
     if (type === "IN") return "Entrada";
     if (type === "OUT") return "Salida";
     if (type === "ADJUST") return "Ajuste";
+    if (type === "INVENTORY_ADJUSTMENT") return "Conteo";
     return type;
   }
 
@@ -96,6 +98,7 @@ export default function StockPage() {
     if (type === "IN") return "bg-green-100 text-green-700";
     if (type === "OUT") return "bg-red-100 text-red-700";
     if (type === "ADJUST") return "bg-blue-100 text-blue-700";
+    if (type === "INVENTORY_ADJUSTMENT") return "bg-amber-100 text-amber-700";
     return "bg-gray-100 text-gray-700";
   }
 
@@ -123,7 +126,7 @@ export default function StockPage() {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        productId: selectedProduct,
+        productId: selectedProduct.id,
         qty,
         type: adjustType,
         reason: adjustReason,
@@ -151,12 +154,18 @@ export default function StockPage() {
 
       {error && <EmptyState message={error} className="mb-4" />}
 
-      <a
+      <Link
         href="/stock/history"
         className="mb-4 inline-flex rounded-full bg-gray-900 px-4 py-2 text-white"
       >
         Ver historial de stock
-      </a>
+      </Link>
+      <Link
+        href="/stock/counts"
+        className="mb-4 ml-2 inline-flex rounded-full border border-black/10 bg-white px-4 py-2 font-semibold"
+      >
+        Conteos de inventario
+      </Link>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(340px,0.75fr)_minmax(0,1.25fr)]">
         <section className="space-y-4">

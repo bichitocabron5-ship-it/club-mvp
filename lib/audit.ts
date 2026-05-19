@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 
@@ -11,6 +11,7 @@ type AuditValue =
   | { [key: string]: AuditValue };
 
 type CreateAuditLogInput = {
+  db?: Pick<PrismaClient, "auditLog"> | Prisma.TransactionClient;
   actorUserId?: number | null;
   actorEmail?: string | null;
   action: string;
@@ -84,9 +85,10 @@ export async function createAuditLog(input: CreateAuditLogInput) {
       ? null
       : sanitizeString(String(input.entityId).trim());
   const metadata = sanitizeAuditValue(input.metadata);
+  const db = input.db ?? prisma;
 
   try {
-    await prisma.auditLog.create({
+    await db.auditLog.create({
       data: {
         actorUserId,
         actorEmail,

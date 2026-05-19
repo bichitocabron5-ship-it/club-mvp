@@ -22,6 +22,7 @@ const adminLinks = [
   { href: "/suppliers", label: "Proveedores" },
   { href: "/purchases", label: "Compras" },
   { href: "/stock", label: "Stock" },
+  { href: "/stock/counts", label: "Conteos" },
 ];
 
 export function AppNav() {
