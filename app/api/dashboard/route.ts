@@ -1,22 +1,55 @@
-// app/api/dashboard/route.ts
 import { requireAuth } from "@/lib/auth-server";
+import { buildTodayDayClosureSummary } from "@/lib/day-closure";
 import { prisma } from "@/lib/prisma";
+import { getTodayRange, roundCurrency } from "@/lib/sales";
 import { NextResponse } from "next/server";
 
 const requiredDashboardEnvVars = ["AUTH_SECRET", "DATABASE_URL"] as const;
-
-function getTodayRange() {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-
-  return { start, end };
-}
+const HIGH_DISCOUNT_PERCENT_THRESHOLD = 20;
+const HIGH_DISCOUNT_AMOUNT_THRESHOLD = 20;
 
 function getMissingEnvVars(envVars: readonly string[]) {
   return envVars.filter((name) => !process.env[name]?.trim());
+}
+
+function getDayClosureStatus(closure: { reopenedAt: Date | null } | null) {
+  if (!closure) {
+    return "OPEN" as const;
+  }
+
+  if (closure.reopenedAt) {
+    return "REOPENED" as const;
+  }
+
+  return "CLOSED" as const;
+}
+
+function toProductSummary(product: {
+  id: number;
+  name: string;
+  unit: string;
+  price: number;
+  stock: number;
+  minStock: number;
+  imageUrl: string | null;
+  category: string;
+  hashType: string | null;
+  active: boolean;
+  createdAt: Date;
+}) {
+  return {
+    id: product.id,
+    name: product.name,
+    unit: product.unit,
+    price: Number(product.price),
+    stock: Number(product.stock),
+    imageUrl: product.imageUrl,
+    category: product.category,
+    hashType: product.hashType,
+    minStock: Number(product.minStock),
+    active: product.active,
+    createdAt: product.createdAt.toISOString(),
+  };
 }
 
 export async function GET() {
@@ -27,7 +60,7 @@ export async function GET() {
 
     return NextResponse.json(
       {
-        error: `Configuración incompleta del servidor. Faltan: ${missingEnvVars.join(", ")}`,
+        error: `Configuracion incompleta del servidor. Faltan: ${missingEnvVars.join(", ")}`,
       },
       { status: 500 }
     );
@@ -39,27 +72,26 @@ export async function GET() {
   }
 
   try {
-    const { start, end } = getTodayRange();
+    const { start, end, day } = getTodayRange();
+    const role = auth.session.user.role;
+    const isAdmin = role === "ADMIN";
 
     const [
-      cashMoves,
+      dayClosureSummary,
+      dayClosure,
       sales,
       products,
       members,
-      lastAccessLogs,
-      expenses,
-      purchases,
-      recentClosures,
+      recentAuditLogs,
+      recentAccessLogs,
+      accessInToday,
     ] = await Promise.all([
-      prisma.cashMove.findMany({
+      buildTodayDayClosureSummary(),
+      prisma.dayClosure.findUnique({
         where: {
-          createdAt: {
-            gte: start,
-            lt: end,
-          },
+          day,
         },
       }),
-
       prisma.sale.findMany({
         where: {
           createdAt: {
@@ -67,344 +99,247 @@ export async function GET() {
             lt: end,
           },
         },
-        include: {
-          member: true,
-          product: true,
-        },
-        orderBy: {
-          createdAt: "desc",
+        select: {
+          id: true,
+          memberId: true,
+          totalAmount: true,
+          profit: true,
+          discountAmount: true,
+          discountPercent: true,
         },
       }),
-
       prisma.product.findMany({
-        orderBy: {
-          stock: "asc",
+        where: {
+          active: true,
+        },
+        orderBy: [{ stock: "asc" }, { name: "asc" }],
+        select: {
+          id: true,
+          name: true,
+          unit: true,
+          price: true,
+          stock: true,
+          minStock: true,
+          imageUrl: true,
+          category: true,
+          hashType: true,
+          active: true,
+          createdAt: true,
         },
       }),
-
       prisma.member.findMany({
-        include: {
-          contracts: {
-            take: 1,
-            orderBy: {
-              signedAt: "desc",
-            },
-          },
+        select: {
           accessLogs: {
             take: 1,
             orderBy: {
               createdAt: "desc",
             },
+            select: {
+              type: true,
+            },
           },
         },
-        orderBy: {
-          fullName: "asc",
-        },
       }),
-
+      isAdmin
+        ? prisma.auditLog.findMany({
+            orderBy: {
+              createdAt: "desc",
+            },
+            take: 8,
+            include: {
+              actorUser: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
+            },
+          })
+        : Promise.resolve([]),
       prisma.accessLog.findMany({
-        include: {
-          member: true,
-        },
         orderBy: {
           createdAt: "desc",
         },
         take: 8,
+        include: {
+          member: {
+            select: {
+              fullName: true,
+              dni: true,
+            },
+          },
+        },
       }),
-
-      prisma.expense.findMany({
+      prisma.accessLog.findMany({
         where: {
+          type: "IN",
           createdAt: {
             gte: start,
             lt: end,
           },
         },
-        orderBy: {
-          createdAt: "desc",
+        select: {
+          memberId: true,
         },
-      }),
-
-      prisma.purchase.findMany({
-        where: {
-          status: {
-            in: ["PENDING", "PARTIAL"],
-          },
-        },
-        include: {
-          supplier: true,
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-      }),
-
-      prisma.dayClosure.findMany({
-        orderBy: {
-          createdAt: "desc",
-        },
-        take: 5,
       }),
     ]);
 
-    const income = cashMoves
-      .filter((move) => move.type === "income")
-      .reduce((acc: number, move) => acc + Number(move.amount), 0);
-
-    const grossProfit = sales.reduce(
-      (acc: number, sale) => acc + Number(sale.profit || 0),
-      0
-    );
-
-    const expense = cashMoves
-      .filter((move) => move.type === "expense")
-      .reduce((acc: number, move) => acc + Number(move.amount), 0);
-
-    const netProfit = grossProfit - expense;
-
-    const lowStock = products.filter(
-      (product) => Number(product.stock) <= Number(product.minStock)
-    );
-
-    const activeMembersToday = new Set(sales.map((sale) => sale.memberId)).size;
-
-    const insideMembers = members.filter(
+    const lowStockProducts = products
+      .filter((product) => Number(product.stock) <= Number(product.minStock))
+      .slice(0, 10)
+      .map(toProductSummary);
+    const currentInsideCount = members.filter(
       (member) => member.accessLogs[0]?.type === "IN"
+    ).length;
+
+    const salesTodayTotal = roundCurrency(
+      sales.reduce((acc, sale) => acc + Number(sale.totalAmount), 0)
     );
-
-    const now = new Date();
-
-    const membersWithoutContract = members.filter(
-      (member) => member.contracts.length === 0
+    const profitToday = roundCurrency(
+      sales.reduce((acc, sale) => acc + Number(sale.profit || 0), 0)
     );
-
-    const expiredMembers = members.filter(
-      (member) => member.expiresAt && new Date(member.expiresAt) < now
+    const discountsTodayTotal = roundCurrency(
+      sales.reduce((acc, sale) => acc + Number(sale.discountAmount || 0), 0)
     );
+    const activeMembersToday = new Set(accessInToday.map((log) => log.memberId)).size;
+    const highDiscountSalesCount = sales.filter(
+      (sale) =>
+        Number(sale.discountPercent || 0) >= HIGH_DISCOUNT_PERCENT_THRESHOLD ||
+        Number(sale.discountAmount || 0) >= HIGH_DISCOUNT_AMOUNT_THRESHOLD
+    ).length;
 
-    const blockedMembers = members.filter((member) => !member.active);
+    const dayClosureStatus = getDayClosureStatus(dayClosure);
+    const pendingAlerts = [];
 
-    const expensesByCategory = expenses.reduce<Record<string, number>>(
-      (acc: Record<string, number>, item) => {
-        acc[item.category] = (acc[item.category] || 0) + Number(item.amount);
-
-        return acc;
-      },
-      {}
-    );
-
-    const productStatsMap = new Map<
-      number,
-      {
-        productId: number;
-        name: string;
-        unit: string;
-        qty: number;
-        revenue: number;
-        profit: number;
-        salesCount: number;
-      }
-    >();
-
-    for (const sale of sales) {
-      const existing = productStatsMap.get(sale.productId);
-
-      if (existing) {
-        existing.qty += Number(sale.qty);
-        existing.revenue += Number(sale.totalAmount);
-        existing.profit += Number(sale.profit || 0);
-        existing.salesCount += 1;
-      } else {
-        productStatsMap.set(sale.productId, {
-          productId: sale.productId,
-          name: sale.product.name,
-          unit: sale.product.unit,
-          qty: Number(sale.qty),
-          revenue: Number(sale.totalAmount),
-          profit: Number(sale.profit || 0),
-          salesCount: 1,
-        });
-      }
-    }
-
-    const productStats = Array.from(productStatsMap.values());
-
-    const topProductsByRevenue = [...productStats]
-      .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 5);
-
-    const topProductsByProfit = [...productStats]
-      .sort((a, b) => b.profit - a.profit)
-      .slice(0, 5);
-
-    const worstProductsByProfit = [...productStats]
-      .sort((a, b) => a.profit - b.profit)
-      .slice(0, 5);
-
-    const memberStatsMap = new Map<
-      number,
-      {
-        memberId: number;
-        fullName: string;
-        dni: string;
-        salesCount: number;
-        totalAmount: number;
-        totalQty: number;
-        profit: number;
-      }
-    >();
-
-    for (const sale of sales) {
-      const existing = memberStatsMap.get(sale.memberId);
-
-      if (existing) {
-        existing.salesCount += 1;
-        existing.totalAmount += Number(sale.totalAmount);
-        existing.totalQty += Number(sale.qty);
-        existing.profit += Number(sale.profit || 0);
-      } else {
-        memberStatsMap.set(sale.memberId, {
-          memberId: sale.memberId,
-          fullName: sale.member.fullName,
-          dni: sale.member.dni,
-          salesCount: 1,
-          totalAmount: Number(sale.totalAmount),
-          totalQty: Number(sale.qty),
-          profit: Number(sale.profit || 0),
-        });
-      }
-    }
-
-    const topMembersByAmount = Array.from(memberStatsMap.values())
-      .sort((a, b) => b.totalAmount - a.totalAmount)
-      .slice(0, 5);
-
-    const sevenDaysAgo = new Date(start);
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
-
-    const [cashMoves7d, sales7d] = await Promise.all([
-      prisma.cashMove.findMany({
-        where: {
-          createdAt: {
-            gte: sevenDaysAgo,
-            lt: end,
-          },
-        },
-      }),
-      prisma.sale.findMany({
-        where: {
-          createdAt: {
-            gte: sevenDaysAgo,
-            lt: end,
-          },
-        },
-      }),
-    ]);
-
-    const dailyMap = new Map<
-      string,
-      {
-        date: string;
-        income: number;
-        expense: number;
-        grossProfit: number;
-        netProfit: number;
-        salesCount: number;
-      }
-    >();
-
-    for (let i = 0; i < 7; i++) {
-      const day = new Date(sevenDaysAgo);
-      day.setDate(sevenDaysAgo.getDate() + i);
-      const key = day.toISOString().slice(0, 10);
-
-      dailyMap.set(key, {
-        date: key,
-        income: 0,
-        expense: 0,
-        grossProfit: 0,
-        netProfit: 0,
-        salesCount: 0,
+    if (dayClosureStatus === "CLOSED") {
+      pendingAlerts.push({
+        id: "day-closure-closed",
+        type: "DAY_CLOSED",
+        severity: "info",
+        title: "Caja del dia cerrada",
+        description: `El cierre de ${day} ya esta registrado.`,
+        href: "/cash",
       });
     }
 
-    for (const move of cashMoves7d) {
-      const key = move.createdAt.toISOString().slice(0, 10);
-      const day = dailyMap.get(key);
-      if (!day) continue;
-
-      if (move.type === "income") {
-        day.income += Number(move.amount);
-      }
-
-      if (move.type === "expense") {
-        day.expense += Number(move.amount);
-      }
+    if (dayClosureStatus === "REOPENED") {
+      pendingAlerts.push({
+        id: "day-closure-reopened",
+        type: "DAY_REOPENED",
+        severity: "warning",
+        title: "Caja reabierta",
+        description: `El cierre de ${day} fue reabierto y necesita seguimiento.`,
+        href: "/cash",
+      });
     }
 
-    for (const sale of sales7d) {
-      const key = sale.createdAt.toISOString().slice(0, 10);
-      const day = dailyMap.get(key);
-      if (!day) continue;
-
-      day.grossProfit += Number(sale.profit || 0);
-      day.salesCount += 1;
+    if (dayClosure && Number(dayClosure.difference) !== 0) {
+      pendingAlerts.push({
+        id: "cash-difference",
+        type: "CASH_DIFFERENCE",
+        severity: "danger",
+        title: "Diferencia de caja detectada",
+        description: `La diferencia actual del cierre es ${roundCurrency(
+          Number(dayClosure.difference)
+        ).toFixed(2)} EUR.`,
+        href: "/cash",
+      });
     }
 
-    const dailyFinance = Array.from(dailyMap.values()).map((day) => ({
-      ...day,
-      netProfit: day.grossProfit - day.expense,
-    }));
+    if (dayClosureSummary.inventoryCountsOpenCount > 0) {
+      pendingAlerts.push({
+        id: "open-inventory-counts",
+        type: "OPEN_INVENTORY_COUNTS",
+        severity: "warning",
+        title: "Conteos de inventario abiertos",
+        description: `Hay ${dayClosureSummary.inventoryCountsOpenCount} conteo(s) pendientes de cerrar hoy.`,
+        href: "/stock/counts",
+      });
+    }
 
-    const supplierDebt = purchases.reduce(
-      (acc: number, purchase) =>
-        acc + (Number(purchase.totalAmount) - Number(purchase.paidAmount)),
-      0
-    );
+    if (lowStockProducts.length > 0) {
+      pendingAlerts.push({
+        id: "low-stock-products",
+        type: "LOW_STOCK",
+        severity: "danger",
+        title: "Productos con stock bajo",
+        description: `${lowStockProducts.length} producto(s) estan por debajo del minimo configurado.`,
+        href: "/stock",
+      });
+    }
 
-    const pendingPurchases = purchases.slice(0, 8).map((purchase) => ({
-      id: purchase.id,
-      supplierName: purchase.supplier.name,
-      totalAmount: Number(purchase.totalAmount),
-      paidAmount: Number(purchase.paidAmount),
-      pendingAmount: Number(purchase.totalAmount) - Number(purchase.paidAmount),
-      status: purchase.status,
-      createdAt: purchase.createdAt,
-    }));
+    if (highDiscountSalesCount > 0) {
+      pendingAlerts.push({
+        id: "high-discount-sales",
+        type: "HIGH_DISCOUNT_SALES",
+        severity: "warning",
+        title: "Ventas con descuentos altos",
+        description: `${highDiscountSalesCount} venta(s) superan el umbral de descuento del dia.`,
+        href: "/sales",
+      });
+    }
+
+    const visiblePendingAlerts = isAdmin
+      ? pendingAlerts
+      : pendingAlerts.filter(
+          (alert) =>
+            alert.type === "LOW_STOCK" || alert.type === "OPEN_INVENTORY_COUNTS"
+        );
 
     return NextResponse.json({
-      income,
-      expense,
-      balance: income - expense,
-      grossProfit,
-      netProfit,
-
-      salesCount: sales.length,
-      activeMembersToday,
-      currentInsideCount: insideMembers.length,
-
-      topProductsByRevenue,
-      topProductsByProfit,
-      worstProductsByProfit,
-      topMembersByAmount,
-
-      lowStock,
-      lastSales: sales.slice(0, 8),
-      lastAccessLogs,
-      dailyFinance,
-      recentClosures,
-
-      supplierDebt,
-      pendingPurchases,
-
-      expensesToday: expenses,
-      expensesByCategory,
-
-      alerts: {
-        membersWithoutContract: membersWithoutContract.length,
-        expiredMembers: expiredMembers.length,
-        blockedMembers: blockedMembers.length,
-        lowStock: lowStock.length,
+      role,
+      generatedAt: new Date().toISOString(),
+      summary: {
+        salesTodayTotal,
+        salesTodayCount: sales.length,
+        profitToday,
+        discountsTodayTotal,
+        expensesTodayTotal: dayClosureSummary.expensesTotal,
+        activeMembersToday,
+        currentInsideCount,
+        lowStockProductsCount: lowStockProducts.length,
       },
+      cash: isAdmin
+        ? {
+            salesTodayTotal,
+            salesTodayCount: sales.length,
+            profitToday,
+            discountsTodayTotal,
+            expensesTodayTotal: dayClosureSummary.expensesTotal,
+            cashExpectedToday: dayClosureSummary.expectedCash,
+            cashBalanceToday: dayClosureSummary.balance,
+            dayClosureStatus,
+            dayClosureDifference: dayClosure
+              ? roundCurrency(Number(dayClosure.difference))
+              : null,
+          }
+        : null,
+      inventory: {
+        openInventoryCountsCount: dayClosureSummary.inventoryCountsOpenCount,
+        confirmedInventoryCountsToday: dayClosureSummary.inventoryCountsConfirmedCount,
+      },
+      lowStockProducts,
+      recentAuditLogs: recentAuditLogs.map((log) => ({
+        id: log.id,
+        action: log.action,
+        entityType: log.entityType,
+        entityId: log.entityId,
+        summary: log.summary,
+        actorEmail: log.actorEmail,
+        createdAt: log.createdAt.toISOString(),
+        actorUser: log.actorUser,
+      })),
+      recentAccessLogs: recentAccessLogs.map((log) => ({
+        id: log.id,
+        type: log.type,
+        createdAt: log.createdAt.toISOString(),
+        member: {
+          fullName: log.member.fullName,
+          dni: log.member.dni,
+        },
+      })),
+      pendingAlerts: visiblePendingAlerts,
     });
   } catch (error) {
     console.error("[api/dashboard] Failed to build dashboard response", error);

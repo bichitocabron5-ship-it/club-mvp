@@ -267,29 +267,78 @@ export type DashboardAlerts = {
   lowStock: number;
 };
 
-export type DashboardData = {
-  income: number;
-  expense: number;
-  balance: number;
-  salesCount: number;
-  grossProfit: number;
-  netProfit: number;
+export type DashboardRole = "ADMIN" | "STAFF" | string;
+
+export type DashboardClosureStatus = "OPEN" | "CLOSED" | "REOPENED";
+
+export type DashboardAlert = {
+  id: string;
+  type:
+    | "DAY_CLOSED"
+    | "DAY_REOPENED"
+    | "OPEN_INVENTORY_COUNTS"
+    | "LOW_STOCK"
+    | "CASH_DIFFERENCE"
+    | "HIGH_DISCOUNT_SALES";
+  severity: "info" | "warning" | "danger";
+  title: string;
+  description: string;
+  href: string | null;
+};
+
+export type DashboardAuditLog = {
+  id: number;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  summary: string;
+  actorEmail: string | null;
+  createdAt: string;
+  actorUser: {
+    id: number;
+    name: string;
+    email: string;
+  } | null;
+};
+
+export type DashboardCashSummary = {
+  salesTodayTotal: number;
+  salesTodayCount: number;
+  profitToday: number;
+  discountsTodayTotal: number;
+  expensesTodayTotal: number;
+  cashExpectedToday: number;
+  cashBalanceToday: number;
+  dayClosureStatus: DashboardClosureStatus;
+  dayClosureDifference: number | null;
+};
+
+export type DashboardInventorySummary = {
+  openInventoryCountsCount: number;
+  confirmedInventoryCountsToday: number;
+};
+
+export type DashboardExecutiveSummary = {
+  salesTodayTotal: number;
+  salesTodayCount: number;
+  profitToday: number;
+  discountsTodayTotal: number;
+  expensesTodayTotal: number;
   activeMembersToday: number;
   currentInsideCount: number;
-  lowStock: ProductSummary[];
-  lastSales: DashboardSale[];
-  lastAccessLogs: DashboardAccessLog[];
-  expensesToday: DashboardExpense[];
-  expensesByCategory: Record<string, number>;
-  topProductsByRevenue: DashboardProductStat[];
-  topProductsByProfit: DashboardProductStat[];
-  worstProductsByProfit: DashboardProductStat[];
-  topMembersByAmount: DashboardMemberStat[];
-  dailyFinance: DashboardDailyFinance[];
-  supplierDebt: number;
-  pendingPurchases: PurchaseSummary[];
-  recentClosures: RecentClosure[];
-  alerts: DashboardAlerts;
+  lowStockProductsCount: number;
+};
+
+export type DashboardData = {
+  role: DashboardRole;
+  generatedAt: string;
+  summary: DashboardExecutiveSummary;
+  cash: DashboardCashSummary | null;
+  inventory: DashboardInventorySummary;
+  lowStockProducts: ProductSummary[];
+  recentAuditLogs: DashboardAuditLog[];
+  recentAccessLogs: DashboardAccessLog[];
+  pendingAlerts: DashboardAlert[];
 };
 
 export type MemberContractRecord = {
