@@ -1,38 +1,38 @@
-// app/api/day-closure/route.ts
-import { requireAdmin } from "@/lib/auth-server";
+import { z } from "zod";
+
 import { createAuditLog } from "@/lib/audit";
+import { requireAdmin, requireAuth } from "@/lib/auth-server";
+import { buildTodayDayClosureSummary, isClosureOpen } from "@/lib/day-closure";
 import { prisma } from "@/lib/prisma";
+import { getTodayRange, roundCurrency } from "@/lib/sales";
 import { NextResponse } from "next/server";
 
-function getTodayRange() {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-
-  const day = start.toISOString().slice(0, 10); // "2026-04-25"
-
-  return { start, end, day };
-}
+const closeDaySchema = z.object({
+  countedCash: z.coerce.number().finite(),
+  note: z.string().trim().max(2000).optional().nullable(),
+  inventoryCountId: z.coerce.number().int().positive().optional().nullable(),
+});
 
 export async function GET() {
-  const auth = await requireAdmin();
+  const auth = await requireAuth();
   if (!auth.ok) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
   const { day } = getTodayRange();
-
-  const closure = await prisma.dayClosure.findUnique({
-    where: {
-      day,
-    },
-  });
+  const [closure, summary] = await Promise.all([
+    prisma.dayClosure.findUnique({
+      where: {
+        day,
+      },
+    }),
+    buildTodayDayClosureSummary(),
+  ]);
 
   return NextResponse.json({
-    closed: !!closure,
+    closed: isClosureOpen(closure),
     closure,
+    summary,
   });
 }
 
@@ -42,68 +42,93 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  const body: {
-    countedCash?: unknown;
-    note?: unknown;
-  } = await req.json().catch(() => ({}));
-  const countedCash =
-    body.countedCash !== undefined ? Number(body.countedCash) : 0;
-  const note = body.note ? String(body.note) : null;
+  const body = await req.json().catch(() => ({}));
+  const parsed = closeDaySchema.safeParse(body);
+
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Datos invalidos" }, { status: 400 });
+  }
+
+  const countedCash = roundCurrency(parsed.data.countedCash);
+  const note = parsed.data.note?.trim() || null;
+  const inventoryCountId = parsed.data.inventoryCountId ?? null;
   const { start, end, day } = getTodayRange();
 
   const existing = await prisma.dayClosure.findUnique({
     where: { day },
   });
 
-  if (existing) {
+  if (existing && !existing.reopenedAt) {
     return NextResponse.json(
-      { error: "El día ya está cerrado" },
+      { error: "El dia ya esta cerrado" },
       { status: 400 }
     );
   }
 
-  const moves = await prisma.cashMove.findMany({
-    where: {
-      createdAt: {
-        gte: start,
-        lt: end,
+  if (inventoryCountId !== null) {
+    const inventoryCount = await prisma.inventoryCount.findFirst({
+      where: {
+        id: inventoryCountId,
+        createdAt: {
+          gte: start,
+          lt: end,
+        },
+        status: {
+          in: ["OPEN", "CONFIRMED"],
+        },
       },
-    },
-  });
+      select: {
+        id: true,
+      },
+    });
 
-  const totalIncome = moves
-    .filter((m: (typeof moves)[number]) => m.type === "income")
-    .reduce(
-      (acc: number, m: (typeof moves)[number]) => acc + Number(m.amount),
-      0
-    );
+    if (!inventoryCount) {
+      return NextResponse.json(
+        { error: "El conteo seleccionado no es valido para hoy" },
+        { status: 400 }
+      );
+    }
+  }
 
-  const totalExpense = moves
-    .filter((m: (typeof moves)[number]) => m.type === "expense")
-    .reduce(
-      (acc: number, m: (typeof moves)[number]) => acc + Number(m.amount),
-      0
-    );
+  const summary = await buildTodayDayClosureSummary();
+  const difference = roundCurrency(countedCash - summary.expectedCash);
+  const actorUserId = Number(auth.session.user.id);
 
-  const balance = totalIncome - totalExpense;
-  const expectedCash = balance;
-  const difference = countedCash - expectedCash;
+  const data = {
+    totalIncome: summary.totalIncome,
+    totalExpense: summary.totalExpense,
+    balance: summary.balance,
+    expectedCash: summary.expectedCash,
+    countedCash,
+    difference,
+    salesTotal: summary.salesTotal,
+    expensesTotal: summary.expensesTotal,
+    manualCashTotal: summary.manualCashTotal,
+    discountsTotal: summary.discountsTotal,
+    closedByUserId: Number.isInteger(actorUserId) ? actorUserId : null,
+    inventoryCountId,
+    note,
+    reopenedAt: null,
+    reopenedByUserId: null,
+    reopenReason: null,
+  };
 
-  const closure = await prisma.dayClosure.create({
-    data: {
-      day,
-      totalIncome,
-      totalExpense,
-      balance,
-      expectedCash,
-      countedCash,
-      difference,
-      note,
-    },
-  });
+  const closure = existing?.reopenedAt
+    ? await prisma.dayClosure.update({
+        where: {
+          id: existing.id,
+        },
+        data,
+      })
+    : await prisma.dayClosure.create({
+        data: {
+          day,
+          ...data,
+        },
+      });
 
   await createAuditLog({
-    actorUserId: Number(auth.session.user.id),
+    actorUserId,
     actorEmail: auth.session.user.email,
     action: "DAY_CLOSURE_CREATED",
     entityType: "DayClosure",
@@ -114,8 +139,15 @@ export async function POST(req: Request) {
       totalIncome: Number(closure.totalIncome),
       totalExpense: Number(closure.totalExpense),
       balance: Number(closure.balance),
+      salesTotal: Number(closure.salesTotal),
+      expensesTotal: Number(closure.expensesTotal),
+      manualCashTotal: Number(closure.manualCashTotal),
+      discountsTotal: Number(closure.discountsTotal),
+      expectedCash: Number(closure.expectedCash),
       countedCash: Number(closure.countedCash),
       difference: Number(closure.difference),
+      inventoryCountId: closure.inventoryCountId,
+      reopenedClosureId: existing?.reopenedAt ? existing.id : null,
     },
   });
 

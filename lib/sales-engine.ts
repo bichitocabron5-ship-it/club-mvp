@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 
 import { createAuditLog } from "@/lib/audit";
+import { isClosureOpen } from "@/lib/day-closure";
 import { prisma } from "@/lib/prisma";
 import {
   DAILY_LIMIT_G,
@@ -177,7 +178,7 @@ export async function createSaleTransaction({
         where: { day },
       });
 
-      if (todayClosed) {
+      if (isClosureOpen(todayClosed)) {
         throw new Error(
           "El dia esta cerrado. No se pueden registrar mas retiradas."
         );

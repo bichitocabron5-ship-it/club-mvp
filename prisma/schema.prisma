@@ -56,6 +56,8 @@ model AppUser {
   auditLogs    AuditLog[]
   createdInventoryCounts   InventoryCount[] @relation("InventoryCountCreatedByUser")
   confirmedInventoryCounts InventoryCount[] @relation("InventoryCountConfirmedByUser")
+  closedDayClosures        DayClosure[]     @relation("DayClosureClosedByUser")
+  reopenedDayClosures      DayClosure[]     @relation("DayClosureReopenedByUser")
 }
 
 model AuditLog {
@@ -108,6 +110,7 @@ model InventoryCount {
   createdByUser   AppUser?             @relation("InventoryCountCreatedByUser", fields: [createdByUserId], references: [id])
   confirmedByUser AppUser?             @relation("InventoryCountConfirmedByUser", fields: [confirmedByUserId], references: [id])
   items           InventoryCountItem[]
+  dayClosures     DayClosure[]
 }
 
 model InventoryCountItem {
@@ -180,9 +183,22 @@ model DayClosure {
   expectedCash Float @default(0)
   countedCash  Float @default(0)
   difference   Float @default(0)
+  salesTotal   Float @default(0)
+  expensesTotal Float @default(0)
+  manualCashTotal Float @default(0)
+  discountsTotal Float @default(0)
+  closedByUserId Int?
+  inventoryCountId Int?
+  reopenedAt DateTime?
+  reopenedByUserId Int?
+  reopenReason String?
 
   note      String?
   createdAt DateTime @default(now())
+
+  closedByUser   AppUser?        @relation("DayClosureClosedByUser", fields: [closedByUserId], references: [id])
+  inventoryCount InventoryCount? @relation(fields: [inventoryCountId], references: [id])
+  reopenedByUser AppUser?        @relation("DayClosureReopenedByUser", fields: [reopenedByUserId], references: [id])
 }
 
 model Expense {

@@ -120,8 +120,43 @@ export type DayClosure = {
   expectedCash: number;
   countedCash: number;
   difference: number;
+  salesTotal: number;
+  expensesTotal: number;
+  manualCashTotal: number;
+  discountsTotal: number;
+  closedByUserId: number | null;
+  inventoryCountId: number | null;
+  reopenedAt: string | null;
+  reopenedByUserId: number | null;
+  reopenReason: string | null;
   note: string | null;
   createdAt: string;
+};
+
+export type DayClosureInventoryOption = {
+  id: number;
+  status: "OPEN" | "CONFIRMED" | "CANCELLED" | string;
+  type: string;
+  notes: string | null;
+  createdAt: string;
+  confirmedAt: string | null;
+};
+
+export type DayClosureSummary = {
+  day: string;
+  salesTotal: number;
+  expensesTotal: number;
+  manualCashTotal: number;
+  discountsTotal: number;
+  expectedCash: number;
+  totalIncome: number;
+  totalExpense: number;
+  balance: number;
+  salesCount: number;
+  cashMovesCount: number;
+  inventoryCounts: DayClosureInventoryOption[];
+  inventoryCountsOpenCount: number;
+  inventoryCountsConfirmedCount: number;
 };
 
 export type DashboardSale = {
