@@ -1,5 +1,6 @@
 // app/api/members/[id]/status/route.ts
 import { requireAdmin } from "@/lib/auth-server";
+import { createAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
@@ -40,10 +41,43 @@ export async function PATCH(
     data.expiresAt = null;
   }
 
+  const existingMember = await prisma.member.findUnique({
+    where: { id: memberId },
+    select: {
+      id: true,
+      memberNumber: true,
+      active: true,
+      expiresAt: true,
+    },
+  });
+
+  if (!existingMember) {
+    return NextResponse.json({ error: "Socio no encontrado" }, { status: 404 });
+  }
+
   const member = await prisma.member.update({
     where: { id: memberId },
     data,
   });
+
+  if (
+    member.active !== existingMember.active ||
+    (member.expiresAt?.toISOString() ?? null) !==
+      (existingMember.expiresAt?.toISOString() ?? null)
+  ) {
+    await createAuditLog({
+      actorUserId: Number(auth.session.user.id),
+      actorEmail: auth.session.user.email,
+      action: "MEMBER_STATUS_UPDATED",
+      entityType: "Member",
+      entityId: member.id,
+      summary: `Estado actualizado para socio #${member.memberNumber ?? member.id}`,
+      metadata: {
+        active: member.active,
+        hasExpiration: Boolean(member.expiresAt),
+      },
+    });
+  }
 
   return NextResponse.json(member);
 }

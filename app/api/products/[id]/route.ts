@@ -1,5 +1,6 @@
 // app/api/products/[id]/route.ts
 import { requireAdmin } from "@/lib/auth-server";
+import { createAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { normalizeUnit } from "@/lib/sales";
 import { PRODUCT_CATEGORY_VALUES, PRODUCT_HASH_TYPE_VALUES } from "@/lib/types";
@@ -47,7 +48,16 @@ export async function PATCH(
 
   const existingProduct = await prisma.product.findUnique({
     where: { id: productId },
-    select: { category: true },
+    select: {
+      id: true,
+      name: true,
+      unit: true,
+      price: true,
+      category: true,
+      hashType: true,
+      minStock: true,
+      active: true,
+    },
   });
 
   if (!existingProduct) {
@@ -95,6 +105,48 @@ export async function PATCH(
       active: parsed.data.active,
     },
   });
+
+  const changedFields: string[] = [];
+
+  if (updated.name !== existingProduct.name) changedFields.push("name");
+  if (updated.unit !== existingProduct.unit) changedFields.push("unit");
+  if (Number(updated.price) !== Number(existingProduct.price)) changedFields.push("price");
+  if (updated.category !== existingProduct.category) changedFields.push("category");
+  if ((updated.hashType ?? null) !== (existingProduct.hashType ?? null)) {
+    changedFields.push("hashType");
+  }
+  if (Number(updated.minStock) !== Number(existingProduct.minStock)) {
+    changedFields.push("minStock");
+  }
+  if (updated.active !== existingProduct.active) changedFields.push("active");
+
+  if (changedFields.some((field) => field !== "active")) {
+    await createAuditLog({
+      actorUserId: Number(auth.session.user.id),
+      actorEmail: auth.session.user.email,
+      action: "PRODUCT_UPDATED",
+      entityType: "Product",
+      entityId: updated.id,
+      summary: `Producto actualizado: ${updated.name}`,
+      metadata: {
+        changedFields: changedFields.filter((field) => field !== "active"),
+      },
+    });
+  }
+
+  if (updated.active !== existingProduct.active) {
+    await createAuditLog({
+      actorUserId: Number(auth.session.user.id),
+      actorEmail: auth.session.user.email,
+      action: updated.active ? "PRODUCT_ACTIVATED" : "PRODUCT_DEACTIVATED",
+      entityType: "Product",
+      entityId: updated.id,
+      summary: `${updated.active ? "Producto activado" : "Producto desactivado"}: ${updated.name}`,
+      metadata: {
+        active: updated.active,
+      },
+    });
+  }
 
   return NextResponse.json(updated);
 }

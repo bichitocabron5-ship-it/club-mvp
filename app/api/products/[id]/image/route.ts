@@ -7,6 +7,7 @@ import {
   isAllowedProductImageType,
 } from "@/lib/product-images";
 import { requireAdmin } from "@/lib/auth-server";
+import { createAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { NextResponse } from "next/server";
@@ -124,6 +125,18 @@ export async function POST(
     where: { id: productId },
     data: {
       imageUrl: data.publicUrl,
+    },
+  });
+
+  await createAuditLog({
+    actorUserId: Number(auth.session.user.id),
+    actorEmail: auth.session.user.email,
+    action: "PRODUCT_IMAGE_UPLOADED",
+    entityType: "Product",
+    entityId: updated.id,
+    summary: `Imagen subida para producto: ${updated.name}`,
+    metadata: {
+      hasImage: Boolean(updated.imageUrl),
     },
   });
 

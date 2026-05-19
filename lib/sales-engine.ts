@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 
+import { createAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import {
   DAILY_LIMIT_G,
@@ -21,6 +22,7 @@ type CreateSaleTransactionInput = {
   memberId: number;
   items: SaleEngineItemInput[];
   operatorUserId: number;
+  operatorEmail?: string | null;
   manualDiscount?: number | null;
   note?: string | null;
 };
@@ -139,6 +141,7 @@ export async function createSaleTransaction({
   memberId,
   items,
   operatorUserId,
+  operatorEmail,
   manualDiscount,
   note,
 }: CreateSaleTransactionInput) {
@@ -166,7 +169,7 @@ export async function createSaleTransaction({
     normalizeDiscountPercent(manualDiscount);
   }
 
-  return prisma.$transaction(
+  const result = await prisma.$transaction(
     async (tx) => {
       const { start, day } = getTodayRange();
 
@@ -400,4 +403,27 @@ export async function createSaleTransaction({
       isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
     }
   );
+
+  await createAuditLog({
+    actorUserId: operatorUserId,
+    actorEmail: operatorEmail,
+    action: "SALE_CREATED",
+    entityType: "Sale",
+    entityId:
+      result.sales.length === 1
+        ? result.sales[0]?.id
+        : result.sales.map((sale) => sale.id).join(","),
+    summary: `Venta creada para socio #${result.memberId}`,
+    metadata: {
+      memberId: result.memberId,
+      saleIds: result.sales.map((sale) => sale.id),
+      itemCount: result.itemCount,
+      originalAmount: result.originalAmount,
+      discountAmount: result.discountAmount,
+      finalAmount: result.finalAmount,
+      totalAmount: result.totalAmount,
+    },
+  });
+
+  return result;
 }

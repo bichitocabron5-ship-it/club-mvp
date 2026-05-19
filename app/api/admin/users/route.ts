@@ -9,6 +9,7 @@ import {
   assertMemberLinkAvailable,
 } from "@/lib/admin-users";
 import { requireAdmin } from "@/lib/auth-server";
+import { createAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 
 const createUserSchema = z.object({
@@ -73,6 +74,20 @@ export async function POST(req: Request) {
         memberId: parsed.data.memberId ?? null,
       },
       select: appUserPublicSelect,
+    });
+
+    await createAuditLog({
+      actorUserId: Number(auth.session.user.id),
+      actorEmail: auth.session.user.email,
+      action: "INTERNAL_USER_CREATED",
+      entityType: "AppUser",
+      entityId: user.id,
+      summary: `Usuario interno creado: ${user.email}`,
+      metadata: {
+        role: user.role,
+        active: user.active,
+        memberId: user.memberId,
+      },
     });
 
     return NextResponse.json(user);

@@ -41,6 +41,7 @@ export async function POST(req: Request) {
       memberId,
       items,
       operatorUserId: appliedByUserId,
+      operatorEmail: auth.session.user.email,
     });
 
     return NextResponse.json({

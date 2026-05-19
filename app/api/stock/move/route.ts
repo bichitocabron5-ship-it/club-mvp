@@ -1,5 +1,6 @@
 // app/api/stock/move/route.ts
 import { requireAdmin } from "@/lib/auth-server";
+import { createAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
@@ -66,6 +67,23 @@ export async function POST(req: Request) {
     });
 
     return { product: updatedProduct, move };
+  });
+
+  await createAuditLog({
+    actorUserId: Number(auth.session.user.id),
+    actorEmail: auth.session.user.email,
+    action: "STOCK_MOVE_CREATED",
+    entityType: "StockMove",
+    entityId: result.move.id,
+    summary: `Movimiento manual de stock ${result.move.type} en producto #${productId}`,
+    metadata: {
+      productId,
+      type: result.move.type,
+      qty: Number(result.move.qty),
+      previousStock: Number(result.move.previousStock),
+      newStock: Number(result.move.newStock),
+      note,
+    },
   });
 
   return NextResponse.json(result);

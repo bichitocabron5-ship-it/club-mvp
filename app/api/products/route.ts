@@ -1,5 +1,6 @@
 // app/api/products/route.ts
 import { requireAdmin, requireAuth } from "@/lib/auth-server";
+import { createAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { normalizeUnit } from "@/lib/sales";
 import { PRODUCT_CATEGORY_VALUES, PRODUCT_HASH_TYPE_VALUES } from "@/lib/types";
@@ -72,6 +73,22 @@ export async function POST(req: Request) {
       category,
       hashType: category === "HASH" ? (parsed.data.hashType ?? null) : null,
       minStock: parsed.data.minStock ?? 5,
+    },
+  });
+
+  await createAuditLog({
+    actorUserId: Number(auth.session.user.id),
+    actorEmail: auth.session.user.email,
+    action: "PRODUCT_CREATED",
+    entityType: "Product",
+    entityId: product.id,
+    summary: `Producto creado: ${product.name}`,
+    metadata: {
+      unit: product.unit,
+      price: Number(product.price),
+      stock: Number(product.stock),
+      category: product.category,
+      active: product.active,
     },
   });
 

@@ -1,5 +1,6 @@
 // app/api/expenses/route.ts
 import { requireAdmin } from "@/lib/auth-server";
+import { createAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -59,6 +60,20 @@ export async function POST(req: Request) {
     });
 
     return created;
+  });
+
+  await createAuditLog({
+    actorUserId: Number(auth.session.user.id),
+    actorEmail: auth.session.user.email,
+    action: "EXPENSE_CREATED",
+    entityType: "Expense",
+    entityId: expense.id,
+    summary: `Gasto creado: ${expense.category}`,
+    metadata: {
+      category: expense.category,
+      amount: Number(expense.amount),
+      paidMethod: expense.paidMethod,
+    },
   });
 
   return NextResponse.json(expense);

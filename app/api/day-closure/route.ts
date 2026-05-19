@@ -1,5 +1,6 @@
 // app/api/day-closure/route.ts
 import { requireAdmin } from "@/lib/auth-server";
+import { createAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
@@ -98,6 +99,23 @@ export async function POST(req: Request) {
       countedCash,
       difference,
       note,
+    },
+  });
+
+  await createAuditLog({
+    actorUserId: Number(auth.session.user.id),
+    actorEmail: auth.session.user.email,
+    action: "DAY_CLOSURE_CREATED",
+    entityType: "DayClosure",
+    entityId: closure.id,
+    summary: `Cierre de caja creado para ${closure.day}`,
+    metadata: {
+      day: closure.day,
+      totalIncome: Number(closure.totalIncome),
+      totalExpense: Number(closure.totalExpense),
+      balance: Number(closure.balance),
+      countedCash: Number(closure.countedCash),
+      difference: Number(closure.difference),
     },
   });
 

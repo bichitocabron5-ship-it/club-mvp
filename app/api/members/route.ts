@@ -1,5 +1,6 @@
 // app/api/members/route.ts
 import { requireAuth } from "@/lib/auth-server";
+import { createAuditLog } from "@/lib/audit";
 import {
   getNextMemberNumber,
   isUniqueConstraintError,
@@ -84,6 +85,20 @@ export async function POST(req: Request) {
         },
       });
 
+      await createAuditLog({
+        actorUserId: Number(auth.session.user.id),
+        actorEmail: auth.session.user.email,
+        action: "MEMBER_CREATED",
+        entityType: "Member",
+        entityId: member.id,
+        summary: `Socio creado #${member.memberNumber ?? member.id}`,
+        metadata: {
+          memberNumber: member.memberNumber,
+          active: member.active,
+          hasExpiration: Boolean(member.expiresAt),
+        },
+      });
+
       return NextResponse.json(member);
     }
 
@@ -98,6 +113,20 @@ export async function POST(req: Request) {
               memberNumber,
             },
           });
+        });
+
+        await createAuditLog({
+          actorUserId: Number(auth.session.user.id),
+          actorEmail: auth.session.user.email,
+          action: "MEMBER_CREATED",
+          entityType: "Member",
+          entityId: member.id,
+          summary: `Socio creado #${member.memberNumber ?? member.id}`,
+          metadata: {
+            memberNumber: member.memberNumber,
+            active: member.active,
+            hasExpiration: Boolean(member.expiresAt),
+          },
         });
 
         return NextResponse.json(member);

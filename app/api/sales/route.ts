@@ -36,6 +36,7 @@ export async function POST(req: Request) {
       memberId,
       items: [{ productId, qty }],
       operatorUserId: appliedByUserId,
+      operatorEmail: auth.session.user.email,
     });
 
     return NextResponse.json(result.sales[0]);

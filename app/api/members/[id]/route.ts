@@ -1,5 +1,6 @@
 // app/api/members/[id]/route.ts
 import { requireAuth } from "@/lib/auth-server";
+import { createAuditLog } from "@/lib/audit";
 import {
   isUniqueConstraintError,
   normalizeMemberNumber,
@@ -32,6 +33,11 @@ const memberUpdateSchema = z.object({
   discountPercent: z.number().min(0).max(100).optional(),
   commercialNotes: z.string().trim().optional().nullable(),
 });
+
+function trimToNull(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
 
 export async function PATCH(
   req: Request,
@@ -144,6 +150,105 @@ export async function PATCH(
           : undefined,
       },
     });
+
+    const changedFields: string[] = [];
+
+    if (member.memberNumber !== existingMember.memberNumber) {
+      changedFields.push("memberNumber");
+    }
+    if (member.fullName !== existingMember.fullName) {
+      changedFields.push("fullName");
+    }
+    if (member.dni !== existingMember.dni) {
+      changedFields.push("dni");
+    }
+    if (trimToNull(member.phone) !== trimToNull(existingMember.phone)) {
+      changedFields.push("phone");
+    }
+    if (trimToNull(member.email) !== trimToNull(existingMember.email)) {
+      changedFields.push("email");
+    }
+    if (
+      (member.expiresAt?.toISOString() ?? null) !==
+      (existingMember.expiresAt?.toISOString() ?? null)
+    ) {
+      changedFields.push("expiresAt");
+    }
+    if (member.commercialProfile !== existingMember.commercialProfile) {
+      changedFields.push("commercialProfile");
+    }
+    if (Number(member.discountPercent) !== Number(existingMember.discountPercent)) {
+      changedFields.push("discountPercent");
+    }
+    if (
+      trimToNull(member.commercialNotes) !== trimToNull(existingMember.commercialNotes)
+    ) {
+      changedFields.push("commercialNotes");
+    }
+    if (trimToNull(member.rfidCode) !== trimToNull(existingMember.rfidCode)) {
+      changedFields.push("rfidCode");
+    }
+
+    if (changedFields.length > 0) {
+      const actorUserId = Number(auth.session.user.id);
+      const actorEmail = auth.session.user.email;
+      const generalFields = changedFields.filter(
+        (field) =>
+          field !== "commercialProfile" &&
+          field !== "discountPercent" &&
+          field !== "commercialNotes" &&
+          field !== "rfidCode"
+      );
+
+      if (generalFields.length > 0) {
+        await createAuditLog({
+          actorUserId,
+          actorEmail,
+          action: "MEMBER_UPDATED",
+          entityType: "Member",
+          entityId: member.id,
+          summary: `Socio actualizado #${member.memberNumber ?? member.id}`,
+          metadata: {
+            changedFields: generalFields,
+          },
+        });
+      }
+
+      if (
+        changedFields.includes("commercialProfile") ||
+        changedFields.includes("discountPercent") ||
+        changedFields.includes("commercialNotes")
+      ) {
+        await createAuditLog({
+          actorUserId,
+          actorEmail,
+          action: "MEMBER_COMMERCIAL_UPDATED",
+          entityType: "Member",
+          entityId: member.id,
+          summary: `Perfil comercial actualizado para socio #${member.memberNumber ?? member.id}`,
+          metadata: {
+            commercialProfile: member.commercialProfile,
+            discountPercent: Number(member.discountPercent),
+            notesUpdated: changedFields.includes("commercialNotes"),
+          },
+        });
+      }
+
+      if (changedFields.includes("rfidCode")) {
+        await createAuditLog({
+          actorUserId,
+          actorEmail,
+          action: "MEMBER_RFID_UPDATED",
+          entityType: "Member",
+          entityId: member.id,
+          summary: `RFID actualizado para socio #${member.memberNumber ?? member.id}`,
+          metadata: {
+            hadRfid: Boolean(existingMember.rfidCode),
+            hasRfid: Boolean(member.rfidCode),
+          },
+        });
+      }
+    }
 
     return NextResponse.json(member);
   } catch (error) {

@@ -1,5 +1,6 @@
 // app/api/stock/adjust/route.ts
 import { requireAdmin } from "@/lib/auth-server";
+import { createAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -70,6 +71,23 @@ export async function POST(req: Request) {
       });
 
       return stockMove;
+    });
+
+    await createAuditLog({
+      actorUserId: Number(auth.session.user.id),
+      actorEmail: auth.session.user.email,
+      action: "STOCK_ADJUSTED",
+      entityType: "StockMove",
+      entityId: result.id,
+      summary: `Ajuste manual de stock en producto #${productId}`,
+      metadata: {
+        productId,
+        type: result.type,
+        qty: Number(result.qty),
+        previousStock: Number(result.previousStock),
+        newStock: Number(result.newStock),
+        reason,
+      },
     });
 
     return NextResponse.json(result);

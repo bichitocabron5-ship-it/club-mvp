@@ -9,6 +9,7 @@ import {
   ensureActiveAdminRemains,
 } from "@/lib/admin-users";
 import { requireAdmin } from "@/lib/auth-server";
+import { createAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 
 const updateUserSchema = z.object({
@@ -45,6 +46,19 @@ export async function PATCH(
   }
 
   const email = parsed.data.email?.trim().toLowerCase();
+  const existingUser = await prisma.appUser.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      email: true,
+      role: true,
+      active: true,
+    },
+  });
+
+  if (!existingUser) {
+    return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
+  }
 
   try {
     await ensureActiveAdminRemains(userId, parsed.data.role, parsed.data.active);
@@ -81,6 +95,54 @@ export async function PATCH(
       },
       select: appUserPublicSelect,
     });
+
+    const actorUserId = Number(auth.session.user.id);
+    const actorEmail = auth.session.user.email;
+
+    if (parsed.data.password) {
+      await createAuditLog({
+        actorUserId,
+        actorEmail,
+        action: "INTERNAL_USER_PASSWORD_RESET",
+        entityType: "AppUser",
+        entityId: user.id,
+        summary: `Password reset para usuario interno: ${user.email}`,
+        metadata: {
+          targetUserId: user.id,
+        },
+      });
+    }
+
+    if (user.role !== existingUser.role) {
+      await createAuditLog({
+        actorUserId,
+        actorEmail,
+        action: "INTERNAL_USER_ROLE_CHANGED",
+        entityType: "AppUser",
+        entityId: user.id,
+        summary: `Rol cambiado para usuario interno: ${user.email}`,
+        metadata: {
+          previousRole: existingUser.role,
+          nextRole: user.role,
+        },
+      });
+    }
+
+    if (user.active !== existingUser.active) {
+      await createAuditLog({
+        actorUserId,
+        actorEmail,
+        action: user.active
+          ? "INTERNAL_USER_ACTIVATED"
+          : "INTERNAL_USER_DEACTIVATED",
+        entityType: "AppUser",
+        entityId: user.id,
+        summary: `${user.active ? "Usuario activado" : "Usuario desactivado"}: ${user.email}`,
+        metadata: {
+          active: user.active,
+        },
+      });
+    }
 
     return NextResponse.json(user);
   } catch {

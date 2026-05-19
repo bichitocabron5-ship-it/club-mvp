@@ -1,4 +1,5 @@
 import { requireAuth } from "@/lib/auth-server";
+import { createAuditLog } from "@/lib/audit";
 import {
   buildMemberDocumentPath,
   buildStoredMemberDocumentRef,
@@ -216,6 +217,7 @@ export async function POST(
       data: updates,
       select: {
         id: true,
+        memberNumber: true,
         dniFrontUrl: true,
         dniBackUrl: true,
       },
@@ -230,6 +232,19 @@ export async function POST(
     if (removablePaths.length > 0) {
       await supabaseAdmin.storage.from(MEMBER_DOCUMENT_BUCKET).remove(removablePaths);
     }
+
+    await createAuditLog({
+      actorUserId: Number(auth.session.user.id),
+      actorEmail: auth.session.user.email,
+      action: "MEMBER_DNI_UPLOADED",
+      entityType: "Member",
+      entityId: updatedMember.id,
+      summary: `DNI actualizado para socio #${updatedMember.memberNumber ?? updatedMember.id}`,
+      metadata: {
+        frontUploaded: Boolean(frontFile),
+        backUploaded: Boolean(backFile),
+      },
+    });
 
     return NextResponse.json({
       member: updatedMember,
