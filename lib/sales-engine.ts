@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 
 import { createAuditLog } from "@/lib/audit";
+import { formatLocalDay } from "@/lib/cash-move";
 import { isClosureOpen } from "@/lib/day-closure";
 import { prisma } from "@/lib/prisma";
 import {
@@ -386,6 +387,11 @@ export async function createSaleTransaction({
           type: "income",
           amount: finalAmount,
           note: cashNote,
+          source: "SALE",
+          sourceId: sales.map((sale) => sale.id).join(","),
+          paymentMethod: "CASH",
+          createdByUserId: operatorUserId,
+          day: formatLocalDay(),
         },
       });
 

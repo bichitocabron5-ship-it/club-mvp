@@ -1,6 +1,7 @@
 // app/api/expenses/route.ts
 import { requireAdmin } from "@/lib/auth-server";
 import { createAuditLog } from "@/lib/audit";
+import { formatLocalDay, normalizeCashMovePaymentMethod } from "@/lib/cash-move";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -41,13 +42,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Datos inválidos" }, { status: 400 });
   }
 
+  const actorUserId = Number(auth.session.user.id);
+  const paidMethod = normalizeCashMovePaymentMethod(parsed.data.paidMethod);
   const expense = await prisma.$transaction(async (tx) => {
     const created = await tx.expense.create({
       data: {
         category: parsed.data.category,
         description: parsed.data.description,
         amount: parsed.data.amount,
-        paidMethod: parsed.data.paidMethod || "CASH",
+        paidMethod,
       },
     });
 
@@ -56,6 +59,11 @@ export async function POST(req: Request) {
         type: "expense",
         amount: parsed.data.amount,
         note: `${parsed.data.category}: ${parsed.data.description}`,
+        source: "EXPENSE",
+        sourceId: String(created.id),
+        paymentMethod: created.paidMethod,
+        createdByUserId: Number.isInteger(actorUserId) ? actorUserId : null,
+        day: formatLocalDay(),
       },
     });
 
@@ -63,7 +71,7 @@ export async function POST(req: Request) {
   });
 
   await createAuditLog({
-    actorUserId: Number(auth.session.user.id),
+    actorUserId,
     actorEmail: auth.session.user.email,
     action: "EXPENSE_CREATED",
     entityType: "Expense",

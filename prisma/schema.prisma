@@ -58,6 +58,7 @@ model AppUser {
   confirmedInventoryCounts InventoryCount[] @relation("InventoryCountConfirmedByUser")
   closedDayClosures        DayClosure[]     @relation("DayClosureClosedByUser")
   reopenedDayClosures      DayClosure[]     @relation("DayClosureReopenedByUser")
+  createdCashMoves         CashMove[]       @relation("CashMoveCreatedByUser")
 }
 
 model AuditLog {
@@ -166,11 +167,18 @@ model Sale {
 }
 
 model CashMove {
-  id        Int      @id @default(autoincrement())
-  type      String // income / expense
-  amount    Float
-  note      String?
-  createdAt DateTime @default(now())
+  id              Int      @id @default(autoincrement())
+  type            String // income / expense
+  amount          Float
+  note            String?
+  source          String   @default("MANUAL") // SALE | EXPENSE | PURCHASE_PAYMENT | MANUAL | ADJUSTMENT | OTHER
+  sourceId        String?
+  paymentMethod   String   @default("CASH") // CASH | CARD | TRANSFER | OTHER
+  createdByUserId Int?
+  day             String?
+  createdAt       DateTime @default(now())
+
+  createdByUser AppUser? @relation("CashMoveCreatedByUser", fields: [createdByUserId], references: [id])
 }
 
 model DayClosure {

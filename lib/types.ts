@@ -108,7 +108,17 @@ export type CashMove = {
   type: "income" | "expense";
   amount: number;
   note: string | null;
+  source: "SALE" | "EXPENSE" | "PURCHASE_PAYMENT" | "MANUAL" | "ADJUSTMENT" | "OTHER" | string;
+  sourceId: string | null;
+  paymentMethod: "CASH" | "CARD" | "TRANSFER" | "OTHER" | string;
+  createdByUserId: number | null;
+  day: string | null;
   createdAt: string;
+  createdByUser?: {
+    id: number;
+    name: string;
+    email: string;
+  } | null;
 };
 
 export type DayClosure = {

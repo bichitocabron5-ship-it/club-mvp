@@ -1,4 +1,5 @@
 import type { ProductUnit } from "@/lib/types";
+import { formatLocalDay } from "@/lib/cash-move";
 
 export const DAILY_LIMIT_G = 10;
 export const DAILY_LIMIT_UD = 15;
@@ -29,7 +30,7 @@ export function getTodayRange() {
   const end = new Date(start);
   end.setDate(end.getDate() + 1);
 
-  const day = start.toISOString().slice(0, 10);
+  const day = formatLocalDay(start);
 
   return { start, end, day };
 }

@@ -1,4 +1,9 @@
 import { prisma } from "@/lib/prisma";
+import {
+  isCashPaymentMethod,
+  isManualCashMoveSource,
+  normalizeCashMoveSource,
+} from "@/lib/cash-move";
 import { getTodayRange, roundCurrency } from "@/lib/sales";
 
 type InventoryCountStatus = "OPEN" | "CONFIRMED" | "CANCELLED" | string;
@@ -58,18 +63,30 @@ export async function buildTodayDayClosureSummary(): Promise<DayClosureSummary> 
       },
       select: {
         amount: true,
+        paidMethod: true,
       },
     }),
     prisma.cashMove.findMany({
       where: {
-        createdAt: {
-          gte: start,
-          lt: end,
-        },
+        OR: [
+          {
+            day,
+          },
+          {
+            day: null,
+            createdAt: {
+              gte: start,
+              lt: end,
+            },
+          },
+        ],
       },
       select: {
         type: true,
         amount: true,
+        note: true,
+        source: true,
+        paymentMethod: true,
       },
     }),
     prisma.inventoryCount.findMany({
@@ -96,27 +113,48 @@ export async function buildTodayDayClosureSummary(): Promise<DayClosureSummary> 
     }),
   ]);
 
+  // Source of truth for sales is Sale because withdrawals are cash-only in this flow.
   const salesTotal = roundCurrency(
     sales.reduce((acc, sale) => acc + Number(sale.totalAmount), 0)
   );
   const discountsTotal = roundCurrency(
     sales.reduce((acc, sale) => acc + Number(sale.discountAmount || 0), 0)
   );
+  // Source of truth for expenses is Expense filtered to cash payments.
   const expensesTotal = roundCurrency(
-    expenses.reduce((acc, expense) => acc + Number(expense.amount), 0)
+    expenses
+      .filter((expense) => isCashPaymentMethod(expense.paidMethod))
+      .reduce((acc, expense) => acc + Number(expense.amount), 0)
   );
   const totalIncome = roundCurrency(
     cashMoves
-      .filter((move) => move.type === "income")
+      .filter((move) => move.type === "income" && isCashPaymentMethod(move.paymentMethod))
       .reduce((acc, move) => acc + Number(move.amount), 0)
   );
   const totalExpense = roundCurrency(
     cashMoves
-      .filter((move) => move.type === "expense")
+      .filter((move) => move.type === "expense" && isCashPaymentMethod(move.paymentMethod))
       .reduce((acc, move) => acc + Number(move.amount), 0)
   );
   const balance = roundCurrency(totalIncome - totalExpense);
-  const manualCashTotal = roundCurrency(balance - salesTotal + expensesTotal);
+  const manualCashTotal = roundCurrency(
+    cashMoves
+      .filter((move) => isCashPaymentMethod(move.paymentMethod))
+      .filter((move) =>
+        isManualCashMoveSource(
+          normalizeCashMoveSource(move.source, {
+            type: move.type,
+            note: move.note,
+          })
+        )
+      )
+      .reduce((acc, move) => {
+        const signedAmount =
+          move.type === "income" ? Number(move.amount) : -Number(move.amount);
+
+        return acc + signedAmount;
+      }, 0)
+  );
   const expectedCash = roundCurrency(salesTotal - expensesTotal + manualCashTotal);
 
   return {

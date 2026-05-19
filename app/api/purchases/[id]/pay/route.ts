@@ -1,5 +1,10 @@
 // app/api/purchases/[id]/pay/route.ts
 import { requireAdmin } from "@/lib/auth-server";
+import { createAuditLog } from "@/lib/audit";
+import {
+  formatLocalDay,
+  normalizeCashMovePaymentMethod,
+} from "@/lib/cash-move";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -33,7 +38,8 @@ export async function POST(
   }
 
   const paymentAmount = parsed.data.amount;
-  const paidMethod = parsed.data.paidMethod || "CASH";
+  const paidMethod = normalizeCashMovePaymentMethod(parsed.data.paidMethod);
+  const actorUserId = Number(auth.session.user.id);
 
   try {
     const result = await prisma.$transaction(async (tx) => {
@@ -83,7 +89,7 @@ export async function POST(
         },
       });
 
-      await tx.expense.create({
+      const paymentExpense = await tx.expense.create({
         data: {
           category: "PROVEEDOR",
           description: `Pago deuda proveedor ${purchase.supplier.name}`,
@@ -97,6 +103,28 @@ export async function POST(
           type: "expense",
           amount: paymentAmount,
           note: `Pago deuda proveedor ${purchase.supplier.name}`,
+          source: "PURCHASE_PAYMENT",
+          sourceId: String(purchase.id),
+          paymentMethod: paidMethod,
+          createdByUserId: Number.isInteger(actorUserId) ? actorUserId : null,
+          day: formatLocalDay(),
+        },
+      });
+
+      await createAuditLog({
+        db: tx,
+        actorUserId,
+        actorEmail: auth.session.user.email,
+        action: "PURCHASE_PAYMENT_CREATED",
+        entityType: "Purchase",
+        entityId: purchase.id,
+        summary: `Pago de compra registrado para proveedor ${purchase.supplier.name}`,
+        metadata: {
+          purchaseId: purchase.id,
+          expenseId: paymentExpense.id,
+          amount: paymentAmount,
+          paymentMethod: paidMethod,
+          resultingStatus: updatedPurchase.status,
         },
       });
 

@@ -1,5 +1,7 @@
 "use client";
 
+import { normalizeCashMoveSource } from "@/lib/cash-move";
+import { CASH_MOVE_SOURCES } from "@/lib/cash-move";
 import type {
   CashMove,
   DayClosure,
@@ -17,6 +19,36 @@ type ClosureResponse = {
 
 function formatCurrency(value: number) {
   return `${Number(value || 0).toFixed(2)} EUR`;
+}
+
+function formatSourceLabel(source: CashMove["source"]) {
+  switch (normalizeCashMoveSource(source)) {
+    case "SALE":
+      return "Ventas";
+    case "EXPENSE":
+      return "Gastos";
+    case "PURCHASE_PAYMENT":
+      return "Pagos de compras";
+    case "MANUAL":
+      return "Manuales";
+    case "ADJUSTMENT":
+      return "Ajustes";
+    default:
+      return "Otros";
+  }
+}
+
+function formatPaymentMethodLabel(paymentMethod: CashMove["paymentMethod"]) {
+  switch ((paymentMethod || "CASH").toUpperCase()) {
+    case "CARD":
+      return "Tarjeta";
+    case "TRANSFER":
+      return "Transferencia";
+    case "OTHER":
+      return "Otro";
+    default:
+      return "Efectivo";
+  }
 }
 
 function formatInventoryLabel(count: DayClosureInventoryOption) {
@@ -94,6 +126,18 @@ export default function CashPage() {
       date.getDate() === now.getDate()
     );
   });
+  const groupedMoves = todayMoves.reduce<Record<string, CashMove[]>>((acc, move) => {
+    const key = normalizeCashMoveSource(move.source, {
+      type: move.type,
+      note: move.note,
+    });
+    acc[key] = acc[key] ? [...acc[key], move] : [move];
+    return acc;
+  }, {});
+  const orderedGroups = [
+    ...CASH_MOVE_SOURCES.filter((source) => groupedMoves[source]?.length),
+    ...Object.keys(groupedMoves).filter((source) => !CASH_MOVE_SOURCES.includes(source as (typeof CASH_MOVE_SOURCES)[number])),
+  ];
 
   const closureValues = closure ?? summary;
   const expectedCash = Number(closureValues?.expectedCash || 0);
@@ -446,27 +490,49 @@ export default function CashPage() {
 
       <h2 className="mb-2 font-semibold">Movimientos de hoy</h2>
 
-      <div className="space-y-3">
-        {todayMoves.map((move) => (
-          <div
-            key={move.id}
-            className="app-panel flex flex-col gap-2 rounded-3xl p-4 md:flex-row md:items-center md:justify-between"
-          >
-            <div>
-              <div className="text-sm text-gray-600">
-                {new Date(move.createdAt).toLocaleString()}
-              </div>
-              <div>{move.note || "Sin nota"}</div>
+      <div className="space-y-4">
+        {orderedGroups.map((source) => {
+          const sourceMoves = groupedMoves[source];
+
+          if (!sourceMoves?.length) {
+            return null;
+          }
+
+          return (
+          <section key={source} className="space-y-3">
+            <div className="text-sm font-semibold text-gray-700">
+              {formatSourceLabel(source)}
             </div>
 
-            <div
-              className={move.type === "income" ? "text-green-600" : "text-red-600"}
-            >
-              {move.type === "income" ? "+" : "-"}
-              {formatCurrency(Number(move.amount))}
-            </div>
-          </div>
-        ))}
+            {sourceMoves.map((move) => (
+              <div
+                key={move.id}
+                className="app-panel flex flex-col gap-3 rounded-3xl p-4 md:flex-row md:items-center md:justify-between"
+              >
+                <div>
+                  <div className="text-sm text-gray-600">
+                    {new Date(move.createdAt).toLocaleString()}
+                  </div>
+                  <div>{move.note || "Sin nota"}</div>
+                  <div className="mt-1 text-xs text-gray-500">
+                    {formatPaymentMethodLabel(move.paymentMethod)}
+                    {move.createdByUser?.name ? ` · ${move.createdByUser.name}` : ""}
+                  </div>
+                </div>
+
+                <div
+                  className={
+                    move.type === "income" ? "text-green-600" : "text-red-600"
+                  }
+                >
+                  {move.type === "income" ? "+" : "-"}
+                  {formatCurrency(Number(move.amount))}
+                </div>
+              </div>
+            ))}
+          </section>
+          );
+        })}
 
         {todayMoves.length === 0 ? (
           <div className="app-panel rounded-3xl p-4 text-sm text-gray-500">
