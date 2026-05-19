@@ -27,6 +27,10 @@ export function AppNav() {
   const { data: session, status } = useSession();
   const pathname = usePathname();
 
+  if (pathname.startsWith("/catalog")) {
+    return null;
+  }
+
   const role = session?.user?.role;
   const isAdmin = role === "ADMIN";
   const showNav = status === "authenticated";

@@ -60,6 +60,7 @@ export default function ProductsPage() {
   const [editForm, setEditForm] = useState<ProductForm | null>(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [uploadingImageFor, setUploadingImageFor] = useState<number | null>(null);
 
   async function loadProducts() {
     const res = await fetch("/api/products");
@@ -178,6 +179,32 @@ export default function ProductsPage() {
     await patchProduct(product.id, {
       active: !product.active,
     });
+  }
+
+  async function uploadProductImage(productId: number, file: File) {
+    setUploadingImageFor(productId);
+    setError("");
+
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+
+      const res = await fetch(`/api/products/${productId}/image`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(data?.error || "Error subiendo imagen");
+      }
+
+      await loadProducts();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error subiendo imagen");
+    } finally {
+      setUploadingImageFor(null);
+    }
   }
 
   return (
@@ -306,7 +333,21 @@ export default function ProductsPage() {
 
           return (
             <div key={product.id} className="app-panel rounded-3xl p-4 md:p-5">
-              <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex flex-wrap items-start gap-4">
+                {product.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={product.imageUrl}
+                    alt={product.name}
+                    className="h-28 w-28 rounded-2xl object-cover"
+                  />
+                ) : (
+                  <div className="flex h-28 w-28 items-center justify-center rounded-2xl bg-[#eef1e8] text-center text-xs font-bold uppercase tracking-[0.18em] text-[#617063]">
+                    Sin foto
+                  </div>
+                )}
+
+                <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-3">
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <strong>{product.name}</strong>
@@ -346,6 +387,7 @@ export default function ProductsPage() {
                     Minimo: {Number(product.minStock).toFixed(2)} {product.unit}
                   </div>
                 </div>
+              </div>
               </div>
 
               {isEditing && editForm ? (
@@ -445,6 +487,23 @@ export default function ProductsPage() {
                   </div>
 
                   <div className="flex flex-wrap gap-2">
+                    <label className="cursor-pointer rounded-full border border-black/10 bg-white px-3 py-2 text-sm font-semibold text-[#25352f]">
+                      {uploadingImageFor === product.id ? "Subiendo..." : "Subir imagen"}
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          e.currentTarget.value = "";
+                          if (file) {
+                            void uploadProductImage(product.id, file);
+                          }
+                        }}
+                        disabled={uploadingImageFor === product.id}
+                      />
+                    </label>
+
                     <button
                       type="button"
                       onClick={() => void saveEditing(product.id)}
@@ -479,6 +538,23 @@ export default function ProductsPage() {
                 </div>
               ) : isAdmin ? (
                 <div className="mt-3 flex flex-wrap gap-2">
+                  <label className="cursor-pointer rounded-full border border-black/10 bg-white px-3 py-2 text-sm font-semibold text-[#25352f]">
+                    {uploadingImageFor === product.id ? "Subiendo..." : "Subir imagen"}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        e.currentTarget.value = "";
+                        if (file) {
+                          void uploadProductImage(product.id, file);
+                        }
+                      }}
+                      disabled={uploadingImageFor === product.id}
+                    />
+                  </label>
+
                   <button
                     type="button"
                     onClick={() => startEditing(product)}

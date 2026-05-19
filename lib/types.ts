@@ -84,11 +84,23 @@ export type ProductSummary = {
   unit: ProductUnit;
   price: number;
   stock: number;
+  imageUrl?: string | null;
   category: ProductCategory;
   hashType: ProductHashType | null;
   minStock: number;
   active: boolean;
   createdAt?: string;
+};
+
+export type CatalogProductSummary = {
+  id: number;
+  name: string;
+  category: ProductCategory;
+  hashType: ProductHashType | null;
+  price: number;
+  unit: ProductUnit;
+  imageUrl: string | null;
+  stockLabel: string | null;
 };
 
 export type CashMove = {
