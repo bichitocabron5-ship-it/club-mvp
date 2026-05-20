@@ -6,16 +6,18 @@ type MemberDocumentsCardProps = {
   memberId: number | string;
   initialFrontUrl: string | null;
   initialBackUrl: string | null;
+  onUploaded?: () => Promise<void> | void;
 };
 
 type DocumentSide = "front" | "back";
 
-const ACCEPTED_DOCUMENT_TYPES = ".jpg,.jpeg,.png,.pdf";
+const ACCEPTED_DOCUMENT_TYPES = ".jpg,.jpeg,.png,.webp";
 
 export function MemberDocumentsCard({
   memberId,
   initialFrontUrl,
   initialBackUrl,
+  onUploaded,
 }: MemberDocumentsCardProps) {
   const frontInputRef = useRef<HTMLInputElement | null>(null);
   const backInputRef = useRef<HTMLInputElement | null>(null);
@@ -27,12 +29,13 @@ export function MemberDocumentsCard({
 
   async function uploadDocument(side: DocumentSide, file: File) {
     const formData = new FormData();
-    formData.append(side, file);
+    formData.append("side", side);
+    formData.append("image", file);
     setUploadingSide(side);
     setMessage("");
 
     try {
-      const res = await fetch(`/api/members/${memberId}/documents`, {
+      const res = await fetch(`/api/members/${memberId}/dni`, {
         method: "POST",
         body: formData,
       });
@@ -44,12 +47,16 @@ export function MemberDocumentsCard({
         return;
       }
 
-      setFrontUrl(payload.member?.dniFrontUrl ?? null);
-      setBackUrl(payload.member?.dniBackUrl ?? null);
+      if (side === "front") {
+        setFrontUrl(payload.dniFrontUrl ?? null);
+      } else {
+        setBackUrl(payload.dniBackUrl ?? null);
+      }
+      await onUploaded?.();
       setMessage(
         side === "front"
           ? "DNI frontal actualizado."
-          : "DNI reverso actualizado."
+          : "DNI trasero actualizado."
       );
     } catch {
       setMessage("No se pudo subir el documento.");
@@ -105,7 +112,7 @@ export function MemberDocumentsCard({
             </button>
 
             <a
-              href={`/api/members/${memberId}/documents?side=${side}`}
+              href={currentUrl || "#"}
               target="_blank"
               rel="noreferrer"
               aria-disabled={!currentUrl}
@@ -115,10 +122,21 @@ export function MemberDocumentsCard({
                   : "pointer-events-none bg-gray-200 text-gray-500"
               }`}
             >
-              Abrir documento
+              Abrir imagen
             </a>
           </div>
         </div>
+
+        {currentUrl ? (
+          <div className="mt-4 overflow-hidden rounded-2xl border border-black/8 bg-[#f4f6f0]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={currentUrl}
+              alt={label}
+              className="h-56 w-full object-contain bg-white"
+            />
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -128,7 +146,7 @@ export function MemberDocumentsCard({
       <div className="flex flex-col gap-1">
         <h2 className="text-xl font-bold">Documentos</h2>
         <p className="text-sm text-gray-500">
-          Adjunta el DNI del socio en JPG, PNG o PDF.
+          Adjunta el DNI del socio en JPG, PNG o WEBP.
         </p>
       </div>
 

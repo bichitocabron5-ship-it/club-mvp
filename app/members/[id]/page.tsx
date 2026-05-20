@@ -38,15 +38,30 @@ export default function MemberDetail() {
     commercialNotes: "",
   });
 
+  async function refreshMember() {
+    if (!id) return;
+
+    const historyRes = await fetch(`/api/members/${id}/history`, {
+      cache: "no-store",
+    });
+
+    if (!historyRes.ok) {
+      throw new Error("No se pudo refrescar el socio");
+    }
+
+    const historyData: MemberHistoryData = await historyRes.json();
+    setData(historyData);
+  }
+
   useEffect(() => {
     if (!id) return;
 
     let cancelled = false;
 
     void Promise.all([
-      fetch(`/api/members/${id}/contracts`),
-      fetch(`/api/members/${id}/history`),
-      fetch(`/api/members/${id}/access-logs`),
+      fetch(`/api/members/${id}/contracts`, { cache: "no-store" }),
+      fetch(`/api/members/${id}/history`, { cache: "no-store" }),
+      fetch(`/api/members/${id}/access-logs`, { cache: "no-store" }),
     ]).then(async ([contractsRes, historyRes, accessRes]) => {
       const contractsData: MemberContractRecord[] = await contractsRes.json();
       const historyData: MemberHistoryData = await historyRes.json();
@@ -115,7 +130,9 @@ export default function MemberDetail() {
       return;
     }
 
-    const historyRes = await fetch(`/api/members/${id}/history`);
+    const historyRes = await fetch(`/api/members/${id}/history`, {
+      cache: "no-store",
+    });
     const historyData: MemberHistoryData = await historyRes.json();
     setData(historyData);
   }
@@ -488,6 +505,7 @@ export default function MemberDetail() {
         memberId={id}
         initialFrontUrl={data.member.dniFrontUrl}
         initialBackUrl={data.member.dniBackUrl}
+        onUploaded={refreshMember}
       />
 
       <div className="mt-6">

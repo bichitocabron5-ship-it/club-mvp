@@ -1,8 +1,8 @@
-import { requireAdmin } from "@/lib/auth-server";
+import { requireStaffOrAdmin } from "@/lib/auth-server";
 import { createAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import {
-  buildProductImagePath,
+  buildMemberDniPath,
   getImageExtension,
   parseStorageUrl,
   uploadImageToStorage,
@@ -33,43 +33,49 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireAdmin();
+  const auth = await requireStaffOrAdmin();
   if (!auth.ok) {
     return NextResponse.json(
-      { error: auth.status === 401 ? "No hay sesion." : "No tienes permiso para editar productos." },
+      { error: auth.status === 401 ? "No hay sesion." : "No tienes permiso para gestionar socios." },
       { status: auth.status }
     );
   }
 
   const { id } = await params;
-  const productId = Number(id);
+  const memberId = Number(id);
 
-  if (!Number.isInteger(productId) || productId <= 0) {
-    return NextResponse.json({ error: "ID invalido" }, { status: 400 });
+  if (!Number.isInteger(memberId) || memberId <= 0) {
+    return NextResponse.json({ error: "ID de socio invalido" }, { status: 400 });
   }
 
-  const product = await prisma.product.findUnique({
-    where: { id: productId },
+  const member = await prisma.member.findUnique({
+    where: { id: memberId },
     select: {
       id: true,
-      name: true,
-      imageUrl: true,
+      memberNumber: true,
+      dniFrontUrl: true,
+      dniBackUrl: true,
     },
   });
 
-  if (!product) {
-    return NextResponse.json({ error: "Producto no encontrado" }, { status: 404 });
+  if (!member) {
+    return NextResponse.json({ error: "Socio no encontrado" }, { status: 404 });
   }
 
   const formData = await req.formData();
+  const sideValue = formData.get("side");
   const image = getUploadedImage(formData);
+
+  if (sideValue !== "front" && sideValue !== "back") {
+    return NextResponse.json({ error: "El campo side debe ser front o back." }, { status: 400 });
+  }
 
   if (image === "INVALID") {
     return NextResponse.json({ error: "Archivo invalido" }, { status: 400 });
   }
 
   if (!image) {
-    return NextResponse.json({ error: "Debes adjuntar una imagen" }, { status: 400 });
+    return NextResponse.json({ error: "Debes adjuntar una imagen." }, { status: 400 });
   }
 
   const validationError = validateImageFile(image);
@@ -85,17 +91,25 @@ export async function POST(
 
   try {
     const timestamp = Date.now();
-    const path = buildProductImagePath(productId, timestamp, extension);
+    const path = buildMemberDniPath(memberId, sideValue, timestamp, extension);
     const uploaded = await uploadImageToStorage(image, path);
 
-    const updated = await prisma.product.update({
-      where: { id: productId },
-      data: {
-        imageUrl: uploaded.publicUrl,
+    const updatedMember = await prisma.member.update({
+      where: { id: memberId },
+      data:
+        sideValue === "front"
+          ? { dniFrontUrl: uploaded.publicUrl }
+          : { dniBackUrl: uploaded.publicUrl },
+      select: {
+        id: true,
+        dniFrontUrl: true,
+        dniBackUrl: true,
       },
     });
 
-    const previousRef = parseStorageUrl(product.imageUrl);
+    const previousRef = parseStorageUrl(
+      sideValue === "front" ? member.dniFrontUrl : member.dniBackUrl
+    );
     if (previousRef) {
       await supabaseAdmin.storage.from(previousRef.bucket).remove([previousRef.path]);
     }
@@ -103,20 +117,21 @@ export async function POST(
     await createAuditLog({
       actorUserId: Number(auth.session.user.id),
       actorEmail: auth.session.user.email,
-      action: "PRODUCT_IMAGE_UPLOADED",
-      entityType: "Product",
-      entityId: updated.id,
-      summary: `Imagen subida para producto: ${updated.name}`,
+      action: "MEMBER_DNI_UPLOADED",
+      entityType: "Member",
+      entityId: updatedMember.id,
+      summary: `DNI ${sideValue === "front" ? "frontal" : "trasero"} actualizado para socio #${member.memberNumber ?? member.id}`,
       metadata: {
-        hasImage: Boolean(updated.imageUrl),
+        side: sideValue,
         storagePath: uploaded.path,
       },
     });
 
-    return NextResponse.json({
-      id: updated.id,
-      imageUrl: updated.imageUrl,
-    });
+    return NextResponse.json(
+      sideValue === "front"
+        ? { dniFrontUrl: updatedMember.dniFrontUrl }
+        : { dniBackUrl: updatedMember.dniBackUrl }
+    );
   } catch (error) {
     return NextResponse.json(
       {

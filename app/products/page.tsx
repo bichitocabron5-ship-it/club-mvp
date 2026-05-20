@@ -66,7 +66,9 @@ export default function ProductsPage() {
   const [uploadingImageFor, setUploadingImageFor] = useState<number | null>(null);
 
   async function loadProducts() {
-    const res = await fetch("/api/products");
+    const res = await fetch("/api/products", {
+      cache: "no-store",
+    });
     const data: ProductSummary[] = await res.json();
     setProducts(data);
   }
