@@ -1,3 +1,9 @@
+import type { Prisma } from "@prisma/client";
+import { ensureSignedContractPdf } from "@/lib/contract-pdf";
+import {
+  findActiveContractTemplate,
+  resolveContractTemplateForContract,
+} from "@/lib/contract-templates";
 import { isSigningSessionExpired } from "@/lib/signing-session";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
@@ -20,6 +26,13 @@ const signPayloadSchema = z.object({
     })
     .optional(),
 });
+
+type SigningSessionWithRelations = Prisma.SigningSessionGetPayload<{
+  include: {
+    member: true;
+    contract: true;
+  };
+}>;
 
 async function getPublicSigningSession(token: string) {
   const parsedToken = tokenSchema.safeParse(token);
@@ -65,6 +78,23 @@ async function getPublicSigningSession(token: string) {
   };
 }
 
+async function serializeSigningSession(
+  session: SigningSessionWithRelations | null
+) {
+  if (!session) {
+    return null;
+  }
+
+  const contractTemplate = session.contract?.contractTemplateId
+    ? await resolveContractTemplateForContract(session.contract.contractTemplateId)
+    : await findActiveContractTemplate();
+
+  return {
+    ...session,
+    contractTemplate,
+  };
+}
+
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ token: string }> }
@@ -76,7 +106,16 @@ export async function GET(
     return result.response;
   }
 
-  return NextResponse.json(result.session);
+  const payload = await serializeSigningSession(result.session);
+
+  if (!payload?.contractTemplate && payload?.status !== "SIGNED") {
+    return NextResponse.json(
+      { error: "No hay plantilla de contrato activa configurada" },
+      { status: 400 }
+    );
+  }
+
+  return NextResponse.json(payload);
 }
 
 export async function POST(
@@ -93,7 +132,28 @@ export async function POST(
   const existingSession = sessionResult.session;
 
   if (existingSession.status === "SIGNED" && existingSession.contract) {
-    return NextResponse.json(existingSession);
+    if (!existingSession.contract.signedPdfUrl) {
+      await ensureSignedContractPdf(existingSession.contract.id);
+    }
+
+    const refreshedSession = await prisma.signingSession.findUnique({
+      where: { token },
+      include: {
+        member: true,
+        contract: true,
+      },
+    });
+
+    return NextResponse.json(await serializeSigningSession(refreshedSession));
+  }
+
+  const contractTemplate = await findActiveContractTemplate();
+
+  if (!contractTemplate) {
+    return NextResponse.json(
+      { error: "No hay plantilla de contrato activa configurada" },
+      { status: 400 }
+    );
   }
 
   const body = await req.json();
@@ -132,10 +192,11 @@ export async function POST(
       },
     });
 
-    await tx.memberContract.create({
+    const createdContract = await tx.memberContract.create({
       data: {
         memberId: updatedSession.memberId,
         signingSessionId: updatedSession.id,
+        contractTemplateId: contractTemplate.id,
 
         fullName: mergedFullName,
         dni: mergedDni,
@@ -152,14 +213,20 @@ export async function POST(
       },
     });
 
-    return tx.signingSession.findUnique({
-      where: { token },
-      include: {
-        member: true,
-        contract: true,
-      },
-    });
+    return {
+      contractId: createdContract.id,
+    };
   });
 
-  return NextResponse.json(session);
+  await ensureSignedContractPdf(session.contractId);
+
+  const refreshedSession = await prisma.signingSession.findUnique({
+    where: { token },
+    include: {
+      member: true,
+      contract: true,
+    },
+  });
+
+  return NextResponse.json(await serializeSigningSession(refreshedSession));
 }

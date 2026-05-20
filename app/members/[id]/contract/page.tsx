@@ -10,6 +10,7 @@ export default function MemberContractPage() {
   const memberId = Number(params.id);
 
   const [session, setSession] = useState<SigningSessionData | null>(null);
+  const [error, setError] = useState("");
 
   async function createSession() {
     const res = await fetch("/api/signing-sessions", {
@@ -20,7 +21,14 @@ export default function MemberContractPage() {
       body: JSON.stringify({ memberId }),
     });
 
-    const data: SigningSessionData = await res.json();
+    const data = await res.json();
+
+    if (!res.ok) {
+      setError(data.error || "No se pudo crear la sesiÃ³n de firma");
+      return;
+    }
+
+    setError("");
     setSession(data);
   }
 
@@ -43,6 +51,12 @@ export default function MemberContractPage() {
     <main>
       <h1 className="mb-4 text-2xl font-bold">Contrato y firma</h1>
 
+      {error && (
+        <div className="mb-4 rounded border border-red-200 bg-red-50 p-4 text-red-700">
+          {error}
+        </div>
+      )}
+
       {!session && (
         <button
           onClick={createSession}
@@ -61,6 +75,20 @@ export default function MemberContractPage() {
 
           {session.status !== "SIGNED" && (
             <div className="rounded border p-4">
+              {session.contractTemplate && (
+                <div className="mb-3 rounded bg-gray-50 p-3 text-sm">
+                  Contrato real: <strong>{session.contractTemplate.name}</strong>{" "}
+                  v{session.contractTemplate.version}.{" "}
+                  <a
+                    href={session.contractTemplate.fileUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-blue-700 underline"
+                  >
+                    Ver PDF
+                  </a>
+                </div>
+              )}
               <p className="mb-2 font-semibold">Abre este enlace en la tablet:</p>
               <input
                 className="w-full border p-2"

@@ -1,12 +1,13 @@
 // app/api/signing-sessions/route.ts
-import { requireAuth } from "@/lib/auth-server";
+import { requireStaffOrAdmin } from "@/lib/auth-server";
+import { findActiveContractTemplate } from "@/lib/contract-templates";
 import { prisma } from "@/lib/prisma";
 import { getSigningSessionExpiresAt } from "@/lib/signing-session";
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 
 export async function POST(req: Request) {
-  const auth = await requireAuth();
+  const auth = await requireStaffOrAdmin();
   if (!auth.ok) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
@@ -16,6 +17,15 @@ export async function POST(req: Request) {
 
   if (!memberId) {
     return NextResponse.json({ error: "Socio inválido" }, { status: 400 });
+  }
+
+  const contractTemplate = await findActiveContractTemplate();
+
+  if (!contractTemplate) {
+    return NextResponse.json(
+      { error: "No hay plantilla de contrato activa configurada" },
+      { status: 400 }
+    );
   }
 
   const token = crypto.randomBytes(24).toString("hex");
@@ -31,5 +41,8 @@ export async function POST(req: Request) {
     },
   });
 
-  return NextResponse.json(session);
+  return NextResponse.json({
+    ...session,
+    contractTemplate,
+  });
 }

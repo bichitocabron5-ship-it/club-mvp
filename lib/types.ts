@@ -408,8 +408,18 @@ export type DashboardData = {
   pendingAlerts: DashboardAlert[];
 };
 
+export type ContractTemplateRecord = {
+  id: number;
+  name: string;
+  version: string;
+  fileUrl: string;
+  active: boolean;
+  createdAt: string;
+};
+
 export type MemberContractRecord = {
   id: number;
+  contractTemplateId: number | null;
   fullName: string;
   dni: string;
   address?: string | null;
@@ -421,6 +431,7 @@ export type MemberContractRecord = {
   signatureImage: string;
   signedAt: string;
   signedPdfUrl: string | null;
+  contractTemplate?: ContractTemplateRecord | null;
 };
 
 export type MemberHistorySale = {
@@ -474,6 +485,7 @@ export type SigningSessionData = {
   expiresAt: string;
   member: MemberSummary;
   contract?: MemberContractRecord | null;
+  contractTemplate: ContractTemplateRecord | null;
 };
 
 export type AccessLogRecord = {

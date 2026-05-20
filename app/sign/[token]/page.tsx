@@ -132,9 +132,43 @@ export default function SignPage() {
           <strong>{session.member.memberNumber ?? session.member.id}</strong>
         </p>
         <p className="text-sm text-gray-500">
-          Documento provisional pendiente de PDF oficial.
+          Vas a firmar la plantilla real activa del contrato.
         </p>
+        {session.contractTemplate && (
+          <p className="mt-1 text-sm text-gray-700">
+            Plantilla: <strong>{session.contractTemplate.name}</strong> v
+            {session.contractTemplate.version}
+          </p>
+        )}
       </div>
+
+      {session.contractTemplate && (
+        <div className="mb-4 rounded border bg-white p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-bold">Contrato real a firmar</h2>
+              <p className="text-sm text-gray-600">
+                Revisa el PDF base antes de confirmar la firma.
+              </p>
+            </div>
+
+            <a
+              href={session.contractTemplate.fileUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
+            >
+              Abrir PDF real
+            </a>
+          </div>
+
+          <iframe
+            title="Contrato real"
+            src={session.contractTemplate.fileUrl}
+            className="mt-4 h-[420px] w-full rounded border"
+          />
+        </div>
+      )}
 
       <div className="mb-4 space-y-3 rounded border p-4">
         <h2 className="font-bold">Datos del socio</h2>
@@ -197,12 +231,17 @@ export default function SignPage() {
         />
       </div>
 
-      <div className="mb-4 rounded border p-4 text-sm leading-6">
-        <h2 className="mb-2 font-bold">Contrato provisional</h2>
-        <p>
-          El socio declara haber leido y aceptado las condiciones internas del
-          club. Este texto sera sustituido por el PDF oficial del contrato.
-        </p>
+      <div className="mb-4 rounded border bg-gray-50 p-4 text-sm">
+        <h2 className="mb-3 font-bold">Resumen de datos que se insertan</h2>
+        <div className="grid gap-2 md:grid-cols-2">
+          <div>Nombre completo: <strong>{form.fullName || "-"}</strong></div>
+          <div>DNI: <strong>{form.dni || "-"}</strong></div>
+          <div>TelÃ©fono: <strong>{form.phone || "-"}</strong></div>
+          <div>Email: <strong>{form.email || "-"}</strong></div>
+          <div>DirecciÃ³n: <strong>{form.address || "-"}</strong></div>
+          <div>Fecha nacimiento: <strong>{form.birthDate || "-"}</strong></div>
+          <div>Consumo declarado: <strong>{form.consumptionGrams || "-"}</strong></div>
+        </div>
       </div>
 
       <div className="rounded border bg-white p-2">

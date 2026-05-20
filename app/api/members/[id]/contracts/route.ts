@@ -1,5 +1,5 @@
 // app/api/members/[id]/contracts/route.ts
-import { requireAuth } from "@/lib/auth-server";
+import { requireStaffOrAdmin } from "@/lib/auth-server";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
@@ -7,7 +7,7 @@ export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireAuth();
+  const auth = await requireStaffOrAdmin();
   if (!auth.ok) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
@@ -17,6 +17,9 @@ export async function GET(
 
   const contracts = await prisma.memberContract.findMany({
     where: { memberId },
+    include: {
+      contractTemplate: true,
+    },
     orderBy: { signedAt: "desc" },
   });
 

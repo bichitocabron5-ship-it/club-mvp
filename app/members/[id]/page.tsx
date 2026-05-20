@@ -109,6 +109,7 @@ export default function MemberDetail() {
 
   const authReady = status !== "loading";
   const visibleMemberNumber = data.member.memberNumber ?? data.member.id;
+  const latestContract = contracts[0] ?? null;
 
   type MemberStatusPayload = {
     active?: boolean;
@@ -286,6 +287,35 @@ export default function MemberDetail() {
             <div className="mt-3 text-sm text-gray-600">
               {data.member.commercialNotes || "Sin notas comerciales"}
             </div>
+          </div>
+
+          <div className="mt-4 rounded border bg-gray-50 p-4">
+            <div className="mb-2 text-sm text-gray-500">Contrato</div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <div className="text-sm text-gray-500">Contrato firmado</div>
+                <div className="font-semibold">{latestContract ? "Si" : "No"}</div>
+              </div>
+              <div>
+                <div className="text-sm text-gray-500">Fecha firma</div>
+                <div className="font-semibold">
+                  {latestContract
+                    ? new Date(latestContract.signedAt).toLocaleString()
+                    : "Sin firma"}
+                </div>
+              </div>
+            </div>
+
+            {latestContract?.signedPdfUrl && (
+              <a
+                href={latestContract.signedPdfUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-3 inline-block rounded-full bg-green-600 px-4 py-2 text-white"
+              >
+                Ver contrato firmado
+              </a>
+            )}
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
@@ -526,6 +556,13 @@ export default function MemberDetail() {
                 <strong>{contract.fullName}</strong> - {contract.dni}
               </div>
 
+              {contract.contractTemplate && (
+                <div className="mt-2 text-sm text-gray-600">
+                  Plantilla: {contract.contractTemplate.name} v
+                  {contract.contractTemplate.version}
+                </div>
+              )}
+
               {(contract.phone || contract.email) && (
                 <div className="mt-2 grid gap-2 text-sm text-gray-700 md:grid-cols-2">
                   <div>Teléfono: {contract.phone || "No indicado"}</div>
@@ -570,7 +607,7 @@ export default function MemberDetail() {
                   className="ml-2 mt-3 inline-block rounded-full bg-green-600 px-4 py-2 text-white"
                   rel="noreferrer"
                 >
-                  Abrir PDF guardado
+                  Ver contrato firmado
                 </a>
               )}
 
@@ -580,7 +617,7 @@ export default function MemberDetail() {
                 className="mt-3 inline-block rounded-full bg-blue-600 px-4 py-2 text-white"
                 rel="noreferrer"
               >
-                Ver PDF firmado
+                Regenerar PDF firmado
               </a>
             </div>
           ))}
