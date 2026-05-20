@@ -1,8 +1,14 @@
 // app/api/access/toggle/route.ts
+import { requireStaffOrAdmin } from "@/lib/auth-server";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
+  const auth = await requireStaffOrAdmin();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
   const body = await req.json();
   const memberId = Number(body.memberId);
 

@@ -13,6 +13,7 @@ const hashTypeSchema = z.enum(PRODUCT_HASH_TYPE_VALUES);
 const productPatchSchema = z
   .object({
     name: z.string().trim().min(1).optional(),
+    description: z.string().trim().max(500).nullable().optional(),
     unit: z.string().trim().min(1).optional(),
     price: z.coerce.number().positive().optional(),
     category: categorySchema.optional(),
@@ -51,6 +52,7 @@ export async function PATCH(
     select: {
       id: true,
       name: true,
+      description: true,
       unit: true,
       price: true,
       category: true,
@@ -92,6 +94,10 @@ export async function PATCH(
     where: { id: productId },
     data: {
       name: parsed.data.name,
+      description:
+        parsed.data.description === undefined
+          ? undefined
+          : parsed.data.description?.trim() || null,
       unit,
       price: parsed.data.price,
       category: parsed.data.category,
@@ -109,6 +115,9 @@ export async function PATCH(
   const changedFields: string[] = [];
 
   if (updated.name !== existingProduct.name) changedFields.push("name");
+  if ((updated.description ?? null) !== (existingProduct.description ?? null)) {
+    changedFields.push("description");
+  }
   if (updated.unit !== existingProduct.unit) changedFields.push("unit");
   if (Number(updated.price) !== Number(existingProduct.price)) changedFields.push("price");
   if (updated.category !== existingProduct.category) changedFields.push("category");

@@ -12,6 +12,7 @@ const hashTypeSchema = z.enum(PRODUCT_HASH_TYPE_VALUES);
 
 const productSchema = z.object({
   name: z.string().trim().min(1),
+  description: z.string().trim().max(500).nullable().optional(),
   unit: z.string().trim().min(1),
   price: z.coerce.number().positive(),
   stock: z.coerce.number().min(0).optional(),
@@ -67,6 +68,7 @@ export async function POST(req: Request) {
   const product = await prisma.product.create({
     data: {
       name: parsed.data.name,
+      description: parsed.data.description?.trim() || null,
       unit,
       price: parsed.data.price,
       stock: parsed.data.stock ?? 0,
@@ -87,6 +89,7 @@ export async function POST(req: Request) {
       unit: product.unit,
       price: Number(product.price),
       stock: Number(product.stock),
+      description: product.description,
       category: product.category,
       active: product.active,
     },

@@ -6,22 +6,6 @@ import { prisma } from "@/lib/prisma";
 import type { CatalogProductSummary } from "@/lib/types";
 import { NextRequest, NextResponse } from "next/server";
 
-function getApproximateStockLabel(stock: number, minStock: number) {
-  if (stock <= 0) {
-    return "Agotado";
-  }
-
-  if (stock <= minStock) {
-    return "Poco stock";
-  }
-
-  if (stock <= minStock * 3) {
-    return "Disponible";
-  }
-
-  return "En stock";
-}
-
 export async function GET(req: NextRequest) {
   const sessionCookie = req.cookies.get(CATALOG_SESSION_COOKIE)?.value;
 
@@ -37,12 +21,11 @@ export async function GET(req: NextRequest) {
     select: {
       id: true,
       name: true,
+      description: true,
       category: true,
       hashType: true,
       price: true,
       unit: true,
-      stock: true,
-      minStock: true,
       imageUrl: true,
     },
   });
@@ -50,12 +33,12 @@ export async function GET(req: NextRequest) {
   const catalogProducts: CatalogProductSummary[] = products.map((product) => ({
     id: product.id,
     name: product.name,
+    description: product.description,
     category: product.category as CatalogProductSummary["category"],
     hashType: product.hashType as CatalogProductSummary["hashType"],
     price: product.price,
     unit: product.unit as CatalogProductSummary["unit"],
     imageUrl: product.imageUrl,
-    stockLabel: getApproximateStockLabel(product.stock, product.minStock),
   }));
 
   return NextResponse.json(catalogProducts);

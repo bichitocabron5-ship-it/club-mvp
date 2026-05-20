@@ -108,6 +108,7 @@ export function CatalogBrowser() {
 
     const haystack = [
       product.name,
+      product.description ?? "",
       product.category,
       product.hashType ?? "",
       categoryLabelMap.get(product.category) ?? "",
@@ -235,6 +236,11 @@ export function CatalogBrowser() {
                     <div className="text-2xl font-black leading-tight text-[#1c211c]">
                       {product.name}
                     </div>
+                    {product.description ? (
+                      <p className="mt-2 max-w-xl text-sm leading-6 text-[#536253]">
+                        {product.description}
+                      </p>
+                    ) : null}
                     <div className="mt-2 flex flex-wrap gap-2">
                       <span className="rounded-full bg-[#eef4e4] px-3 py-1 text-xs font-bold text-[#31584d]">
                         {categoryLabelMap.get(product.category) ?? product.category}
@@ -257,11 +263,9 @@ export function CatalogBrowser() {
                   </div>
                 </div>
 
-                {product.stockLabel ? (
-                  <div className="rounded-[1.2rem] bg-[#f7f4ed] px-4 py-3 text-sm font-semibold text-[#4f5d52]">
-                    Stock aproximado: {product.stockLabel}
-                  </div>
-                ) : null}
+                <div className="rounded-[1.2rem] bg-[#f7f4ed] px-4 py-3 text-sm font-semibold text-[#4f5d52]">
+                  Solo lectura. Consulta protegida por clave de catalogo.
+                </div>
               </div>
             </article>
           ))}

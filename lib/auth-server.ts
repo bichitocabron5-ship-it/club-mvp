@@ -16,6 +16,8 @@ type AuthFailure = {
 
 type AuthResult = AuthSuccess | AuthFailure;
 
+const STAFF_ROLES = new Set(["ADMIN", "STAFF"]);
+
 export async function requireAuth(): Promise<AuthResult> {
   const session = await getServerSession(authConfig);
 
@@ -41,6 +43,24 @@ export async function requireAdmin(): Promise<AuthResult> {
   }
 
   if (auth.session.user.role !== "ADMIN") {
+    return {
+      ok: false,
+      status: 403,
+      error: "FORBIDDEN",
+    };
+  }
+
+  return auth;
+}
+
+export async function requireStaffOrAdmin(): Promise<AuthResult> {
+  const auth = await requireAuth();
+
+  if (!auth.ok) {
+    return auth;
+  }
+
+  if (!STAFF_ROLES.has(auth.session.user.role)) {
     return {
       ok: false,
       status: 403,

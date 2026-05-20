@@ -16,6 +16,7 @@ import { useEffect, useState } from "react";
 
 type ProductForm = {
   name: string;
+  description: string;
   unit: ProductUnit;
   price: string;
   stock: string;
@@ -26,6 +27,7 @@ type ProductForm = {
 
 const initialForm: ProductForm = {
   name: "",
+  description: "",
   unit: "G",
   price: "",
   stock: "",
@@ -41,6 +43,7 @@ const hashTypeLabelMap = new Map(
 function toEditableForm(product: ProductSummary): ProductForm {
   return {
     name: product.name,
+    description: product.description ?? "",
     unit: product.unit,
     price: String(product.price),
     stock: String(product.stock),
@@ -89,6 +92,7 @@ export default function ProductsPage() {
         },
         body: JSON.stringify({
           name: form.name,
+          description: form.description.trim() || null,
           unit: form.unit,
           price: Number(form.price),
           stock: Number(form.stock || 0),
@@ -128,6 +132,7 @@ export default function ProductsPage() {
     productId: number,
     payload: Partial<{
       name: string;
+      description: string | null;
       unit: ProductUnit;
       price: number;
       category: ProductCategory;
@@ -165,6 +170,7 @@ export default function ProductsPage() {
 
     await patchProduct(productId, {
       name: editForm.name,
+      description: editForm.description.trim() || null,
       unit: editForm.unit,
       price: Number(editForm.price),
       category: editForm.category,
@@ -230,6 +236,15 @@ export default function ProductsPage() {
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
             required
+          />
+
+          <textarea
+            className="rounded-2xl border border-black/10 bg-white/80 p-3 md:col-span-2 xl:col-span-2"
+            placeholder="Descripcion breve"
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+            rows={3}
+            maxLength={500}
           />
 
           <select
@@ -372,6 +387,12 @@ export default function ProductsPage() {
                       : ""}
                   </div>
 
+                  {product.description ? (
+                    <div className="mt-2 text-sm text-gray-600">
+                      {product.description}
+                    </div>
+                  ) : null}
+
                   <div className="mt-1 text-sm text-gray-500">
                     Precio: {Number(product.price).toFixed(2)} EUR/
                     {product.unit === "G" ? "g" : "ud"}
@@ -399,6 +420,17 @@ export default function ProductsPage() {
                       setEditForm({ ...editForm, name: e.target.value })
                     }
                     placeholder="Nombre"
+                  />
+
+                  <textarea
+                    className="rounded-2xl border border-black/10 bg-white p-3"
+                    value={editForm.description}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, description: e.target.value })
+                    }
+                    placeholder="Descripcion breve"
+                    rows={3}
+                    maxLength={500}
                   />
 
                   <div className="grid gap-2 md:grid-cols-2">

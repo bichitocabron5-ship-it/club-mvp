@@ -81,6 +81,7 @@ export type MemberSummary = {
 export type ProductSummary = {
   id: number;
   name: string;
+  description?: string | null;
   unit: ProductUnit;
   price: number;
   stock: number;
@@ -95,12 +96,12 @@ export type ProductSummary = {
 export type CatalogProductSummary = {
   id: number;
   name: string;
+  description?: string | null;
   category: ProductCategory;
   hashType: ProductHashType | null;
   price: number;
   unit: ProductUnit;
   imageUrl: string | null;
-  stockLabel: string | null;
 };
 
 export type CashMove = {
