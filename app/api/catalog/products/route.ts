@@ -3,7 +3,10 @@ import {
   isCatalogSessionValid,
 } from "@/lib/catalog-session";
 import { prisma } from "@/lib/prisma";
-import type { CatalogProductSummary } from "@/lib/types";
+import {
+  CATALOG_EXCLUDED_CATEGORY_VALUES,
+  type CatalogProductSummary,
+} from "@/lib/types";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(req: NextRequest) {
@@ -16,6 +19,9 @@ export async function GET(req: NextRequest) {
   const products = await prisma.product.findMany({
     where: {
       active: true,
+      category: {
+        notIn: [...CATALOG_EXCLUDED_CATEGORY_VALUES],
+      },
     },
     orderBy: [{ category: "asc" }, { name: "asc" }],
     select: {

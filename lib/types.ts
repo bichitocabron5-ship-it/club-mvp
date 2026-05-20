@@ -52,6 +52,72 @@ export const PRODUCT_HASH_TYPES: ReadonlyArray<{
   { value: "SEMI_DRY", label: "Semi-Dry" },
 ] as const;
 
+export const CATALOG_EXCLUDED_CATEGORY_VALUES = [
+  "DRINK",
+  "FOOD",
+  "MERCH",
+] as const satisfies ReadonlyArray<ProductCategory>;
+
+const catalogExcludedCategorySet = new Set<ProductCategory>(
+  CATALOG_EXCLUDED_CATEGORY_VALUES
+);
+
+export function isCatalogVisibleCategory(category: ProductCategory) {
+  return !catalogExcludedCategorySet.has(category);
+}
+
+export function getProductCategoryLabel(category: ProductCategory) {
+  return (
+    PRODUCT_CATEGORIES.find((item) => item.value === category)?.label ?? category
+  );
+}
+
+export function getProductHashTypeLabel(hashType: ProductHashType) {
+  return (
+    PRODUCT_HASH_TYPES.find((item) => item.value === hashType)?.label ?? hashType
+  );
+}
+
+export type CatalogSectionKey = "FLOWERS" | "HASHES" | "EXTRACTS" | "OTHER";
+
+export function getCatalogSectionMeta(category: ProductCategory): {
+  key: CatalogSectionKey;
+  title: string;
+  order: number;
+} {
+  switch (category) {
+    case "CANNABIS":
+    case "SATIVA":
+    case "INDICA":
+    case "HYBRID":
+    case "CBD":
+      return {
+        key: "FLOWERS",
+        title: "Flores / Cannabis",
+        order: 1,
+      };
+    case "HASH":
+    case "RESIN":
+      return {
+        key: "HASHES",
+        title: "Hash / Resinas",
+        order: 2,
+      };
+    case "JOINT":
+      return {
+        key: "OTHER",
+        title: "Otros productos",
+        order: 4,
+      };
+    default:
+      return {
+        key: "OTHER",
+        title: "Otros productos",
+        order: 4,
+      };
+  }
+}
+
 export type ProductLike = {
   id: number;
   name: string;
