@@ -241,6 +241,8 @@ export type DashboardSale = {
   id: number;
   qty: number;
   totalAmount: number;
+  unitCost?: number;
+  profit?: number;
   originalAmount?: number | null;
   discountAmount?: number;
   discountPercent?: number;
@@ -283,6 +285,8 @@ export type DashboardProductStat = {
   qty: number;
   revenue: number;
   profit: number;
+  marginPercent: number;
+  marginIsEstimated: boolean;
   salesCount: number;
 };
 
@@ -294,6 +298,8 @@ export type DashboardMemberStat = {
   totalAmount: number;
   totalQty: number;
   profit: number;
+  marginPercent: number;
+  marginIsEstimated: boolean;
 };
 
 export type DashboardDailyFinance = {
@@ -303,6 +309,14 @@ export type DashboardDailyFinance = {
   grossProfit: number;
   netProfit: number;
   salesCount: number;
+};
+
+export type DashboardStockSummary = {
+  availableStockValue: number;
+  reserveStockValue: number;
+  totalPhysicalStockValue: number;
+  stockCostValue: number;
+  stockCostValueEstimated: boolean;
 };
 
 export type PurchaseSummary = {
@@ -373,6 +387,8 @@ export type DashboardCashSummary = {
   salesTodayTotal: number;
   salesTodayCount: number;
   profitToday: number;
+  marginPercent: number;
+  marginIsEstimated: boolean;
   discountsTodayTotal: number;
   expensesTodayTotal: number;
   cashExpectedToday: number;
@@ -390,6 +406,8 @@ export type DashboardExecutiveSummary = {
   salesTodayTotal: number;
   salesTodayCount: number;
   profitToday: number;
+  marginPercent: number;
+  marginIsEstimated: boolean;
   discountsTodayTotal: number;
   expensesTodayTotal: number;
   activeMembersToday: number;
@@ -403,6 +421,11 @@ export type DashboardData = {
   summary: DashboardExecutiveSummary;
   cash: DashboardCashSummary | null;
   inventory: DashboardInventorySummary;
+  topProductsToday: DashboardProductStat[] | null;
+  topMembersToday: DashboardMemberStat[] | null;
+  recentSales: DashboardSale[] | null;
+  dailyFinance: DashboardDailyFinance[] | null;
+  stockSummary: DashboardStockSummary | null;
   lowStockProducts: ProductSummary[];
   recentAuditLogs: DashboardAuditLog[];
   recentAccessLogs: DashboardAccessLog[];

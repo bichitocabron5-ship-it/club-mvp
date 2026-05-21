@@ -281,7 +281,7 @@ export async function createSaleTransaction({
           manualDiscount
         );
         const pricing: EngineSalePricing = rawPricing;
-        const unitCost = roundCurrency(product.averageCost);
+        const unitCost = Number(product.averageCost || 0);
         const profit = roundCurrency(rawPricing.finalAmount - item.qty * unitCost);
         const previousStock = product.stock;
         const newStock = roundCurrency(previousStock - item.qty);

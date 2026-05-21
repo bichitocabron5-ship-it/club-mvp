@@ -1,19 +1,25 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
+
 import { StatCard } from "@/components/dashboard/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { fetchJson } from "@/lib/fetch-json";
-import type {
-  DashboardAlert,
-  DashboardAuditLog,
-  DashboardData,
-} from "@/lib/types";
-import { useEffect, useState } from "react";
+import type { DashboardAlert, DashboardAuditLog, DashboardData } from "@/lib/types";
 
 function formatCurrency(value: number) {
   return `${Number(value || 0).toFixed(2)} EUR`;
+}
+
+function formatPercent(value: number) {
+  return `${Number(value || 0).toFixed(2)}%`;
+}
+
+function formatQty(value: number, unit?: string) {
+  const formatted = Number(value || 0).toFixed(2);
+  return unit ? `${formatted} ${unit}` : formatted;
 }
 
 function formatDateTime(value: string) {
@@ -48,6 +54,23 @@ function actionTone(action: DashboardAuditLog["action"]) {
   }
 
   return "text-emerald-700 bg-emerald-100";
+}
+
+function MarginBadge({
+  marginPercent,
+  estimated,
+}: {
+  marginPercent: number;
+  estimated: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <span className="rounded-full bg-sky-100 px-3 py-1 font-bold text-sky-800">
+        {formatPercent(marginPercent)}
+      </span>
+      {estimated ? <span className="app-muted">Estimado</span> : null}
+    </div>
+  );
 }
 
 const adminQuickLinks = [
@@ -238,11 +261,11 @@ export default function DashboardPage() {
   return (
     <main className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
       <PageHeader
-        title="Dashboard ejecutivo diario"
-        description={`Corte generado ${formatDateTime(data.generatedAt)} con foco en ventas, caja, inventario y trazabilidad.`}
+        title="Dashboard ejecutivo admin v2"
+        description={`Corte generado ${formatDateTime(data.generatedAt)} con beneficio basado en Sale.profit y costes congelados por venta.`}
       />
 
-      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         <StatCard
           label="Ventas hoy"
           value={formatCurrency(data.summary.salesTodayTotal)}
@@ -260,15 +283,22 @@ export default function DashboardPage() {
               : "text-3xl font-black text-red-800"
           }
         />
+        <StatCard label="Margen medio" value={formatPercent(data.summary.marginPercent)} />
         <StatCard
           label="Descuentos hoy"
           value={formatCurrency(data.summary.discountsTodayTotal)}
         />
       </section>
 
+      {data.summary.marginIsEstimated ? (
+        <div className="rounded-[1.5rem] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          El margen de hoy es estimado porque existen ventas sin coste historico completo.
+        </div>
+      ) : null}
+
       <QuickLinks links={quickLinks} />
 
-      <section className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
+      <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
         <section className="app-panel-strong rounded-[2rem] p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -327,30 +357,251 @@ export default function DashboardPage() {
         </section>
 
         <section className="app-panel rounded-[2rem] p-5">
-          <h2 className="text-lg font-black">Inventario</h2>
-          <p className="mt-1 text-sm app-muted">
-            Conteos de hoy y estado de stock minimo.
-          </p>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-black">Stock valorizado</h2>
+              <p className="mt-1 text-sm app-muted">
+                Valor comercial y coste estimado del stock fisico.
+              </p>
+            </div>
+            {data.stockSummary?.stockCostValueEstimated ? (
+              <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">
+                Coste estimado
+              </span>
+            ) : null}
+          </div>
 
           <div className="mt-4 grid gap-3">
             <div className="rounded-[1.5rem] border border-black/8 bg-white/85 p-4">
-              <div className="text-sm app-muted">Conteos abiertos</div>
+              <div className="text-sm app-muted">Valor stock disponible</div>
               <div className="mt-1 text-3xl font-black">
-                {data.inventory.openInventoryCountsCount}
+                {formatCurrency(data.stockSummary?.availableStockValue || 0)}
               </div>
             </div>
             <div className="rounded-[1.5rem] border border-black/8 bg-white/85 p-4">
-              <div className="text-sm app-muted">Conteos confirmados hoy</div>
+              <div className="text-sm app-muted">Valor stock reserva</div>
               <div className="mt-1 text-3xl font-black">
-                {data.inventory.confirmedInventoryCountsToday}
+                {formatCurrency(data.stockSummary?.reserveStockValue || 0)}
               </div>
             </div>
             <div className="rounded-[1.5rem] border border-black/8 bg-white/85 p-4">
-              <div className="text-sm app-muted">Productos en stock bajo</div>
-              <div className="mt-1 text-3xl font-black text-red-700">
-                {data.summary.lowStockProductsCount}
+              <div className="text-sm app-muted">Valor stock fisico</div>
+              <div className="mt-1 text-3xl font-black">
+                {formatCurrency(data.stockSummary?.totalPhysicalStockValue || 0)}
               </div>
             </div>
+            <div className="rounded-[1.5rem] border border-black/8 bg-white/85 p-4">
+              <div className="text-sm app-muted">Coste stock fisico</div>
+              <div className="mt-1 text-3xl font-black">
+                {formatCurrency(data.stockSummary?.stockCostValue || 0)}
+              </div>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-2">
+        <section className="app-panel rounded-[2rem] p-5">
+          <h2 className="text-lg font-black">Top productos hoy</h2>
+          <p className="mt-1 text-sm app-muted">
+            Ranking por revenue y beneficio usando Sale.profit.
+          </p>
+
+          <div className="mt-4 space-y-3">
+            {!data.topProductsToday || data.topProductsToday.length === 0 ? (
+              <EmptyState message="Sin ventas de productos hoy." className="rounded-[1.5rem]" />
+            ) : (
+              data.topProductsToday.slice(0, 8).map((product) => (
+                <div
+                  key={product.productId}
+                  className="rounded-[1.5rem] border border-black/8 bg-white/85 p-4"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-semibold">{product.name}</div>
+                      <div className="mt-1 text-sm app-muted">
+                        {product.salesCount} venta(s) · {formatQty(product.qty, product.unit)}
+                      </div>
+                    </div>
+                    <MarginBadge
+                      marginPercent={product.marginPercent}
+                      estimated={product.marginIsEstimated}
+                    />
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <div className="rounded-2xl bg-black/[0.03] px-3 py-2">
+                      <div className="text-xs uppercase tracking-[0.18em] app-muted">Revenue</div>
+                      <div className="mt-1 font-black">{formatCurrency(product.revenue)}</div>
+                    </div>
+                    <div className="rounded-2xl bg-black/[0.03] px-3 py-2">
+                      <div className="text-xs uppercase tracking-[0.18em] app-muted">
+                        Beneficio
+                      </div>
+                      <div className="mt-1 font-black">{formatCurrency(product.profit)}</div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+
+        <section className="app-panel rounded-[2rem] p-5">
+          <h2 className="text-lg font-black">Top socios hoy</h2>
+          <p className="mt-1 text-sm app-muted">
+            Acumulado por socio con ingreso final y margen medio.
+          </p>
+
+          <div className="mt-4 space-y-3">
+            {!data.topMembersToday || data.topMembersToday.length === 0 ? (
+              <EmptyState message="Sin ventas por socio hoy." className="rounded-[1.5rem]" />
+            ) : (
+              data.topMembersToday.slice(0, 8).map((member) => (
+                <div
+                  key={member.memberId}
+                  className="rounded-[1.5rem] border border-black/8 bg-white/85 p-4"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-semibold">{member.fullName}</div>
+                      <div className="mt-1 text-sm app-muted">
+                        {member.dni} · {member.salesCount} venta(s) · {formatQty(member.totalQty)}
+                      </div>
+                    </div>
+                    <MarginBadge
+                      marginPercent={member.marginPercent}
+                      estimated={member.marginIsEstimated}
+                    />
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <div className="rounded-2xl bg-black/[0.03] px-3 py-2">
+                      <div className="text-xs uppercase tracking-[0.18em] app-muted">Revenue</div>
+                      <div className="mt-1 font-black">
+                        {formatCurrency(member.totalAmount)}
+                      </div>
+                    </div>
+                    <div className="rounded-2xl bg-black/[0.03] px-3 py-2">
+                      <div className="text-xs uppercase tracking-[0.18em] app-muted">
+                        Beneficio
+                      </div>
+                      <div className="mt-1 font-black">{formatCurrency(member.profit)}</div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+        <section className="app-panel rounded-[2rem] p-5">
+          <h2 className="text-lg font-black">Finanzas ultimos 7 dias</h2>
+          <p className="mt-1 text-sm app-muted">
+            Ingresos y gastos de caja junto al beneficio bruto por ventas.
+          </p>
+
+          <div className="mt-4 space-y-2">
+            {!data.dailyFinance || data.dailyFinance.length === 0 ? (
+              <EmptyState message="Sin datos financieros recientes." className="rounded-[1.5rem]" />
+            ) : (
+              data.dailyFinance.map((day) => (
+                <div
+                  key={day.date}
+                  className="grid gap-2 rounded-[1.25rem] border border-black/8 bg-white/85 p-3 md:grid-cols-[0.8fr_1fr_1fr_1fr_1fr_auto]"
+                >
+                  <div>
+                    <div className="font-semibold">{day.date}</div>
+                    <div className="text-xs app-muted">{day.salesCount} venta(s)</div>
+                  </div>
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.18em] app-muted">Income</div>
+                    <div className="font-black">{formatCurrency(day.income)}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.18em] app-muted">Expense</div>
+                    <div className="font-black text-red-700">{formatCurrency(day.expense)}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.18em] app-muted">
+                      Gross profit
+                    </div>
+                    <div className="font-black">{formatCurrency(day.grossProfit)}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.18em] app-muted">Net profit</div>
+                    <div
+                      className={`font-black ${
+                        day.netProfit >= 0 ? "text-emerald-700" : "text-red-700"
+                      }`}
+                    >
+                      {formatCurrency(day.netProfit)}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+
+        <section className="app-panel rounded-[2rem] p-5">
+          <h2 className="text-lg font-black">Ventas recientes</h2>
+          <p className="mt-1 text-sm app-muted">
+            Ultimas ventas del dia con coste unitario congelado y beneficio.
+          </p>
+
+          <div className="mt-4 space-y-2">
+            {!data.recentSales || data.recentSales.length === 0 ? (
+              <EmptyState message="Sin ventas recientes." className="rounded-[1.5rem]" />
+            ) : (
+              data.recentSales.map((sale) => (
+                <div
+                  key={sale.id}
+                  className="rounded-[1.25rem] border border-black/8 bg-white/85 p-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-semibold">
+                        {sale.member.fullName} · {sale.product.name}
+                      </div>
+                      <div className="mt-1 text-sm app-muted">
+                        {formatQty(sale.qty, sale.product.unit)} · {formatTime(sale.createdAt)}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-black">{formatCurrency(sale.finalAmount || 0)}</div>
+                      <div className="text-xs app-muted">
+                        Original {formatCurrency(sale.originalAmount || sale.totalAmount)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                    <div className="rounded-2xl bg-black/[0.03] px-3 py-2">
+                      <div className="text-xs uppercase tracking-[0.18em] app-muted">
+                        Unit cost
+                      </div>
+                      <div className="mt-1 font-black">
+                        {formatCurrency(sale.unitCost || 0)}
+                      </div>
+                    </div>
+                    <div className="rounded-2xl bg-black/[0.03] px-3 py-2">
+                      <div className="text-xs uppercase tracking-[0.18em] app-muted">
+                        Discount
+                      </div>
+                      <div className="mt-1 font-black">
+                        {formatCurrency(sale.discountAmount || 0)}
+                      </div>
+                    </div>
+                    <div className="rounded-2xl bg-black/[0.03] px-3 py-2">
+                      <div className="text-xs uppercase tracking-[0.18em] app-muted">
+                        Profit
+                      </div>
+                      <div className="mt-1 font-black">{formatCurrency(sale.profit || 0)}</div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </section>
       </section>
@@ -416,8 +667,7 @@ export default function DashboardPage() {
                     <div>
                       <div className="font-semibold">{log.summary}</div>
                       <div className="mt-1 text-sm app-muted">
-                        {log.actorUser?.name || log.actorEmail || "Sistema"} ·{" "}
-                        {log.entityType}
+                        {log.actorUser?.name || log.actorEmail || "Sistema"} · {log.entityType}
                         {log.entityId ? ` #${log.entityId}` : ""}
                       </div>
                     </div>
@@ -429,9 +679,7 @@ export default function DashboardPage() {
                       {log.action}
                     </div>
                   </div>
-                  <div className="mt-2 text-xs app-muted">
-                    {formatDateTime(log.createdAt)}
-                  </div>
+                  <div className="mt-2 text-xs app-muted">{formatDateTime(log.createdAt)}</div>
                 </div>
               ))
             )}
