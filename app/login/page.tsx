@@ -1,4 +1,3 @@
-// app/login/page.tsx
 "use client";
 
 import { signIn } from "next-auth/react";
@@ -29,9 +28,7 @@ export default function LoginPage() {
         onSubmit={handleLogin}
         className="w-full max-w-sm rounded bg-white p-6 shadow"
       >
-        <h1 className="mb-6 text-2xl font-bold">
-          Acceso al sistema
-        </h1>
+        <h1 className="mb-6 text-2xl font-bold">Acceso al sistema</h1>
 
         <input
           className="mb-3 w-full rounded border p-3"
@@ -57,7 +54,7 @@ export default function LoginPage() {
           disabled={loading}
           className="w-full rounded bg-black p-3 font-bold text-white"
         >
-          {loading ? "Entrando..." : "Entrar"}
+          {loading ? "Iniciando sesión..." : "Iniciar sesión"}
         </button>
       </form>
     </main>

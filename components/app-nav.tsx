@@ -7,7 +7,7 @@ import { usePathname } from "next/navigation";
 import { LogoutButton } from "@/components/logout-button";
 
 const commonLinks = [
-  { href: "/", label: "Dashboard" },
+  { href: "/", label: "Panel" },
   { href: "/access", label: "Acceso" },
   { href: "/sales", label: "Retiradas" },
   { href: "/members", label: "Socios" },
@@ -15,7 +15,7 @@ const commonLinks = [
 ];
 
 const adminLinks = [
-  { href: "/admin/users", label: "Admin" },
+  { href: "/admin/users", label: "Administrador" },
   { href: "/admin/audit", label: "Auditoría" },
   { href: "/cash", label: "Caja" },
   { href: "/expenses", label: "Gastos" },
@@ -65,7 +65,7 @@ export function AppNav() {
           {showNav && (
             <div className="flex items-center gap-2">
               <span className="rounded-full border border-white/12 bg-white/8 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-white/72">
-                {isAdmin ? "Admin" : "Staff"}
+                {isAdmin ? "Administrador" : "Personal"}
               </span>
               <LogoutButton />
             </div>

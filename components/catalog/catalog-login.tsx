@@ -27,7 +27,7 @@ export function CatalogLogin() {
         const data = (await response.json().catch(() => null)) as
           | { error?: string }
           | null;
-        throw new Error(data?.error || "No se pudo abrir el kiosko");
+        throw new Error(data?.error || "No se pudo abrir el kiosco");
       }
 
       setPassword("");
@@ -35,7 +35,7 @@ export function CatalogLogin() {
         router.refresh();
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo abrir el kiosko");
+      setError(err instanceof Error ? err.message : "No se pudo abrir el kiosco");
     } finally {
       setSubmitting(false);
     }
@@ -46,10 +46,10 @@ export function CatalogLogin() {
       <section className="app-panel-strong w-full rounded-[2rem] p-6 shadow-2xl md:p-10">
         <div className="mb-8">
           <div className="mb-3 inline-flex rounded-full border border-black/10 bg-white/70 px-4 py-2 text-xs font-black uppercase tracking-[0.24em] text-[#31584d]">
-            Catalogo kiosko
+            Catálogo kiosco
           </div>
           <h1 className="text-4xl font-black tracking-tight text-[#1f241d] md:text-5xl">
-            Acceso rapido para tablet
+            Acceso rápido para tablet
           </h1>
           <p className="mt-3 max-w-xl text-base text-[#536055] md:text-lg">
             Solo lectura. Sin socios, sin caja, sin ventas y sin acceso al panel interno.
@@ -58,7 +58,7 @@ export function CatalogLogin() {
 
         <form className="grid gap-4" onSubmit={handleSubmit}>
           <label className="grid gap-2">
-            <span className="text-sm font-semibold text-[#445146]">Password kiosko</span>
+            <span className="text-sm font-semibold text-[#445146]">Contraseña del kiosco</span>
             <input
               className="rounded-[1.4rem] border border-black/10 bg-white/90 px-5 py-4 text-lg outline-none focus:border-[#31584d] focus:ring-4 focus:ring-[#a7c957]/30"
               type="password"
@@ -80,7 +80,7 @@ export function CatalogLogin() {
             className="app-button-primary rounded-[1.4rem] px-5 py-4 text-lg font-black disabled:opacity-60"
             disabled={submitting}
           >
-            {submitting ? "Abriendo..." : "Entrar al catalogo"}
+            {submitting ? "Abriendo..." : "Entrar al catálogo"}
           </button>
         </form>
       </section>

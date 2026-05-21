@@ -13,7 +13,7 @@ function countTypeLabel(type: string) {
   if (type === "PARTIAL") return "Parcial";
   if (type === "FULL") return "Completo";
   if (type === "CLOSING") return "Cierre";
-  if (type === "AUDIT") return "Auditoria";
+  if (type === "AUDIT") return "Auditoría";
   return type;
 }
 

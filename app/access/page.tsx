@@ -174,7 +174,7 @@ export default function AccessPage() {
           ref={inputRef}
           autoFocus
           className="w-full rounded border p-4 text-xl"
-          placeholder="Escanea la chapita o pega el codigo"
+          placeholder="Escanea la chapita o pega el código"
           value={rfidInput}
           onChange={(e) => setRfidInput(e.target.value)}
           autoComplete="off"

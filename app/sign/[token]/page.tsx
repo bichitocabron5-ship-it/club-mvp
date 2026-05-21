@@ -48,7 +48,7 @@ export default function SignPage() {
       if (cancelled) return;
 
       if (!res.ok) {
-        setError(data.error || "La sesión de firma no está disponible");
+        setError(data.error || "La sesi?n de firma no est? disponible");
         return;
       }
 
@@ -102,7 +102,7 @@ export default function SignPage() {
   if (error) {
     return (
       <main className="p-6 text-center">
-        <h1 className="text-2xl font-bold text-red-700">Sesión no disponible</h1>
+        <h1 className="text-2xl font-bold text-red-700">Sesi?n no disponible</h1>
         <p className="mt-2">{error}</p>
       </main>
     );
@@ -128,7 +128,7 @@ export default function SignPage() {
           Socio: <strong>{session.member.fullName}</strong>
         </p>
         <p className="text-sm text-gray-600">
-          Nº de socio:{" "}
+          N? de socio:{" "}
           <strong>{session.member.memberNumber ?? session.member.id}</strong>
         </p>
         <p className="text-sm text-gray-500">
@@ -210,7 +210,7 @@ export default function SignPage() {
 
         <input
           className="w-full border p-3"
-          placeholder="Telefono"
+          placeholder="Tel?fono"
           value={form.phone}
           onChange={(e) => setForm({ ...form, phone: e.target.value })}
         />
@@ -236,9 +236,9 @@ export default function SignPage() {
         <div className="grid gap-2 md:grid-cols-2">
           <div>Nombre completo: <strong>{form.fullName || "-"}</strong></div>
           <div>DNI: <strong>{form.dni || "-"}</strong></div>
-          <div>TelÃ©fono: <strong>{form.phone || "-"}</strong></div>
+          <div>Tel�fono: <strong>{form.phone || "-"}</strong></div>
           <div>Email: <strong>{form.email || "-"}</strong></div>
-          <div>DirecciÃ³n: <strong>{form.address || "-"}</strong></div>
+          <div>Direcci�n: <strong>{form.address || "-"}</strong></div>
           <div>Fecha nacimiento: <strong>{form.birthDate || "-"}</strong></div>
           <div>Consumo declarado: <strong>{form.consumptionGrams || "-"}</strong></div>
         </div>

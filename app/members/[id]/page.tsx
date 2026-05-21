@@ -230,7 +230,7 @@ export default function MemberDetail() {
         <div className="app-panel mb-4 rounded-3xl p-4 md:p-5">
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <div className="text-sm text-gray-500">Numero de socio</div>
+              <div className="text-sm text-gray-500">Número de socio</div>
               <div className="text-2xl font-semibold">
                 N° socio {visibleMemberNumber}
               </div>
@@ -245,7 +245,7 @@ export default function MemberDetail() {
 
           <div className="mt-4 grid gap-3 rounded-2xl border border-black/8 bg-gray-50 p-4 md:grid-cols-2">
             <div>
-              <div className="text-sm text-gray-500">Telefono</div>
+              <div className="text-sm text-gray-500">Teléfono</div>
               <div className="font-medium">{data.member.phone || "No indicado"}</div>
             </div>
             <div>
@@ -270,7 +270,7 @@ export default function MemberDetail() {
 
               {data.member.expiresAt && new Date(data.member.expiresAt) < new Date() && (
                 <span className="rounded bg-red-100 px-3 py-1 text-red-700">
-                  Membresia caducada
+                  Membresía caducada
                 </span>
               )}
 
@@ -401,7 +401,7 @@ export default function MemberDetail() {
 
               <input
                 className="w-full rounded-2xl border border-black/10 bg-white p-3"
-                placeholder="Numero de socio"
+                placeholder="Número de socio"
                 value={editForm.memberNumber}
                 onChange={(e) =>
                   setEditForm({ ...editForm, memberNumber: e.target.value })
@@ -428,7 +428,7 @@ export default function MemberDetail() {
 
               <input
                 className="w-full rounded-2xl border border-black/10 bg-white p-3"
-                placeholder="Telefono"
+                placeholder="Teléfono"
                 value={editForm.phone}
                 onChange={(e) =>
                   setEditForm({ ...editForm, phone: e.target.value })
@@ -455,14 +455,14 @@ export default function MemberDetail() {
 
               <input
                 className="w-full rounded-2xl border border-black/10 bg-white p-3"
-                placeholder="Escanea la chapita o pega el codigo"
+                placeholder="Escanea la chapita o pega el código"
                 value={editForm.rfidCode}
                 onChange={(e) =>
                   setEditForm({ ...editForm, rfidCode: e.target.value })
                 }
               />
               <p className="text-sm text-gray-500">
-                Escanea la chapita o pega el codigo.
+                Escanea la chapita o pega el código.
               </p>
 
               {authReady && isAdmin && (
@@ -554,13 +554,13 @@ export default function MemberDetail() {
                     ref={rfidRef}
                     autoFocus
                     className="w-full rounded-2xl border border-blue-500 bg-white p-3"
-                    placeholder="Escanea la chapita o pega el codigo"
+                    placeholder="Escanea la chapita o pega el código"
                     value={rfidInput}
                     onChange={(e) => setRfidInput(e.target.value)}
                     disabled={rfidProcessing}
                   />
                   <p className="text-sm text-gray-500">
-                    Escanea la chapita o pega el codigo.
+                    Escanea la chapita o pega el código.
                   </p>
                 </form>
               )}
@@ -619,7 +619,7 @@ export default function MemberDetail() {
 
               {(contract.phone || contract.email) && (
                 <div className="mt-2 grid gap-2 text-sm text-gray-700 md:grid-cols-2">
-                  <div>Telefono: {contract.phone || "No indicado"}</div>
+                  <div>Teléfono: {contract.phone || "No indicado"}</div>
                   <div>Email: {contract.email || "No indicado"}</div>
                 </div>
               )}

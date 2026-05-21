@@ -37,7 +37,7 @@ export async function getSaleMemberStatus(memberId: number) {
   }
 
   if (member.expiresAt && member.expiresAt < new Date()) {
-    return { error: "Membresia caducada", status: 400 as const };
+    return { error: "Membresía caducada", status: 400 as const };
   }
 
   if (!contract) {

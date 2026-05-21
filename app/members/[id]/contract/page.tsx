@@ -24,7 +24,7 @@ export default function MemberContractPage() {
     const data = await res.json();
 
     if (!res.ok) {
-      setError(data.error || "No se pudo crear la sesiÃ³n de firma");
+      setError(data.error || "No se pudo crear la sesi�n de firma");
       return;
     }
 

@@ -41,9 +41,9 @@ export function ProductMenu({
   loading = false,
   error = "",
   note = "Solo lectura. Sin stock ni datos internos.",
-  searchPlaceholder = "Buscar por nombre, categoria o subtipo",
+  searchPlaceholder = "Buscar por nombre, categoría o subtipo",
   emptyMessage = "No hay productos que coincidan con los filtros.",
-  logoutLabel = "Salir catalogo",
+  logoutLabel = "Salir del catálogo",
   loggingOut = false,
   onLogout = null,
 }: ProductMenuProps) {
@@ -205,7 +205,7 @@ export function ProductMenu({
               setCategory(event.target.value as "ALL" | ProductCategory)
             }
           >
-            <option value="ALL">Todas las categorias</option>
+            <option value="ALL">Todas las categorías</option>
             {categoryOptions.map((item) => (
               <option key={item.value} value={item.value}>
                 {item.label}
@@ -322,7 +322,7 @@ export function ProductMenu({
                         </p>
                       ) : (
                         <p className="min-h-12 text-sm leading-6 text-[#7c877e]">
-                          Seleccion disponible sin descripcion adicional.
+                          Selección disponible sin descripción adicional.
                         </p>
                       )}
 

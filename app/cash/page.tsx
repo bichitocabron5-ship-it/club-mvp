@@ -59,7 +59,7 @@ function formatInventoryLabel(count: DayClosureInventoryOption) {
     minute: "2-digit",
   });
 
-  return `#${count.id} ${count.type} · ${count.status} · ${timestamp}`;
+  return `#${count.id} ${count.type} · ${count.status === "OPEN" ? "Abierto" : count.status === "CONFIRMED" ? "Confirmado" : count.status === "CANCELLED" ? "Cancelado" : count.status} · ${timestamp}`;
 }
 
 export default function CashPage() {
@@ -174,7 +174,7 @@ export default function CashPage() {
 
       if (!res.ok) {
         const err = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(err?.error || "Error al cerrar el dia");
+        throw new Error(err?.error || "Error al cerrar el día");
       }
 
       setCountedCash("");
@@ -210,7 +210,7 @@ export default function CashPage() {
 
       if (!res.ok) {
         const err = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(err?.error || "Error al reabrir el dia");
+        throw new Error(err?.error || "Error al reabrir el día");
       }
 
       setReopenReason("");
@@ -242,7 +242,7 @@ export default function CashPage() {
 
       {hasOpenInventoryCounts ? (
         <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          Hay {summary?.inventoryCountsOpenCount} conteo(s) OPEN de hoy. Puedes
+          Hay {summary?.inventoryCountsOpenCount} conteo(s) abiertos hoy. Puedes
           vincular uno al cierre, pero conviene revisarlos antes de cerrar caja.
         </div>
       ) : null}
@@ -292,7 +292,7 @@ export default function CashPage() {
             {formatCurrency(Number(summary?.discountsTotal || 0))}
           </div>
           <div className="mt-1 text-xs text-gray-500">
-            Impacto aplicado en ventas del dia
+            Impacto aplicado en ventas del día
           </div>
         </div>
       </div>
@@ -336,7 +336,7 @@ export default function CashPage() {
             <div>
               <h2 className="text-xl font-black">Cierre del dia completado</h2>
               <p className="mt-1 text-sm text-gray-500">
-                Dia {closure?.day} · creado el{" "}
+                Dia {closure?.day} ? creado el{" "}
                 {closure?.createdAt
                   ? new Date(closure.createdAt).toLocaleString()
                   : "-"}
@@ -391,7 +391,7 @@ export default function CashPage() {
 
           {isAdmin ? (
             <div className="mt-4 rounded-2xl border border-black/8 bg-white/70 p-4">
-              <div className="mb-2 font-semibold">Reabrir dia</div>
+              <div className="mb-2 font-semibold">Reabrir día</div>
               <textarea
                 className="mb-3 min-h-24 w-full rounded-2xl border border-black/10 bg-white/80 p-3"
                 placeholder="Motivo obligatorio de reapertura"
@@ -405,16 +405,16 @@ export default function CashPage() {
                 className="rounded-2xl bg-amber-500 px-4 py-3 font-bold text-white disabled:opacity-60"
                 disabled={saving}
               >
-                Reabrir dia
+                Reabrir día
               </button>
             </div>
           ) : null}
         </div>
       ) : (
         <div className="app-panel mb-6 rounded-3xl p-4 md:p-5">
-          <h2 className="text-xl font-black">Preparar cierre del dia</h2>
+          <h2 className="text-xl font-black">Preparar cierre del día</h2>
           <p className="mt-1 text-sm text-gray-500">
-            El servidor recalculara ventas, gastos, movimientos manuales,
+            El servidor recalculará ventas, gastos, movimientos manuales,
             descuentos y caja esperada antes de guardar el cierre.
           </p>
 
@@ -477,11 +477,11 @@ export default function CashPage() {
                 className="app-button-danger rounded-2xl px-5 py-3 font-bold text-white disabled:opacity-60"
                 disabled={saving}
               >
-                Cerrar dia
+                Cerrar día
               </button>
             ) : (
               <div className="text-sm text-gray-500">
-                Solo ADMIN puede cerrar el dia.
+                Solo el administrador puede cerrar el día.
               </div>
             )}
           </div>
@@ -516,7 +516,7 @@ export default function CashPage() {
                   <div>{move.note || "Sin nota"}</div>
                   <div className="mt-1 text-xs text-gray-500">
                     {formatPaymentMethodLabel(move.paymentMethod)}
-                    {move.createdByUser?.name ? ` · ${move.createdByUser.name}` : ""}
+                    {move.createdByUser?.name ? ` ? ${move.createdByUser.name}` : ""}
                   </div>
                 </div>
 

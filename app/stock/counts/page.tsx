@@ -16,7 +16,7 @@ const COUNT_TYPE_OPTIONS: Array<{ value: InventoryCountType; label: string }> = 
   { value: "PARTIAL", label: "Parcial" },
   { value: "FULL", label: "Completo" },
   { value: "CLOSING", label: "Cierre" },
-  { value: "AUDIT", label: "Auditoria" },
+  { value: "AUDIT", label: "Auditoría" },
 ];
 
 function countTypeLabel(type: string) {
@@ -256,7 +256,7 @@ export default function InventoryCountsPage() {
             </div>
 
             {counts.length === 0 && (
-              <EmptyState message="Todavia no hay conteos registrados." />
+              <EmptyState message="Todavía no hay conteos registrados." />
             )}
 
             <div className="space-y-3">

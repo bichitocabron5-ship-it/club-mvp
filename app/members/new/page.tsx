@@ -360,13 +360,13 @@ export default function NewMemberPage() {
                       ref={rfidRef}
                       autoFocus
                       className="w-full rounded-2xl border border-blue-500 bg-white p-4 text-xl"
-                      placeholder="Escanea la chapita o pega el codigo"
+                      placeholder="Escanea la chapita o pega el código"
                       value={rfidInput}
                       onChange={(e) => setRfidInput(e.target.value)}
                       disabled={rfidProcessing}
                     />
                     <p className="text-sm text-gray-500">
-                      Escanea la chapita o pega el codigo.
+                      Escanea la chapita o pega el código.
                     </p>
                   </form>
                 )}

@@ -36,8 +36,8 @@ const PRODUCT_CATEGORIES = [
   { value: "ALL", label: "Todo" },
   { value: "CANNABIS", label: "Cannabis" },
   { value: "SATIVA", label: "Sativa" },
-  { value: "INDICA", label: "Índica" },
-  { value: "HYBRID", label: "Híbrida" },
+  { value: "INDICA", label: "?ndica" },
+  { value: "HYBRID", label: "H?brida" },
   { value: "CBD", label: "CBD" },
   { value: "RESIN", label: "Resina" },
   { value: "HASH", label: "Hash" },
@@ -370,13 +370,13 @@ export default function SalesPage() {
         <div>
           <h1 className="text-3xl font-black tracking-tight">TPV de retiradas</h1>
           <p className="text-sm app-muted">
-            Modo mostrador/tablet · carrito multi-producto
+            Modo mostrador/tablet ? carrito multi-producto
           </p>
         </div>
 
         <div className="app-panel rounded-2xl p-3 text-sm">
           Hoy: <strong>{visibleToday.grams.toFixed(2)} g</strong> / {DAILY_LIMIT_G} g
-          {" · "}
+          {" ? "}
           <strong>{visibleToday.units.toFixed(0)} ud</strong> / {DAILY_LIMIT_UD} ud
         </div>
       </div>
@@ -427,7 +427,7 @@ export default function SalesPage() {
               <option value="">Selecciona socio</option>
               {filteredMembers.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.fullName} {m.dni ? `— ${m.dni}` : ""}
+                  {m.fullName} {m.dni ? `? ${m.dni}` : ""}
                 </option>
               ))}
             </select>
@@ -477,11 +477,11 @@ export default function SalesPage() {
 
                     {memberStatus.expired ? (
                       <span className="rounded bg-red-100 px-3 py-1 text-red-700">
-                        Membresía caducada
+                        Membres?a caducada
                       </span>
                     ) : (
                       <span className="rounded bg-blue-100 px-3 py-1 text-blue-700">
-                        Membresía vigente
+                        Membres?a vigente
                       </span>
                     )}
 
@@ -516,7 +516,7 @@ export default function SalesPage() {
           </div>
 
           <div className="app-panel rounded-3xl p-4">
-            <div className="mb-2 text-sm font-medium">Categorías rápidas</div>
+            <div className="mb-2 text-sm font-medium">Categor?as r?pidas</div>
 
             <div className="flex flex-wrap gap-2">
               {PRODUCT_CATEGORIES.map((category) => (
@@ -596,12 +596,12 @@ export default function SalesPage() {
                   <div className="mt-1 text-xs font-bold text-gray-500">
                     {product.category}
                     {product.hashType
-                      ? ` · ${hashTypeLabelMap.get(product.hashType) ?? product.hashType}`
+                      ? ` ? ${hashTypeLabelMap.get(product.hashType) ?? product.hashType}`
                       : ""}
                   </div>
 
                   <div className="mt-2 text-2xl font-bold text-blue-700">
-                    {Number(product.price).toFixed(2)} €
+                    {Number(product.price).toFixed(2)} ?
                   </div>
 
                   <div className="text-xs text-gray-500">
@@ -616,7 +616,7 @@ export default function SalesPage() {
                   </div>
 
                   <div className="mt-3 rounded bg-gray-900 px-3 py-2 text-center text-sm font-bold text-white">
-                    {noStock ? "SIN STOCK" : "AÑADIR"}
+                    {noStock ? "SIN STOCK" : "A?ADIR"}
                   </div>
                 </button>
               );
@@ -628,7 +628,7 @@ export default function SalesPage() {
           <h2 className="mb-3 text-lg font-bold">Carrito</h2>
 
           {cartLines.length === 0 && (
-            <EmptyState message="AÃ±ade productos para registrar una retirada." />
+            <EmptyState message="A�ade productos para registrar una retirada." />
           )}
 
           <div className="space-y-3">
@@ -692,7 +692,7 @@ export default function SalesPage() {
                     </div>
                     {line.discountAmount > 0 && (
                       <div className="mt-1 text-xs text-blue-700">
-                        Antes: {line.originalAmount.toFixed(2)} EUR · descuento{" "}
+                        Antes: {line.originalAmount.toFixed(2)} EUR ? descuento{" "}
                         {line.discountAmount.toFixed(2)} EUR
                       </div>
                     )}
@@ -726,7 +726,7 @@ export default function SalesPage() {
             <strong className={overGrams ? "text-red-600" : "text-green-700"}>
               {gramsAfter.toFixed(2)} g
             </strong>
-            {" · "}
+            {" ? "}
             <strong className={overUnits ? "text-red-600" : "text-green-700"}>
               {unitsAfter.toFixed(0)} ud
             </strong>
@@ -734,13 +734,13 @@ export default function SalesPage() {
 
           {overGrams && (
             <div className="mt-3 rounded-2xl bg-red-100 p-3 text-sm text-red-700">
-              Se supera el limite diario de {DAILY_LIMIT_G} g.
+              Se supera el límite diario de {DAILY_LIMIT_G} g.
             </div>
           )}
 
           {overUnits && (
             <div className="mt-3 rounded-2xl bg-red-100 p-3 text-sm text-red-700">
-              Se supera el limite diario de {DAILY_LIMIT_UD} ud.
+              Se supera el límite diario de {DAILY_LIMIT_UD} ud.
             </div>
           )}
 

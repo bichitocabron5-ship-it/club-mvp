@@ -104,7 +104,7 @@ async function getSaleMemberStatusTx(
   }
 
   if (member.expiresAt && member.expiresAt < new Date()) {
-    throw new Error("Membresia caducada");
+    throw new Error("Membresía caducada");
   }
 
   if (!contract) {

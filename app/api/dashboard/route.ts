@@ -137,7 +137,7 @@ export async function GET() {
 
     return NextResponse.json(
       {
-        error: `Configuracion incompleta del servidor. Faltan: ${missingEnvVars.join(", ")}`,
+        error: `Configuración incompleta del servidor. Faltan: ${missingEnvVars.join(", ")}`,
       },
       { status: 500 }
     );
@@ -384,7 +384,7 @@ export async function GET() {
         id: "day-closure-closed",
         type: "DAY_CLOSED",
         severity: "info",
-        title: "Caja del dia cerrada",
+        title: "Caja del día cerrada",
         description: `El cierre de ${day} ya esta registrado.`,
         href: "/cash",
       });
@@ -431,7 +431,7 @@ export async function GET() {
         type: "LOW_STOCK",
         severity: "danger",
         title: "Productos con stock bajo",
-        description: `${lowStockProducts.length} producto(s) estan por debajo del minimo configurado.`,
+        description: `${lowStockProducts.length} producto(s) están por debajo del mínimo configurado.`,
         href: "/stock",
       });
     }
@@ -442,7 +442,7 @@ export async function GET() {
         type: "HIGH_DISCOUNT_SALES",
         severity: "warning",
         title: "Ventas con descuentos altos",
-        description: `${highDiscountSalesCount} venta(s) superan el umbral de descuento del dia.`,
+        description: `${highDiscountSalesCount} venta(s) superan el umbral de descuento del día.`,
         href: "/sales",
       });
     }
@@ -685,7 +685,7 @@ export async function GET() {
         error:
           error instanceof Error
             ? error.message
-            : "Error interno cargando el dashboard",
+            : "Error interno cargando el panel",
       },
       { status: 500 }
     );

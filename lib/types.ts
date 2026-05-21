@@ -32,14 +32,14 @@ export const PRODUCT_CATEGORIES: ReadonlyArray<{
   { value: "CANNABIS", label: "Cannabis" },
   { value: "SATIVA", label: "Sativa" },
   { value: "INDICA", label: "Indica" },
-  { value: "HYBRID", label: "Hibrida" },
+  { value: "HYBRID", label: "Híbrida" },
   { value: "CBD", label: "CBD" },
   { value: "RESIN", label: "Resin" },
   { value: "HASH", label: "Hash" },
   { value: "JOINT", label: "Joint" },
-  { value: "DRINK", label: "Drink" },
-  { value: "FOOD", label: "Food" },
-  { value: "MERCH", label: "Merch" },
+  { value: "DRINK", label: "Bebida" },
+  { value: "FOOD", label: "Comida" },
+  { value: "MERCH", label: "Merchandising" },
 ] as const;
 
 export const PRODUCT_HASH_TYPES: ReadonlyArray<{

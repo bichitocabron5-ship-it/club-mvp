@@ -162,7 +162,7 @@ export default function MembersPage() {
 
           <input
             className="rounded-2xl border border-black/10 bg-white/80 p-3"
-            placeholder="Telefono"
+            placeholder="Teléfono"
             value={form.phone}
             onChange={(e) => setForm({ ...form, phone: e.target.value })}
           />

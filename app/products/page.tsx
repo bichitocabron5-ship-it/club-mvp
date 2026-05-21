@@ -277,7 +277,7 @@ export default function ProductsPage() {
         products={staffCatalogProducts}
         loading={loading || status === "loading"}
         error={error}
-        note="Solo lectura para STAFF. Se ocultan stock, minimos, costes y controles de gestion."
+        note="Solo lectura para personal. Se ocultan stock, mínimos, costes y controles de gestión."
       />
     );
   }
@@ -287,7 +287,7 @@ export default function ProductsPage() {
       <div className="mb-6">
         <h1 className="text-3xl font-black tracking-tight">Productos</h1>
         <p className="mt-2 text-sm app-muted">
-          Gestion completa para ADMIN con catalogo, stock, minimos, activacion e imagenes.
+          Gestión completa para administrador con catálogo, stock, mínimos, activación e imágenes.
         </p>
       </div>
 
@@ -398,7 +398,7 @@ export default function ProductsPage() {
           type="number"
           min="0"
           step="0.01"
-          placeholder="Stock minimo"
+          placeholder="Stock mínimo"
           value={form.minStock}
           onChange={(e) => setForm({ ...form, minStock: e.target.value })}
         />
@@ -492,7 +492,7 @@ export default function ProductsPage() {
                         {(Number(product.stock) + Number(product.reserveStock)).toFixed(2)} {product.unit}
                       </div>
                       <div className="text-sm text-gray-500">
-                        Minimo: {Number(product.minStock).toFixed(2)} {product.unit}
+                        Mínimo: {Number(product.minStock).toFixed(2)} {product.unit}
                       </div>
                     </div>
                   </div>
@@ -597,7 +597,7 @@ export default function ProductsPage() {
                         onChange={(e) =>
                           setEditForm({ ...editForm, minStock: e.target.value })
                         }
-                        placeholder="Stock minimo"
+                        placeholder="Stock mínimo"
                       />
 
                       <input

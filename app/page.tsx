@@ -33,6 +33,19 @@ function formatTime(value: string) {
   });
 }
 
+function formatAccessType(value: string) {
+  if (value === "IN") return "Entrada";
+  if (value === "OUT") return "Salida";
+  return value;
+}
+
+function formatClosureStatus(value: string | undefined) {
+  if (value === "OPEN") return "Abierto";
+  if (value === "CLOSED") return "Cerrado";
+  if (value === "REOPENED") return "Reabierto";
+  return value ?? "-";
+}
+
 function alertClassName(alert: DashboardAlert) {
   switch (alert.severity) {
     case "danger":
@@ -78,7 +91,7 @@ const adminQuickLinks = [
   { href: "/cash", label: "Caja", description: "Cierre y movimientos" },
   { href: "/stock/counts", label: "Conteos", description: "Inventario abierto" },
   { href: "/stock", label: "Stock", description: "Niveles y ajustes" },
-  { href: "/admin/audit", label: "Auditoria", description: "Trazabilidad" },
+  { href: "/admin/audit", label: "AuditorÃ­a", description: "Trazabilidad" },
   { href: "/members/new", label: "Alta socio", description: "Nuevo miembro" },
 ];
 
@@ -98,7 +111,7 @@ function QuickLinks({
     <section className="app-panel-strong rounded-[2rem] p-5">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-black">Accesos rapidos</h2>
+          <h2 className="text-lg font-black">Accesos rÃ¡pidos</h2>
           <p className="mt-1 text-sm app-muted">Atajos a las tareas del turno.</p>
         </div>
       </div>
@@ -119,11 +132,11 @@ function QuickLinks({
   );
 }
 
-export default function DashboardPage() {
+export default function PanelPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState("");
 
-  async function loadDashboard() {
+  async function loadPanel() {
     try {
       const json = await fetchJson<DashboardData>("/api/dashboard");
       setData(json);
@@ -132,15 +145,15 @@ export default function DashboardPage() {
       console.error("[dashboard] Error loading /api/dashboard", err);
       setError(
         err instanceof Error
-          ? `No se pudo cargar el dashboard: ${err.message}`
-          : "No se pudo cargar el dashboard"
+          ? `No se pudo cargar el panel: ${err.message}`
+          : "No se pudo cargar el panel"
       );
     }
   }
 
   useEffect(() => {
     const timeout = setTimeout(() => {
-      void loadDashboard();
+      void loadPanel();
     }, 0);
 
     return () => clearTimeout(timeout);
@@ -150,8 +163,8 @@ export default function DashboardPage() {
     return (
       <main className="mx-auto max-w-7xl p-4 md:p-6">
         <PageHeader
-          title="Dashboard"
-          description="Resumen diario del club para abrir el dia con criterio operativo."
+          title="Panel"
+          description="Resumen diario del club para abrir el dÃ­a con criterio operativo."
         />
         <EmptyState message={error} />
       </main>
@@ -159,7 +172,7 @@ export default function DashboardPage() {
   }
 
   if (!data) {
-    return <main className="p-6 app-muted">Cargando dashboard...</main>;
+    return <main className="p-6 app-muted">Cargando panel...</main>;
   }
 
   const isAdmin = data.role === "ADMIN";
@@ -169,8 +182,8 @@ export default function DashboardPage() {
     return (
       <main className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
         <PageHeader
-          title="Dashboard operativo"
-          description="Vista reducida para STAFF con accesos directos y alertas operativas basicas."
+          title="Panel operativo"
+          description="Vista reducida para personal con accesos directos y alertas operativas bÃ¡sicas."
         />
 
         <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -190,7 +203,7 @@ export default function DashboardPage() {
           <section className="app-panel rounded-[2rem] p-5">
             <h2 className="text-lg font-black">Stock bajo</h2>
             <p className="mt-1 text-sm app-muted">
-              Productos por debajo del minimo configurado.
+              Productos por debajo del mÃ­nimo configurado.
             </p>
 
             <div className="mt-4 space-y-2">
@@ -205,7 +218,7 @@ export default function DashboardPage() {
                     <div>
                       <div className="font-semibold">{product.name}</div>
                       <div className="text-sm app-muted">
-                        Minimo {product.minStock.toFixed(2)} {product.unit}
+                        MÃ­nimo {product.minStock.toFixed(2)} {product.unit}
                       </div>
                     </div>
                     <div className="font-black text-red-700">
@@ -218,7 +231,7 @@ export default function DashboardPage() {
           </section>
 
           <section className="app-panel rounded-[2rem] p-5">
-            <h2 className="text-lg font-black">Ultimos accesos</h2>
+            <h2 className="text-lg font-black">Ãšltimos accesos</h2>
             <p className="mt-1 text-sm app-muted">
               Movimiento reciente de socios en el acceso.
             </p>
@@ -244,7 +257,7 @@ export default function DashboardPage() {
                             : "bg-sky-100 text-sky-700"
                         }`}
                       >
-                        {log.type}
+                        {formatAccessType(log.type)}
                       </div>
                       <div className="mt-1 text-xs app-muted">{formatTime(log.createdAt)}</div>
                     </div>
@@ -261,7 +274,7 @@ export default function DashboardPage() {
   return (
     <main className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
       <PageHeader
-        title="Dashboard ejecutivo admin v2"
+        title="Panel ejecutivo"
         description={`Corte generado ${formatDateTime(data.generatedAt)} con beneficio basado en Sale.profit y costes congelados por venta.`}
       />
 
@@ -292,7 +305,7 @@ export default function DashboardPage() {
 
       {data.summary.marginIsEstimated ? (
         <div className="rounded-[1.5rem] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          El margen de hoy es estimado porque existen ventas sin coste historico completo.
+          El margen de hoy es estimado porque existen ventas sin coste histÃ³rico completo.
         </div>
       ) : null}
 
@@ -302,7 +315,7 @@ export default function DashboardPage() {
         <section className="app-panel-strong rounded-[2rem] p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 className="text-lg font-black">Caja del dia</h2>
+              <h2 className="text-lg font-black">Caja del dÃ­a</h2>
               <p className="mt-1 text-sm app-muted">
                 Estado actual del cierre y caja esperada.
               </p>
@@ -316,7 +329,7 @@ export default function DashboardPage() {
                     : "bg-sky-100 text-sky-800"
               }`}
             >
-              {data.cash?.dayClosureStatus}
+              {formatClosureStatus(data.cash?.dayClosureStatus)}
             </div>
           </div>
 
@@ -361,7 +374,7 @@ export default function DashboardPage() {
             <div>
               <h2 className="text-lg font-black">Stock valorizado</h2>
               <p className="mt-1 text-sm app-muted">
-                Valor comercial y coste estimado del stock fisico.
+                Valor comercial y coste estimado del stock fÃ­sico.
               </p>
             </div>
             {data.stockSummary?.stockCostValueEstimated ? (
@@ -385,13 +398,13 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className="rounded-[1.5rem] border border-black/8 bg-white/85 p-4">
-              <div className="text-sm app-muted">Valor stock fisico</div>
+              <div className="text-sm app-muted">Valor del stock fÃ­sico</div>
               <div className="mt-1 text-3xl font-black">
                 {formatCurrency(data.stockSummary?.totalPhysicalStockValue || 0)}
               </div>
             </div>
             <div className="rounded-[1.5rem] border border-black/8 bg-white/85 p-4">
-              <div className="text-sm app-muted">Coste stock fisico</div>
+              <div className="text-sm app-muted">Coste del stock fÃ­sico</div>
               <div className="mt-1 text-3xl font-black">
                 {formatCurrency(data.stockSummary?.stockCostValue || 0)}
               </div>
@@ -420,7 +433,7 @@ export default function DashboardPage() {
                     <div>
                       <div className="font-semibold">{product.name}</div>
                       <div className="mt-1 text-sm app-muted">
-                        {product.salesCount} venta(s) · {formatQty(product.qty, product.unit)}
+                        {product.salesCount} venta(s) Â· {formatQty(product.qty, product.unit)}
                       </div>
                     </div>
                     <MarginBadge
@@ -465,7 +478,7 @@ export default function DashboardPage() {
                     <div>
                       <div className="font-semibold">{member.fullName}</div>
                       <div className="mt-1 text-sm app-muted">
-                        {member.dni} · {member.salesCount} venta(s) · {formatQty(member.totalQty)}
+                        {member.dni} Â· {member.salesCount} venta(s) Â· {formatQty(member.totalQty)}
                       </div>
                     </div>
                     <MarginBadge
@@ -496,7 +509,7 @@ export default function DashboardPage() {
 
       <section className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
         <section className="app-panel rounded-[2rem] p-5">
-          <h2 className="text-lg font-black">Finanzas ultimos 7 dias</h2>
+          <h2 className="text-lg font-black">Finanzas Ãºltimos 7 dÃ­as</h2>
           <p className="mt-1 text-sm app-muted">
             Ingresos y gastos de caja junto al beneficio bruto por ventas.
           </p>
@@ -515,21 +528,21 @@ export default function DashboardPage() {
                     <div className="text-xs app-muted">{day.salesCount} venta(s)</div>
                   </div>
                   <div>
-                    <div className="text-xs uppercase tracking-[0.18em] app-muted">Income</div>
+                    <div className="text-xs uppercase tracking-[0.18em] app-muted">Ingresos</div>
                     <div className="font-black">{formatCurrency(day.income)}</div>
                   </div>
                   <div>
-                    <div className="text-xs uppercase tracking-[0.18em] app-muted">Expense</div>
+                    <div className="text-xs uppercase tracking-[0.18em] app-muted">Gastos</div>
                     <div className="font-black text-red-700">{formatCurrency(day.expense)}</div>
                   </div>
                   <div>
                     <div className="text-xs uppercase tracking-[0.18em] app-muted">
-                      Gross profit
+                      Beneficio bruto
                     </div>
                     <div className="font-black">{formatCurrency(day.grossProfit)}</div>
                   </div>
                   <div>
-                    <div className="text-xs uppercase tracking-[0.18em] app-muted">Net profit</div>
+                    <div className="text-xs uppercase tracking-[0.18em] app-muted">Beneficio neto</div>
                     <div
                       className={`font-black ${
                         day.netProfit >= 0 ? "text-emerald-700" : "text-red-700"
@@ -547,7 +560,7 @@ export default function DashboardPage() {
         <section className="app-panel rounded-[2rem] p-5">
           <h2 className="text-lg font-black">Ventas recientes</h2>
           <p className="mt-1 text-sm app-muted">
-            Ultimas ventas del dia con coste unitario congelado y beneficio.
+            Ãšltimas ventas del dÃ­a con coste unitario congelado y beneficio.
           </p>
 
           <div className="mt-4 space-y-2">
@@ -562,10 +575,10 @@ export default function DashboardPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="font-semibold">
-                        {sale.member.fullName} · {sale.product.name}
+                        {sale.member.fullName} Â· {sale.product.name}
                       </div>
                       <div className="mt-1 text-sm app-muted">
-                        {formatQty(sale.qty, sale.product.unit)} · {formatTime(sale.createdAt)}
+                        {formatQty(sale.qty, sale.product.unit)} Â· {formatTime(sale.createdAt)}
                       </div>
                     </div>
                     <div className="text-right">
@@ -578,7 +591,7 @@ export default function DashboardPage() {
                   <div className="mt-3 grid gap-2 sm:grid-cols-3">
                     <div className="rounded-2xl bg-black/[0.03] px-3 py-2">
                       <div className="text-xs uppercase tracking-[0.18em] app-muted">
-                        Unit cost
+                        Coste unitario
                       </div>
                       <div className="mt-1 font-black">
                         {formatCurrency(sale.unitCost || 0)}
@@ -586,7 +599,7 @@ export default function DashboardPage() {
                     </div>
                     <div className="rounded-2xl bg-black/[0.03] px-3 py-2">
                       <div className="text-xs uppercase tracking-[0.18em] app-muted">
-                        Discount
+                        Descuento
                       </div>
                       <div className="mt-1 font-black">
                         {formatCurrency(sale.discountAmount || 0)}
@@ -594,7 +607,7 @@ export default function DashboardPage() {
                     </div>
                     <div className="rounded-2xl bg-black/[0.03] px-3 py-2">
                       <div className="text-xs uppercase tracking-[0.18em] app-muted">
-                        Profit
+                        Beneficio
                       </div>
                       <div className="mt-1 font-black">{formatCurrency(sale.profit || 0)}</div>
                     </div>
@@ -648,13 +661,13 @@ export default function DashboardPage() {
         <section className="app-panel rounded-[2rem] p-5">
           <h2 className="text-lg font-black">Ultimas acciones</h2>
           <p className="mt-1 text-sm app-muted">
-            Ultimos eventos de auditoria registrados en el sistema.
+            Ãšltimos eventos de auditorÃ­a registrados en el sistema.
           </p>
 
           <div className="mt-4 space-y-3">
             {data.recentAuditLogs.length === 0 ? (
               <EmptyState
-                message="Sin eventos recientes de auditoria."
+                message="Sin eventos recientes de auditorÃ­a."
                 className="rounded-[1.5rem]"
               />
             ) : (
@@ -667,7 +680,7 @@ export default function DashboardPage() {
                     <div>
                       <div className="font-semibold">{log.summary}</div>
                       <div className="mt-1 text-sm app-muted">
-                        {log.actorUser?.name || log.actorEmail || "Sistema"} · {log.entityType}
+                        {log.actorUser?.name || log.actorEmail || "Sistema"} Â· {log.entityType}
                         {log.entityId ? ` #${log.entityId}` : ""}
                       </div>
                     </div>
@@ -696,7 +709,7 @@ export default function DashboardPage() {
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <div className="rounded-[1.5rem] border border-black/8 bg-white/85 p-4">
-              <div className="text-sm app-muted">Socios con acceso IN hoy</div>
+              <div className="text-sm app-muted">Socios con entrada hoy</div>
               <div className="mt-1 text-3xl font-black">{data.summary.activeMembersToday}</div>
             </div>
             <div className="rounded-[1.5rem] border border-black/8 bg-white/85 p-4">
@@ -726,7 +739,7 @@ export default function DashboardPage() {
                           : "bg-sky-100 text-sky-700"
                       }`}
                     >
-                      {log.type}
+                      {formatAccessType(log.type)}
                     </div>
                     <div className="mt-1 text-xs app-muted">{formatTime(log.createdAt)}</div>
                   </div>
@@ -739,7 +752,7 @@ export default function DashboardPage() {
         <section className="app-panel rounded-[2rem] p-5">
           <h2 className="text-lg font-black">Stock bajo</h2>
           <p className="mt-1 text-sm app-muted">
-            Prioridades de reposicion o ajuste de inventario.
+            Prioridades de reposiciÃ³n o ajuste de inventario.
           </p>
 
           <div className="mt-4 grid gap-2">
@@ -754,7 +767,7 @@ export default function DashboardPage() {
                   <div>
                     <div className="font-semibold">{product.name}</div>
                     <div className="text-sm app-muted">
-                      Minimo {product.minStock.toFixed(2)} {product.unit}
+                      MÃ­nimo {product.minStock.toFixed(2)} {product.unit}
                     </div>
                   </div>
                   <div className="text-right">

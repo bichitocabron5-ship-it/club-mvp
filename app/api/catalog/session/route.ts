@@ -24,11 +24,11 @@ export async function POST(req: Request) {
   const parsed = catalogLoginSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Password invalida" }, { status: 400 });
+    return NextResponse.json({ error: "Contraseña inválida" }, { status: 400 });
   }
 
   if (!isCatalogPasswordValid(parsed.data.password)) {
-    return NextResponse.json({ error: "Password incorrecta" }, { status: 401 });
+    return NextResponse.json({ error: "Contraseña incorrecta" }, { status: 401 });
   }
 
   const response = NextResponse.json({ ok: true });

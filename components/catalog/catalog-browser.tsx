@@ -33,7 +33,7 @@ export function CatalogBrowser() {
             });
             return;
           }
-          throw new Error(data?.error || "No se pudo cargar el catalogo");
+          throw new Error(data?.error || "No se pudo cargar el catálogo");
         }
 
         const data = (await response.json()) as CatalogProductSummary[];
@@ -45,7 +45,7 @@ export function CatalogBrowser() {
       } catch (err) {
         if (active) {
           setError(
-            err instanceof Error ? err.message : "No se pudo cargar el catalogo"
+            err instanceof Error ? err.message : "No se pudo cargar el catálogo"
           );
         }
       } finally {
@@ -79,14 +79,14 @@ export function CatalogBrowser() {
 
   return (
     <ProductMenu
-      badge="Modo catalogo"
-      title="Catalogo visual"
-      description="Consulta rapida para mostrar el catalogo al socio en tablet o mostrador."
+      badge="Modo catálogo"
+      title="Catálogo visual"
+      description="Consulta rápida para mostrar el catálogo al socio en tablet o mostrador."
       products={products}
       loading={loading}
       error={error}
-      note="Solo lectura. Consulta protegida por clave de catalogo y sin datos internos."
-      logoutLabel="Salir catalogo"
+      note="Solo lectura. Consulta protegida por clave de catálogo y sin datos internos."
+      logoutLabel="Salir del catálogo"
       loggingOut={loggingOut}
       onLogout={handleLogout}
     />
