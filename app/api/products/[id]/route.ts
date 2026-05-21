@@ -16,6 +16,7 @@ const productPatchSchema = z
     description: z.string().trim().max(500).nullable().optional(),
     unit: z.string().trim().min(1).optional(),
     price: z.coerce.number().positive().optional(),
+    reserveStock: z.coerce.number().min(0).optional(),
     category: categorySchema.optional(),
     hashType: hashTypeSchema.nullable().optional(),
     minStock: z.coerce.number().min(0).optional(),
@@ -55,6 +56,7 @@ export async function PATCH(
       description: true,
       unit: true,
       price: true,
+      reserveStock: true,
       category: true,
       hashType: true,
       minStock: true,
@@ -100,6 +102,7 @@ export async function PATCH(
           : parsed.data.description?.trim() || null,
       unit,
       price: parsed.data.price,
+      reserveStock: parsed.data.reserveStock,
       category: parsed.data.category,
       hashType:
         nextCategory === "HASH"
@@ -120,6 +123,9 @@ export async function PATCH(
   }
   if (updated.unit !== existingProduct.unit) changedFields.push("unit");
   if (Number(updated.price) !== Number(existingProduct.price)) changedFields.push("price");
+  if (Number(updated.reserveStock) !== Number(existingProduct.reserveStock)) {
+    changedFields.push("reserveStock");
+  }
   if (updated.category !== existingProduct.category) changedFields.push("category");
   if ((updated.hashType ?? null) !== (existingProduct.hashType ?? null)) {
     changedFields.push("hashType");

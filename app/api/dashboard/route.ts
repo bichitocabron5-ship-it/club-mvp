@@ -30,6 +30,7 @@ function toProductSummary(product: {
   unit: string;
   price: number;
   stock: number;
+  reserveStock: number;
   minStock: number;
   imageUrl: string | null;
   category: string;
@@ -43,6 +44,7 @@ function toProductSummary(product: {
     unit: product.unit,
     price: Number(product.price),
     stock: Number(product.stock),
+    reserveStock: Number(product.reserveStock),
     imageUrl: product.imageUrl,
     category: product.category,
     hashType: product.hashType,
@@ -119,6 +121,7 @@ export async function GET() {
           unit: true,
           price: true,
           stock: true,
+          reserveStock: true,
           minStock: true,
           imageUrl: true,
           category: true,

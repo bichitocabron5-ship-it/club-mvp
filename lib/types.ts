@@ -151,6 +151,7 @@ export type ProductSummary = {
   unit: ProductUnit;
   price: number;
   stock: number;
+  reserveStock: number;
   imageUrl?: string | null;
   category: ProductCategory;
   hashType: ProductHashType | null;
@@ -498,7 +499,7 @@ export type AccessLogRecord = {
 export type StockMoveRecord = {
   id: number;
   productId: number;
-  type: "IN" | "OUT" | "ADJUST" | "INVENTORY_ADJUSTMENT" | string;
+  type: "IN" | "OUT" | "ADJUST" | "TRANSFER" | "INVENTORY_ADJUSTMENT" | string;
   qty: number;
   previousStock: number;
   newStock: number;

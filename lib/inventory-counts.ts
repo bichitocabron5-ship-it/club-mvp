@@ -8,7 +8,7 @@ type InventoryCountWithRelations = InventoryCount & {
   confirmedByUser: Pick<AppUser, "id" | "name" | "email"> | null;
   items: Array<
     InventoryCountItem & {
-      product?: Pick<Product, "id" | "name" | "unit" | "stock" | "active">;
+      product?: Pick<Product, "id" | "name" | "unit" | "stock" | "reserveStock" | "active">;
     }
   >;
 };

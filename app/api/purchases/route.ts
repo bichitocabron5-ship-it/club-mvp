@@ -15,6 +15,7 @@ const purchaseSchema = z.object({
       z.object({
         productId: z.number().int().positive(),
         qty: z.coerce.number().positive(),
+        availableQty: z.coerce.number().min(0).optional(),
         unitCost: z.coerce.number().min(0),
       })
     )
@@ -97,16 +98,26 @@ export async function POST(req: Request) {
           throw new Error("Producto no encontrado");
         }
 
+        if (Number(item.availableQty ?? 0) > Number(item.qty)) {
+          throw new Error("La cantidad disponible no puede superar la cantidad comprada");
+        }
+
         const previousStock = Number(product.stock);
-        const newStock = previousStock + item.qty;
+        const previousReserveStock = Number(product.reserveStock);
+        const availableQty = Math.min(Number(item.availableQty ?? 0), Number(item.qty));
+        const reserveQty = Number(item.qty) - availableQty;
+        const newStock = previousStock + availableQty;
+        const newReserveStock = previousReserveStock + reserveQty;
         const lineTotal = item.qty * item.unitCost;
 
         const previousAverageCost = Number(product.averageCost || 0);
+        const previousPhysicalStock = previousStock + previousReserveStock;
+        const newPhysicalStock = previousPhysicalStock + item.qty;
 
         const newAverageCost =
-          newStock > 0
-            ? (previousStock * previousAverageCost + item.qty * item.unitCost) /
-              newStock
+          newPhysicalStock > 0
+            ? (previousPhysicalStock * previousAverageCost + item.qty * item.unitCost) /
+              newPhysicalStock
             : item.unitCost;
 
         await tx.purchaseItem.create({
@@ -114,6 +125,8 @@ export async function POST(req: Request) {
             purchaseId: purchase.id,
             productId: item.productId,
             qty: item.qty,
+            availableQty,
+            reserveQty,
             unitCost: item.unitCost,
             lineTotal,
           },
@@ -123,18 +136,42 @@ export async function POST(req: Request) {
           where: { id: item.productId },
           data: {
             stock: newStock,
+            reserveStock: newReserveStock,
             averageCost: newAverageCost,
           },
         });
 
-        await tx.stockMove.create({
-          data: {
+        if (availableQty > 0) {
+          await tx.stockMove.create({
+            data: {
+              productId: item.productId,
+              type: "IN",
+              qty: availableQty,
+              previousStock,
+              newStock,
+              note: `Compra proveedor ${supplier.name} · entrada disponible`,
+            },
+          });
+        }
+
+        await createAuditLog({
+          db: tx,
+          actorUserId,
+          actorEmail: auth.session.user.email,
+          action: "PURCHASE_ITEM_STOCK_SPLIT",
+          entityType: "PurchaseItem",
+          entityId: `${purchase.id}:${item.productId}`,
+          summary: `Linea de compra registrada para ${product.name}`,
+          metadata: {
+            purchaseId: purchase.id,
             productId: item.productId,
-            type: "IN",
             qty: item.qty,
+            availableQty,
+            reserveQty,
             previousStock,
             newStock,
-            note: `Compra proveedor ${supplier.name}`,
+            previousReserveStock,
+            newReserveStock,
           },
         });
       }
@@ -191,6 +228,30 @@ export async function POST(req: Request) {
         },
       });
     });
+
+    if (result) {
+      await createAuditLog({
+        actorUserId,
+        actorEmail: auth.session.user.email,
+        action: "PURCHASE_CREATED",
+        entityType: "Purchase",
+        entityId: result.id,
+        summary: `Compra creada para proveedor ${result.supplier.name}`,
+        metadata: {
+          purchaseId: result.id,
+          supplierId,
+          totalAmount,
+          paidAmount,
+          items: result.items.map((item) => ({
+            productId: item.productId,
+            qty: Number(item.qty),
+            availableQty: Number(item.availableQty),
+            reserveQty: Number(item.reserveQty),
+            unitCost: Number(item.unitCost),
+          })),
+        },
+      });
+    }
 
     return NextResponse.json(result);
   } catch (err) {

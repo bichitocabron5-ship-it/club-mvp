@@ -82,6 +82,7 @@ model Product {
   unit        String // "G" o "UD"
   price       Float
   stock       Float  @default(0)
+  reserveStock Float @default(0)
   averageCost Float  @default(0)
   imageUrl    String?
 
@@ -136,7 +137,7 @@ model StockMove {
   productId Int
   product   Product @relation(fields: [productId], references: [id])
 
-  type          String // IN | OUT | ADJUST
+  type          String // IN | OUT | ADJUST | TRANSFER | INVENTORY_ADJUSTMENT
   qty           Float
   previousStock Float
   newStock      Float
@@ -302,7 +303,9 @@ model PurchaseItem {
   productId Int
   product   Product @relation(fields: [productId], references: [id])
 
-  qty       Float
-  unitCost  Float
-  lineTotal Float
+  qty          Float
+  availableQty Float    @default(0)
+  reserveQty   Float    @default(0)
+  unitCost     Float
+  lineTotal    Float
 }

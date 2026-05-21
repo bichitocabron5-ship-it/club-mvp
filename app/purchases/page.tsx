@@ -1,4 +1,3 @@
-// app/purchases/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -14,11 +13,13 @@ type Product = {
   name: string;
   unit: string;
   stock: number;
+  reserveStock: number;
 };
 
 type PurchaseItemForm = {
   productId: string;
   qty: string;
+  availableQty: string;
   unitCost: string;
 };
 
@@ -37,6 +38,8 @@ type Purchase = {
     qty: number;
     unitCost: number;
     lineTotal: number;
+    availableQty?: number;
+    reserveQty?: number;
     product: {
       name: string;
       unit: string;
@@ -47,6 +50,7 @@ type Purchase = {
 const initialItem: PurchaseItemForm = {
   productId: "",
   qty: "",
+  availableQty: "",
   unitCost: "",
 };
 
@@ -99,7 +103,9 @@ export default function PurchasesPage() {
 
   function updateItem(index: number, patch: Partial<PurchaseItemForm>) {
     setItems((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, ...patch } : item))
+      prev.map((item, currentIndex) =>
+        currentIndex === index ? { ...item, ...patch } : item
+      )
     );
   }
 
@@ -108,7 +114,7 @@ export default function PurchasesPage() {
   }
 
   function removeItem(index: number) {
-    setItems((prev) => prev.filter((_, i) => i !== index));
+    setItems((prev) => prev.filter((_, currentIndex) => currentIndex !== index));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -116,14 +122,20 @@ export default function PurchasesPage() {
 
     const cleanItems = items
       .filter((item) => item.productId && Number(item.qty) > 0)
-      .map((item) => ({
-        productId: Number(item.productId),
-        qty: Number(item.qty),
-        unitCost: Number(item.unitCost || 0),
-      }));
+      .map((item) => {
+        const qty = Number(item.qty);
+        const availableQty = Math.min(Math.max(0, Number(item.availableQty || 0)), qty);
+
+        return {
+          productId: Number(item.productId),
+          qty,
+          availableQty,
+          unitCost: Number(item.unitCost || 0),
+        };
+      });
 
     if (cleanItems.length === 0) {
-      alert("Añade al menos un producto.");
+      alert("Anade al menos un producto.");
       return;
     }
 
@@ -178,7 +190,7 @@ export default function PurchasesPage() {
     const amount = Number(paymentAmounts[purchaseId] || 0);
 
     if (!amount || amount <= 0) {
-      alert("Introduce un importe válido");
+      alert("Introduce un importe valido");
       return;
     }
 
@@ -212,7 +224,7 @@ export default function PurchasesPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Compras</h1>
         <p className="text-sm text-gray-500">
-          Registra compras a proveedores, entrada de stock y pagos parciales.
+          Registra compras separando disponible para retiradas y stock guardado en reserva.
         </p>
       </div>
 
@@ -224,9 +236,7 @@ export default function PurchasesPage() {
             <select
               className="w-full rounded border p-3"
               value={form.supplierId}
-              onChange={(e) =>
-                setForm({ ...form, supplierId: e.target.value })
-              }
+              onChange={(e) => setForm({ ...form, supplierId: e.target.value })}
               required
             >
               <option value="">Selecciona proveedor</option>
@@ -241,40 +251,49 @@ export default function PurchasesPage() {
 
             <div className="space-y-3">
               {items.map((item, index) => {
-                const product = products.find(
-                  (p) => p.id === Number(item.productId)
-                );
+                const product = products.find((candidate) => candidate.id === Number(item.productId));
+                const qty = Number(item.qty || 0);
+                const availableQty = Math.min(Math.max(0, Number(item.availableQty || 0)), qty);
+                const reserveQty = Math.max(0, qty - availableQty);
 
                 return (
                   <div key={index} className="rounded border p-3">
                     <select
                       className="w-full rounded border p-2"
                       value={item.productId}
-                      onChange={(e) =>
-                        updateItem(index, { productId: e.target.value })
-                      }
+                      onChange={(e) => updateItem(index, { productId: e.target.value })}
                       required
                     >
                       <option value="">Producto</option>
-                      {products.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name} · stock {Number(p.stock).toFixed(2)} {p.unit}
+                      {products.map((candidate) => (
+                        <option key={candidate.id} value={candidate.id}>
+                          {candidate.name} · disp. {Number(candidate.stock).toFixed(2)} {candidate.unit} ·
+                          reserva {Number(candidate.reserveStock).toFixed(2)} {candidate.unit}
                         </option>
                       ))}
                     </select>
 
-                    <div className="mt-2 grid grid-cols-2 gap-2">
+                    <div className="mt-2 grid grid-cols-3 gap-2">
                       <input
                         className="rounded border p-2"
                         type="number"
                         step={product?.unit === "UD" ? "1" : "0.01"}
                         min="0"
-                        placeholder="Cantidad"
+                        placeholder="Cantidad comprada"
                         value={item.qty}
-                        onChange={(e) =>
-                          updateItem(index, { qty: e.target.value })
-                        }
+                        onChange={(e) => updateItem(index, { qty: e.target.value })}
                         required
+                      />
+
+                      <input
+                        className="rounded border p-2"
+                        type="number"
+                        step={product?.unit === "UD" ? "1" : "0.01"}
+                        min="0"
+                        max={item.qty || undefined}
+                        placeholder="Disponible ahora"
+                        value={item.availableQty}
+                        onChange={(e) => updateItem(index, { availableQty: e.target.value })}
                       />
 
                       <input
@@ -284,34 +303,32 @@ export default function PurchasesPage() {
                         min="0"
                         placeholder="Coste unidad"
                         value={item.unitCost}
-                        onChange={(e) =>
-                          updateItem(index, { unitCost: e.target.value })
-                        }
+                        onChange={(e) => updateItem(index, { unitCost: e.target.value })}
                         required
                       />
                     </div>
 
                     <div className="mt-2 flex items-center justify-between text-sm">
                       <span className="text-gray-500">
-                        Línea:{" "}
+                        Linea: <strong>{(qty * Number(item.unitCost || 0)).toFixed(2)} €</strong>
+                      </span>
+                      <span className="text-gray-500">
+                        Reserva calculada:{" "}
                         <strong>
-                          {(
-                            Number(item.qty || 0) * Number(item.unitCost || 0)
-                          ).toFixed(2)}{" "}
-                          €
+                          {reserveQty.toFixed(2)} {product?.unit ?? ""}
                         </strong>
                       </span>
-
-                      {items.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeItem(index)}
-                          className="text-red-600"
-                        >
-                          Quitar
-                        </button>
-                      )}
                     </div>
+
+                    {items.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeItem(index)}
+                        className="mt-2 text-sm text-red-600"
+                      >
+                        Quitar
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -322,14 +339,17 @@ export default function PurchasesPage() {
               onClick={addItem}
               className="w-full rounded border p-3 font-bold"
             >
-              Añadir producto
+              Anadir producto
             </button>
 
             <div className="rounded bg-gray-900 p-4 text-white">
               <div className="text-sm opacity-80">Total compra</div>
-              <div className="text-3xl font-black">
-                {totalAmount.toFixed(2)} €
-              </div>
+              <div className="text-3xl font-black">{totalAmount.toFixed(2)} €</div>
+            </div>
+
+            <div className="rounded border border-blue-100 bg-blue-50 p-3 text-sm text-blue-800">
+              Por defecto, toda compra entra en reserva. Si indicas
+              {" \"Disponible ahora\""}, esa parte sube a mostrador y el resto queda guardado.
             </div>
 
             <input
@@ -339,9 +359,7 @@ export default function PurchasesPage() {
               min="0"
               placeholder="Pagado ahora (€)"
               value={form.paidAmount}
-              onChange={(e) =>
-                setForm({ ...form, paidAmount: e.target.value })
-              }
+              onChange={(e) => setForm({ ...form, paidAmount: e.target.value })}
             />
 
             <input
@@ -379,16 +397,12 @@ export default function PurchasesPage() {
                       {new Date(purchase.createdAt).toLocaleString()}
                     </div>
                     {purchase.note && (
-                      <div className="mt-1 text-sm text-gray-500">
-                        {purchase.note}
-                      </div>
+                      <div className="mt-1 text-sm text-gray-500">{purchase.note}</div>
                     )}
                   </div>
 
                   <span
-                    className={`rounded px-3 py-1 text-sm font-bold ${statusClass(
-                      purchase.status
-                    )}`}
+                    className={`rounded px-3 py-1 text-sm font-bold ${statusClass(purchase.status)}`}
                   >
                     {statusLabel(purchase.status)}
                   </span>
@@ -396,72 +410,73 @@ export default function PurchasesPage() {
 
                 <div className="mt-3 grid gap-2 text-sm md:grid-cols-3">
                   <div>
-                    Total:{" "}
-                    <strong>{Number(purchase.totalAmount).toFixed(2)} €</strong>
+                    Total: <strong>{Number(purchase.totalAmount).toFixed(2)} €</strong>
                   </div>
                   <div>
-                    Pagado:{" "}
-                    <strong>{Number(purchase.paidAmount).toFixed(2)} €</strong>
+                    Pagado: <strong>{Number(purchase.paidAmount).toFixed(2)} €</strong>
                   </div>
                   <div>
                     Pendiente:{" "}
                     <strong>
-                      {(
-                        Number(purchase.totalAmount) -
-                        Number(purchase.paidAmount)
-                      ).toFixed(2)}{" "}
-                      €
+                      {(Number(purchase.totalAmount) - Number(purchase.paidAmount)).toFixed(2)} €
                     </strong>
                   </div>
                 </div>
 
-              {purchase.status !== "PAID" && (
-                <div className="mt-3 rounded border bg-yellow-50 p-3">
-                  <div className="mb-2 text-sm font-bold text-yellow-800">
-                    Registrar pago de deuda
-                  </div>
+                {purchase.status !== "PAID" && (
+                  <div className="mt-3 rounded border bg-yellow-50 p-3">
+                    <div className="mb-2 text-sm font-bold text-yellow-800">
+                      Registrar pago de deuda
+                    </div>
 
-                  <div className="flex flex-col gap-2 md:flex-row">
-                    <input
-                      className="rounded border p-2"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      placeholder="Importe a pagar"
-                      value={paymentAmounts[purchase.id] || ""}
-                      onChange={(e) =>
-                        setPaymentAmounts((prev) => ({
-                          ...prev,
-                          [purchase.id]: e.target.value,
-                        }))
-                      }
-                    />
+                    <div className="flex flex-col gap-2 md:flex-row">
+                      <input
+                        className="rounded border p-2"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="Importe a pagar"
+                        value={paymentAmounts[purchase.id] || ""}
+                        onChange={(e) =>
+                          setPaymentAmounts((prev) => ({
+                            ...prev,
+                            [purchase.id]: e.target.value,
+                          }))
+                        }
+                      />
 
-                    <button
-                      type="button"
-                      onClick={() => void payPurchase(purchase.id)}
-                      className="rounded bg-yellow-600 px-4 py-2 font-bold text-white"
-                    >
-                      Registrar pago
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => void payPurchase(purchase.id)}
+                        className="rounded bg-yellow-600 px-4 py-2 font-bold text-white"
+                      >
+                        Registrar pago
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
                 <div className="mt-3 space-y-1">
-                  {purchase.items.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex justify-between rounded bg-gray-50 p-2 text-sm"
-                    >
-                      <span>
-                        {item.product.name} · {Number(item.qty).toFixed(2)}{" "}
-                        {item.product.unit} ×{" "}
-                        {Number(item.unitCost).toFixed(2)} €
-                      </span>
-                      <strong>{Number(item.lineTotal).toFixed(2)} €</strong>
-                    </div>
-                  ))}
+                  {purchase.items.map((item) => {
+                    const availableQty = Number(item.availableQty ?? 0);
+                    const reserveQty = Number(
+                      item.reserveQty ?? Math.max(0, Number(item.qty) - availableQty)
+                    );
+
+                    return (
+                      <div
+                        key={item.id}
+                        className="flex justify-between rounded bg-gray-50 p-2 text-sm"
+                      >
+                        <span>
+                          {item.product.name} · {Number(item.qty).toFixed(2)} {item.product.unit} ×{" "}
+                          {Number(item.unitCost).toFixed(2)} € · disp. {availableQty.toFixed(2)}{" "}
+                          {item.product.unit} · reserva {reserveQty.toFixed(2)} {item.product.unit}
+                        </span>
+                        <strong>{Number(item.lineTotal).toFixed(2)} €</strong>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ))}
