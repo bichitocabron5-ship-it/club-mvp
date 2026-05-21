@@ -1,16 +1,17 @@
 // app/members/[id]/page.tsx
 "use client";
 
+import { MemberDocumentsCard } from "@/components/member-documents-card";
+import { normalizeRfidCode } from "@/lib/rfid";
 import type {
   AccessLogRecord,
   MemberContractRecord,
   MemberHistoryData,
 } from "@/lib/types";
-import { MemberDocumentsCard } from "@/components/member-documents-card";
 import Image from "next/image";
 import { useSession } from "next-auth/react";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export default function MemberDetail() {
   const params = useParams<{ id: string }>();
@@ -24,6 +25,9 @@ export default function MemberDetail() {
   const [editing, setEditing] = useState(false);
   const [assigningRfid, setAssigningRfid] = useState(false);
   const [rfidMessage, setRfidMessage] = useState("");
+  const [rfidInput, setRfidInput] = useState("");
+  const [rfidProcessing, setRfidProcessing] = useState(false);
+  const rfidRef = useRef<HTMLInputElement | null>(null);
 
   const [editForm, setEditForm] = useState({
     memberNumber: "",
@@ -37,6 +41,10 @@ export default function MemberDetail() {
     discountPercent: "0",
     commercialNotes: "",
   });
+
+  function focusRfidInput() {
+    setTimeout(() => rfidRef.current?.focus(), 0);
+  }
 
   async function refreshMember() {
     if (!id) return;
@@ -139,18 +147,33 @@ export default function MemberDetail() {
   }
 
   async function saveMember() {
+    const payload: Record<string, string | number> = {
+      memberNumber: editForm.memberNumber.trim(),
+      fullName: editForm.fullName.trim(),
+      dni: editForm.dni.trim(),
+      phone: editForm.phone.trim(),
+      email: editForm.email.trim(),
+      expiresAt: editForm.expiresAt,
+    };
+
+    const normalizedRfidCode = normalizeRfidCode(editForm.rfidCode);
+    if (normalizedRfidCode) {
+      payload.rfidCode = normalizedRfidCode;
+    }
+
+    if (isAdmin) {
+      payload.commercialProfile = editForm.commercialProfile;
+      payload.discountPercent =
+        editForm.discountPercent === "" ? 0 : Number(editForm.discountPercent);
+      payload.commercialNotes = editForm.commercialNotes.trim();
+    }
+
     const res = await fetch(`/api/members/${id}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        ...editForm,
-        discountPercent:
-          editForm.discountPercent === ""
-            ? 0
-            : Number(editForm.discountPercent),
-      }),
+      body: JSON.stringify(payload),
     });
 
     if (!res.ok) {
@@ -164,28 +187,39 @@ export default function MemberDetail() {
   }
 
   async function saveScannedRfid(code: string) {
-    const cleanCode = code.trim();
-    if (!cleanCode) return;
-
-    const res = await fetch(`/api/members/${id}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        rfidCode: cleanCode,
-      }),
-    });
-
-    if (!res.ok) {
-      const err = await res.json();
-      alert(err.error || "Error asignando RFID");
+    const cleanCode = normalizeRfidCode(code);
+    if (!cleanCode || rfidProcessing) {
+      focusRfidInput();
       return;
     }
 
-    setEditForm((current) => ({ ...current, rfidCode: cleanCode }));
-    setAssigningRfid(false);
-    setRfidMessage(`Chapita asignada correctamente: ${cleanCode}`);
+    setRfidProcessing(true);
+
+    try {
+      const res = await fetch(`/api/members/${id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          rfidCode: cleanCode,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.error || "Error asignando RFID");
+        return;
+      }
+
+      setEditForm((current) => ({ ...current, rfidCode: cleanCode }));
+      setAssigningRfid(false);
+      setRfidInput("");
+      setRfidMessage(`Chapita asignada correctamente: ${cleanCode}`);
+    } finally {
+      setRfidProcessing(false);
+      focusRfidInput();
+    }
   }
 
   return (
@@ -196,9 +230,9 @@ export default function MemberDetail() {
         <div className="app-panel mb-4 rounded-3xl p-4 md:p-5">
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <div className="text-sm text-gray-500">Número de socio</div>
+              <div className="text-sm text-gray-500">Numero de socio</div>
               <div className="text-2xl font-semibold">
-                Nº socio {visibleMemberNumber}
+                N° socio {visibleMemberNumber}
               </div>
             </div>
 
@@ -211,7 +245,7 @@ export default function MemberDetail() {
 
           <div className="mt-4 grid gap-3 rounded-2xl border border-black/8 bg-gray-50 p-4 md:grid-cols-2">
             <div>
-              <div className="text-sm text-gray-500">Teléfono</div>
+              <div className="text-sm text-gray-500">Telefono</div>
               <div className="font-medium">{data.member.phone || "No indicado"}</div>
             </div>
             <div>
@@ -236,13 +270,13 @@ export default function MemberDetail() {
 
               {data.member.expiresAt && new Date(data.member.expiresAt) < new Date() && (
                 <span className="rounded bg-red-100 px-3 py-1 text-red-700">
-                  Membresía caducada
+                  Membresia caducada
                 </span>
               )}
 
               {data.member.expiresAt && new Date(data.member.expiresAt) >= new Date() && (
                 <span className="rounded bg-blue-100 px-3 py-1 text-blue-700">
-                  Válido hasta {new Date(data.member.expiresAt).toLocaleDateString()}
+                  Valido hasta {new Date(data.member.expiresAt).toLocaleDateString()}
                 </span>
               )}
 
@@ -319,35 +353,39 @@ export default function MemberDetail() {
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
-            {data.member.active ? (
-              <button
-                onClick={() => updateMemberStatus({ active: false })}
-                className="app-button-danger rounded-full px-4 py-2 text-white"
-              >
-                Bloquear socio
-              </button>
-            ) : (
-              <button
-                onClick={() => updateMemberStatus({ active: true })}
-                className="rounded-full bg-green-600 px-4 py-2 text-white"
-              >
-                Activar socio
-              </button>
+            {authReady && isAdmin && (
+              <>
+                {data.member.active ? (
+                  <button
+                    onClick={() => updateMemberStatus({ active: false })}
+                    className="app-button-danger rounded-full px-4 py-2 text-white"
+                  >
+                    Bloquear socio
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => updateMemberStatus({ active: true })}
+                    className="rounded-full bg-green-600 px-4 py-2 text-white"
+                  >
+                    Activar socio
+                  </button>
+                )}
+
+                <button
+                  onClick={() => updateMemberStatus({ renewOneYear: true })}
+                  className="app-button-primary rounded-full px-4 py-2 text-white"
+                >
+                  Renovar 1 ano
+                </button>
+
+                <button
+                  onClick={() => updateMemberStatus({ clearExpiration: true })}
+                  className="app-button-secondary rounded-full px-4 py-2"
+                >
+                  Quitar vencimiento
+                </button>
+              </>
             )}
-
-            <button
-              onClick={() => updateMemberStatus({ renewOneYear: true })}
-              className="app-button-primary rounded-full px-4 py-2 text-white"
-            >
-              Renovar 1 año
-            </button>
-
-            <button
-              onClick={() => updateMemberStatus({ clearExpiration: true })}
-              className="app-button-secondary rounded-full px-4 py-2"
-            >
-              Quitar vencimiento
-            </button>
 
             <button
               onClick={() => setEditing(!editing)}
@@ -360,6 +398,15 @@ export default function MemberDetail() {
           {editing && (
             <div className="mt-4 space-y-3 rounded-3xl border border-black/8 bg-white/82 p-4">
               <h2 className="font-bold">Editar socio</h2>
+
+              <input
+                className="w-full rounded-2xl border border-black/10 bg-white p-3"
+                placeholder="Numero de socio"
+                value={editForm.memberNumber}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, memberNumber: e.target.value })
+                }
+              />
 
               <input
                 className="w-full rounded-2xl border border-black/10 bg-white p-3"
@@ -381,7 +428,7 @@ export default function MemberDetail() {
 
               <input
                 className="w-full rounded-2xl border border-black/10 bg-white p-3"
-                placeholder="Teléfono"
+                placeholder="Telefono"
                 value={editForm.phone}
                 onChange={(e) =>
                   setEditForm({ ...editForm, phone: e.target.value })
@@ -408,24 +455,18 @@ export default function MemberDetail() {
 
               <input
                 className="w-full rounded-2xl border border-black/10 bg-white p-3"
-                placeholder="RFID"
+                placeholder="Escanea la chapita o pega el codigo"
                 value={editForm.rfidCode}
                 onChange={(e) =>
                   setEditForm({ ...editForm, rfidCode: e.target.value })
                 }
               />
+              <p className="text-sm text-gray-500">
+                Escanea la chapita o pega el codigo.
+              </p>
 
               {authReady && isAdmin && (
                 <>
-                  <input
-                    className="w-full rounded-2xl border border-black/10 bg-white p-3"
-                    placeholder="Numero de socio"
-                    value={editForm.memberNumber}
-                    onChange={(e) =>
-                      setEditForm({ ...editForm, memberNumber: e.target.value })
-                    }
-                  />
-
                   <div className="border-t pt-3">
                     <h3 className="font-semibold">Perfil comercial</h3>
                   </div>
@@ -491,24 +532,37 @@ export default function MemberDetail() {
 
               <button
                 type="button"
-                onClick={() => setAssigningRfid(true)}
+                onClick={() => {
+                  setAssigningRfid(true);
+                  setRfidInput("");
+                  focusRfidInput();
+                }}
                 className="rounded-full bg-gray-900 px-4 py-3 font-bold text-white"
               >
                 Asignar RFID escaneando
               </button>
 
               {assigningRfid && (
-                <input
-                  autoFocus
-                  className="w-full rounded-2xl border border-blue-500 bg-white p-3"
-                  placeholder="Pasa la chapita ahora..."
-                  onChange={(e) => {
-                    const value = e.target.value.trim();
-                    if (value) {
-                      void saveScannedRfid(value);
-                    }
+                <form
+                  className="space-y-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void saveScannedRfid(rfidInput);
                   }}
-                />
+                >
+                  <input
+                    ref={rfidRef}
+                    autoFocus
+                    className="w-full rounded-2xl border border-blue-500 bg-white p-3"
+                    placeholder="Escanea la chapita o pega el codigo"
+                    value={rfidInput}
+                    onChange={(e) => setRfidInput(e.target.value)}
+                    disabled={rfidProcessing}
+                  />
+                  <p className="text-sm text-gray-500">
+                    Escanea la chapita o pega el codigo.
+                  </p>
+                </form>
               )}
 
               <button
@@ -565,7 +619,7 @@ export default function MemberDetail() {
 
               {(contract.phone || contract.email) && (
                 <div className="mt-2 grid gap-2 text-sm text-gray-700 md:grid-cols-2">
-                  <div>Teléfono: {contract.phone || "No indicado"}</div>
+                  <div>Telefono: {contract.phone || "No indicado"}</div>
                   <div>Email: {contract.email || "No indicado"}</div>
                 </div>
               )}
@@ -635,7 +689,7 @@ export default function MemberDetail() {
           {accessLogs.map((log) => (
             <div
               key={log.id}
-            className="app-panel flex items-center justify-between rounded-2xl p-3"
+              className="app-panel flex items-center justify-between rounded-2xl p-3"
             >
               <div>
                 <span
@@ -671,7 +725,10 @@ export default function MemberDetail() {
 
       <div className="space-y-2">
         {data.sales.map((sale) => (
-          <div key={sale.id} className="app-panel flex flex-col gap-2 rounded-3xl p-4 md:flex-row md:justify-between">
+          <div
+            key={sale.id}
+            className="app-panel flex flex-col gap-2 rounded-3xl p-4 md:flex-row md:justify-between"
+          >
             <div>
               <div>{sale.product.name}</div>
               <div className="text-sm text-gray-500">

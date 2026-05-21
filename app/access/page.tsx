@@ -1,6 +1,7 @@
 // app/access/page.tsx
 "use client";
 
+import { normalizeRfidCode } from "@/lib/rfid";
 import { useEffect, useRef, useState } from "react";
 
 type InsideMember = {
@@ -22,12 +23,18 @@ export default function AccessPage() {
   const [lastMember, setLastMember] = useState("");
   const [lastAction, setLastAction] = useState<"IN" | "OUT" | "">("");
   const [screenStatus, setScreenStatus] = useState<"OK" | "DENIED" | "IDLE">("IDLE");
+  const [processing, setProcessing] = useState(false);
+  const [lastReadCode, setLastReadCode] = useState("");
   const [current, setCurrent] = useState<CurrentAccess>({
     count: 0,
     inside: [],
   });
 
   const inputRef = useRef<HTMLInputElement | null>(null);
+
+  function focusInput() {
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }
 
   async function loadCurrent() {
     const res = await fetch("/api/access/current");
@@ -36,7 +43,7 @@ export default function AccessPage() {
   }
 
   useEffect(() => {
-    inputRef.current?.focus();
+    focusInput();
 
     setTimeout(() => {
       void loadCurrent();
@@ -46,65 +53,73 @@ export default function AccessPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    const code = rfidInput.trim();
-    if (!code) return;
+    if (processing) return;
+
+    const code = normalizeRfidCode(rfidInput);
+    if (!code) {
+      setRfidInput("");
+      focusInput();
+      return;
+    }
 
     setError("");
     setLastMessage("");
     setLastMember("");
     setLastAction("");
+    setLastReadCode(code);
+    setProcessing(true);
 
-    const memberRes = await fetch(
-      `/api/members/by-rfid/${encodeURIComponent(code)}`
-    );
+    try {
+      const memberRes = await fetch(
+        `/api/members/by-rfid/${encodeURIComponent(code)}`
+      );
 
-    if (!memberRes.ok) {
-      setError("Chapita no asignada a ningún socio.");
-      setScreenStatus("DENIED");
+      if (!memberRes.ok) {
+        const err = await memberRes.json().catch(() => null);
+        setError(err?.error || "Chapita no asignada");
+        setScreenStatus("DENIED");
+        return;
+      }
+
+      const member = await memberRes.json();
+
+      const accessRes = await fetch("/api/access/toggle", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ memberId: member.id }),
+      });
+
+      if (!accessRes.ok) {
+        const err = await accessRes.json();
+        setError(err.error || "Error registrando acceso");
+        setScreenStatus("DENIED");
+        return;
+      }
+
+      const result = await accessRes.json();
+
+      setLastMessage(result.message);
+      setLastMember(member.fullName);
+      setLastAction(result.action);
+      setScreenStatus("OK");
+
+      await loadCurrent();
+
+      setTimeout(() => {
+        setScreenStatus("IDLE");
+        setError("");
+        setLastMessage("");
+        setLastMember("");
+        setLastAction("");
+        focusInput();
+      }, 3000);
+    } finally {
       setRfidInput("");
-      setTimeout(() => inputRef.current?.focus(), 0);
-      return;
+      setProcessing(false);
+      focusInput();
     }
-
-    const member = await memberRes.json();
-
-    const accessRes = await fetch("/api/access/toggle", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ memberId: member.id }),
-    });
-
-    if (!accessRes.ok) {
-      const err = await accessRes.json();
-      setError(err.error || "Error registrando acceso");
-      setScreenStatus("DENIED");
-      setRfidInput("");
-      setTimeout(() => inputRef.current?.focus(), 0);
-      return;
-    }
-
-    const result = await accessRes.json();
-
-    setLastMessage(result.message);
-    setLastMember(member.fullName);
-    setLastAction(result.action);
-    setScreenStatus("OK");
-    setRfidInput("");
-
-    await loadCurrent();
-
-    setTimeout(() => {
-      setScreenStatus("IDLE");
-      setError("");
-      setLastMessage("");
-      setLastMember("");
-      setLastAction("");
-      inputRef.current?.focus();
-    }, 3000);
-
-    setTimeout(() => inputRef.current?.focus(), 0);
   }
 
   return (
@@ -159,11 +174,16 @@ export default function AccessPage() {
           ref={inputRef}
           autoFocus
           className="w-full rounded border p-4 text-xl"
-          placeholder="Pasa la chapita por el lector..."
+          placeholder="Escanea la chapita o pega el codigo"
           value={rfidInput}
           onChange={(e) => setRfidInput(e.target.value)}
           autoComplete="off"
+          disabled={processing}
         />
+
+        {lastReadCode && (
+          <div className="mt-2 text-xs text-gray-500">Lectura: {lastReadCode}</div>
+        )}
 
         {error && (
           <div className="mt-3 rounded bg-red-100 p-3 text-red-700">

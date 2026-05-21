@@ -1,5 +1,4 @@
-// app/api/members/[id]/route.ts
-import { requireAuth } from "@/lib/auth-server";
+import { requireStaffOrAdmin } from "@/lib/auth-server";
 import { createAuditLog } from "@/lib/audit";
 import {
   isUniqueConstraintError,
@@ -7,18 +6,25 @@ import {
   validateMemberNumber,
 } from "@/lib/member-number";
 import { prisma } from "@/lib/prisma";
+import { normalizeRfidCode } from "@/lib/rfid";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-const adminOnlyFields = [
+const staffEditableFields = [
   "memberNumber",
   "fullName",
   "dni",
+  "phone",
+  "email",
   "expiresAt",
   "rfidCode",
+] as const;
+
+const adminOnlyFields = [
   "commercialProfile",
   "discountPercent",
   "commercialNotes",
+  "active",
 ] as const;
 
 const memberUpdateSchema = z.object({
@@ -28,7 +34,7 @@ const memberUpdateSchema = z.object({
   phone: z.string().trim().optional().nullable(),
   email: z.string().trim().optional().nullable(),
   expiresAt: z.string().optional().nullable(),
-  rfidCode: z.string().trim().optional().nullable(),
+  rfidCode: z.string().optional().nullable(),
   commercialProfile: z.string().trim().min(1).optional(),
   discountPercent: z.number().min(0).max(100).optional(),
   commercialNotes: z.string().trim().optional().nullable(),
@@ -39,11 +45,20 @@ function trimToNull(value: string | null | undefined) {
   return trimmed ? trimmed : null;
 }
 
+function normalizeDateOnly(value: string | null | undefined) {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "INVALID";
+  return date.toISOString().slice(0, 10);
+}
+
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireAuth();
+  const auth = await requireStaffOrAdmin();
   if (!auth.ok) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
@@ -53,21 +68,34 @@ export async function PATCH(
   const body = await req.json();
 
   if (!memberId || Number.isNaN(memberId)) {
-    return NextResponse.json({ error: "ID inválido" }, { status: 400 });
+    return NextResponse.json({ error: "ID invalido" }, { status: 400 });
   }
 
   const parsed = memberUpdateSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Datos inválidos" }, { status: 400 });
+    return NextResponse.json({ error: "Datos invalidos" }, { status: 400 });
   }
 
   const data = parsed.data;
   const normalizedMemberNumber = normalizeMemberNumber(data.memberNumber);
   const validatedMemberNumber = validateMemberNumber(normalizedMemberNumber);
+  const normalizedExpiresAt = normalizeDateOnly(data.expiresAt);
+  const normalizedRfidCode =
+    data.rfidCode === undefined || data.rfidCode === null
+      ? undefined
+      : normalizeRfidCode(data.rfidCode);
 
   if (!validatedMemberNumber.ok) {
     return NextResponse.json({ error: validatedMemberNumber.error }, { status: 400 });
+  }
+
+  if (normalizedExpiresAt === "INVALID") {
+    return NextResponse.json({ error: "Fecha invalida" }, { status: 400 });
+  }
+
+  if (data.rfidCode !== undefined && !normalizedRfidCode) {
+    return NextResponse.json({ error: "Codigo RFID invalido" }, { status: 400 });
   }
 
   const existingMember = await prisma.member.findUnique({
@@ -81,38 +109,58 @@ export async function PATCH(
   const isAdmin = auth.session.user.role === "ADMIN";
 
   if (!isAdmin) {
-    const normalizedExpiresAt =
-      data.expiresAt === undefined
-        ? undefined
-        : data.expiresAt === null || data.expiresAt === ""
-          ? null
-          : new Date(data.expiresAt).toISOString().slice(0, 10);
-
     const currentExpiresAt = existingMember.expiresAt
       ? existingMember.expiresAt.toISOString().slice(0, 10)
       : null;
+    const attemptedForbiddenFields: string[] = [];
 
-    const attemptedSensitiveChange =
-      (normalizedMemberNumber !== undefined &&
-        normalizedMemberNumber !== (existingMember.memberNumber ?? "")) ||
-      (data.fullName !== undefined && data.fullName !== existingMember.fullName) ||
-      (data.dni !== undefined && data.dni !== existingMember.dni) ||
-      (data.rfidCode !== undefined &&
-        (data.rfidCode === "" ? null : data.rfidCode) !== existingMember.rfidCode) ||
-      (normalizedExpiresAt !== undefined && normalizedExpiresAt !== currentExpiresAt) ||
-      (data.commercialProfile !== undefined &&
-        data.commercialProfile !== existingMember.commercialProfile) ||
-      (data.discountPercent !== undefined &&
-        data.discountPercent !== Number(existingMember.discountPercent || 0)) ||
-      (data.commercialNotes !== undefined &&
-        (data.commercialNotes === "" ? null : data.commercialNotes) !==
-          existingMember.commercialNotes);
+    if (
+      data.commercialProfile !== undefined &&
+      data.commercialProfile !== existingMember.commercialProfile
+    ) {
+      attemptedForbiddenFields.push("commercialProfile");
+    }
+    if (
+      data.discountPercent !== undefined &&
+      data.discountPercent !== Number(existingMember.discountPercent || 0)
+    ) {
+      attemptedForbiddenFields.push("discountPercent");
+    }
+    if (
+      data.commercialNotes !== undefined &&
+      trimToNull(data.commercialNotes) !== trimToNull(existingMember.commercialNotes)
+    ) {
+      attemptedForbiddenFields.push("commercialNotes");
+    }
+    if (
+      "active" in body &&
+      typeof body.active === "boolean" &&
+      body.active !== existingMember.active
+    ) {
+      attemptedForbiddenFields.push("active");
+    }
 
-    if (attemptedSensitiveChange) {
+    if (attemptedForbiddenFields.length > 0) {
       return NextResponse.json(
-        { error: `FORBIDDEN_FIELDS:${adminOnlyFields.join(",")}` },
+        {
+          error: `No tienes permiso para modificar estos campos: ${attemptedForbiddenFields.join(", ")}`,
+          allowedFields: staffEditableFields,
+        },
         { status: 403 }
       );
+    }
+
+    if (
+      normalizedMemberNumber !== undefined &&
+      normalizedMemberNumber !== (existingMember.memberNumber ?? "")
+    ) {
+      body.memberNumber = normalizedMemberNumber;
+    }
+    if (
+      normalizedExpiresAt !== undefined &&
+      normalizedExpiresAt !== currentExpiresAt
+    ) {
+      body.expiresAt = normalizedExpiresAt;
     }
   }
 
@@ -120,27 +168,21 @@ export async function PATCH(
     const member = await prisma.member.update({
       where: { id: memberId },
       data: {
-        memberNumber: isAdmin
-          ? validatedMemberNumber.value === null
-            ? undefined
-            : validatedMemberNumber.value
-          : undefined,
-        fullName: isAdmin ? data.fullName : undefined,
-        dni: isAdmin ? data.dni : undefined,
+        memberNumber:
+          validatedMemberNumber.value !== undefined
+            ? validatedMemberNumber.value
+            : undefined,
+        fullName: data.fullName,
+        dni: data.dni,
         phone: data.phone === "" ? null : data.phone,
         email: data.email === "" ? null : data.email,
-        expiresAt: isAdmin
-          ? data.expiresAt
-            ? new Date(data.expiresAt)
-            : data.expiresAt === null
+        expiresAt:
+          normalizedExpiresAt === undefined
+            ? undefined
+            : normalizedExpiresAt === null
               ? null
-              : undefined
-          : undefined,
-        rfidCode: isAdmin
-          ? data.rfidCode === ""
-            ? null
-            : data.rfidCode
-          : undefined,
+              : new Date(normalizedExpiresAt),
+        rfidCode: normalizedRfidCode,
         commercialProfile: isAdmin ? data.commercialProfile : undefined,
         discountPercent: isAdmin ? data.discountPercent : undefined,
         commercialNotes: isAdmin
@@ -193,11 +235,7 @@ export async function PATCH(
       const actorUserId = Number(auth.session.user.id);
       const actorEmail = auth.session.user.email;
       const generalFields = changedFields.filter(
-        (field) =>
-          field !== "commercialProfile" &&
-          field !== "discountPercent" &&
-          field !== "commercialNotes" &&
-          field !== "rfidCode"
+        (field) => !adminOnlyFields.includes(field as (typeof adminOnlyFields)[number])
       );
 
       if (generalFields.length > 0) {
@@ -260,7 +298,9 @@ export async function PATCH(
     }
 
     return NextResponse.json(
-      { error: "No se pudo actualizar. Revisa numero de socio, DNI o RFID duplicados." },
+      {
+        error: "No se pudo actualizar. Revisa numero de socio, DNI o RFID duplicados.",
+      },
       { status: 400 }
     );
   }

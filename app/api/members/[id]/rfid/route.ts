@@ -1,14 +1,15 @@
 // app/api/members/[id]/rfid/route.ts
-import { requireAdmin } from "@/lib/auth-server";
+import { requireStaffOrAdmin } from "@/lib/auth-server";
 import { createAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
+import { normalizeRfidCode } from "@/lib/rfid";
 import { NextResponse } from "next/server";
 
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireAdmin();
+  const auth = await requireStaffOrAdmin();
   if (!auth.ok) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
@@ -16,18 +17,14 @@ export async function PATCH(
   const { id } = await params;
   const memberId = Number(id);
   const body = await req.json();
-
-  const rfidCode = String(body.rfidCode || "").trim();
+  const rfidCode = normalizeRfidCode(String(body.rfidCode || ""));
 
   if (!memberId || Number.isNaN(memberId)) {
-    return NextResponse.json({ error: "ID inválido" }, { status: 400 });
+    return NextResponse.json({ error: "ID invalido" }, { status: 400 });
   }
 
   if (!rfidCode) {
-    return NextResponse.json(
-      { error: "Código RFID inválido" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Codigo RFID invalido" }, { status: 400 });
   }
 
   try {
@@ -67,7 +64,7 @@ export async function PATCH(
     return NextResponse.json(member);
   } catch {
     return NextResponse.json(
-      { error: "Esta chapita ya está asignada a otro socio" },
+      { error: "Esta chapita ya esta asignada a otro socio" },
       { status: 400 }
     );
   }

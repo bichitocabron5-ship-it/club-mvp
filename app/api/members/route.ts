@@ -1,5 +1,5 @@
 // app/api/members/route.ts
-import { requireAuth } from "@/lib/auth-server";
+import { requireAuth, requireStaffOrAdmin } from "@/lib/auth-server";
 import { createAuditLog } from "@/lib/audit";
 import {
   getNextMemberNumber,
@@ -8,6 +8,7 @@ import {
   validateMemberNumber,
 } from "@/lib/member-number";
 import { prisma } from "@/lib/prisma";
+import { normalizeRfidCode } from "@/lib/rfid";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -19,6 +20,10 @@ const memberSchema = z.object({
   email: z.string().trim().optional().or(z.literal("")),
   active: z.coerce.boolean().optional(),
   expiresAt: z.string().optional().or(z.literal("")),
+  rfidCode: z.string().optional().nullable(),
+  commercialProfile: z.string().trim().optional(),
+  discountPercent: z.number().min(0).max(100).optional(),
+  commercialNotes: z.string().trim().optional().nullable(),
 });
 
 export async function GET() {
@@ -48,7 +53,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const auth = await requireAuth();
+  const auth = await requireStaffOrAdmin();
   if (!auth.ok) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
@@ -62,27 +67,78 @@ export async function POST(req: Request) {
 
   const normalizedMemberNumber = normalizeMemberNumber(parsed.data.memberNumber);
   const validatedMemberNumber = validateMemberNumber(normalizedMemberNumber);
+  const normalizedRfidCode =
+    parsed.data.rfidCode === undefined || parsed.data.rfidCode === null
+      ? undefined
+      : normalizeRfidCode(parsed.data.rfidCode);
 
   if (!validatedMemberNumber.ok) {
     return NextResponse.json({ error: validatedMemberNumber.error }, { status: 400 });
   }
 
+  if (parsed.data.rfidCode !== undefined && !normalizedRfidCode) {
+    return NextResponse.json({ error: "Codigo RFID invalido" }, { status: 400 });
+  }
+
+  const isAdmin = auth.session.user.role === "ADMIN";
+
+  if (!isAdmin) {
+    const forbiddenFields: string[] = [];
+
+    if (parsed.data.active === false) {
+      forbiddenFields.push("active");
+    }
+    if (
+      parsed.data.commercialProfile !== undefined &&
+      parsed.data.commercialProfile !== "STANDARD"
+    ) {
+      forbiddenFields.push("commercialProfile");
+    }
+    if (
+      parsed.data.discountPercent !== undefined &&
+      parsed.data.discountPercent !== 0
+    ) {
+      forbiddenFields.push("discountPercent");
+    }
+    if (
+      parsed.data.commercialNotes !== undefined &&
+      (parsed.data.commercialNotes ?? "").trim() !== ""
+    ) {
+      forbiddenFields.push("commercialNotes");
+    }
+
+    if (forbiddenFields.length > 0) {
+      return NextResponse.json(
+        {
+          error: `No tienes permiso para definir estos campos: ${forbiddenFields.join(", ")}`,
+        },
+        { status: 403 }
+      );
+    }
+  }
+
   const baseData = {
+    memberNumber: validatedMemberNumber.value ?? undefined,
     fullName: parsed.data.fullName,
     dni: parsed.data.dni,
     phone: parsed.data.phone || null,
     email: parsed.data.email || null,
-    active: parsed.data.active ?? true,
+    active: isAdmin ? (parsed.data.active ?? true) : true,
     expiresAt: parsed.data.expiresAt ? new Date(parsed.data.expiresAt) : null,
+    rfidCode: normalizedRfidCode ?? null,
+    commercialProfile: isAdmin ? parsed.data.commercialProfile : undefined,
+    discountPercent: isAdmin ? parsed.data.discountPercent : undefined,
+    commercialNotes: isAdmin
+      ? parsed.data.commercialNotes === ""
+        ? null
+        : parsed.data.commercialNotes
+      : undefined,
   };
 
   try {
     if (validatedMemberNumber.value) {
       const member = await prisma.member.create({
-        data: {
-          ...baseData,
-          memberNumber: validatedMemberNumber.value,
-        },
+        data: baseData,
       });
 
       await createAuditLog({
@@ -96,6 +152,7 @@ export async function POST(req: Request) {
           memberNumber: member.memberNumber,
           active: member.active,
           hasExpiration: Boolean(member.expiresAt),
+          hasRfid: Boolean(member.rfidCode),
         },
       });
 
@@ -126,6 +183,7 @@ export async function POST(req: Request) {
             memberNumber: member.memberNumber,
             active: member.active,
             hasExpiration: Boolean(member.expiresAt),
+            hasRfid: Boolean(member.rfidCode),
           },
         });
 
@@ -165,6 +223,9 @@ export async function POST(req: Request) {
       );
     }
 
-    return NextResponse.json({ error: "No se pudo crear el socio." }, { status: 500 });
+    return NextResponse.json(
+      { error: "No se pudo crear el socio." },
+      { status: 500 }
+    );
   }
 }

@@ -3,6 +3,7 @@
 
 import { PageHeader } from "@/components/ui/page-header";
 import { fetchJson } from "@/lib/fetch-json";
+import { normalizeRfidCode } from "@/lib/rfid";
 import type { SigningSessionData } from "@/lib/types";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -28,6 +29,8 @@ export default function NewMemberPage() {
   const [loading, setLoading] = useState(false);
   const [contractSigned, setContractSigned] = useState(false);
   const [rfidMessage, setRfidMessage] = useState("");
+  const [rfidInput, setRfidInput] = useState("");
+  const [rfidProcessing, setRfidProcessing] = useState(false);
 
   const [form, setForm] = useState({
     fullName: "",
@@ -38,6 +41,10 @@ export default function NewMemberPage() {
   });
 
   const visibleMemberNumber = createdMember?.memberNumber ?? createdMember?.id ?? null;
+
+  function focusRfidInput() {
+    setTimeout(() => rfidRef.current?.focus(), 0);
+  }
 
   async function createMember(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -54,7 +61,6 @@ export default function NewMemberPage() {
         phone: form.phone,
         email: form.email,
         expiresAt: form.expiresAt || null,
-        active: true,
       }),
     });
 
@@ -73,29 +79,37 @@ export default function NewMemberPage() {
   async function assignRfid(code: string) {
     if (!createdMember) return;
 
-    const cleanCode = code.trim();
-    if (!cleanCode) return;
+    const cleanCode = normalizeRfidCode(code);
+    if (!cleanCode || rfidProcessing) return;
 
-    const res = await fetch(`/api/members/${createdMember.id}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        rfidCode: cleanCode,
-      }),
-    });
+    setRfidProcessing(true);
 
-    if (!res.ok) {
-      const err = await res.json();
-      alert(err.error || "Error asignando RFID");
-      return;
+    try {
+      const res = await fetch(`/api/members/${createdMember.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          rfidCode: cleanCode,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.error || "Error asignando RFID");
+        return;
+      }
+
+      const updated: CreatedMember = await res.json();
+      setCreatedMember(updated);
+      setAssigningRfid(false);
+      setRfidInput("");
+      setRfidMessage(`Chapita asignada correctamente: ${updated.rfidCode}`);
+    } finally {
+      setRfidProcessing(false);
+      focusRfidInput();
     }
-
-    const updated: CreatedMember = await res.json();
-    setCreatedMember(updated);
-    setAssigningRfid(false);
-    setRfidMessage(`Chapita asignada correctamente: ${updated.rfidCode}`);
   }
 
   async function createSigningSession() {
@@ -321,7 +335,8 @@ export default function NewMemberPage() {
                   type="button"
                   onClick={() => {
                     setAssigningRfid(true);
-                    setTimeout(() => rfidRef.current?.focus(), 0);
+                    setRfidInput("");
+                    focusRfidInput();
                   }}
                   className="app-button-primary rounded-full px-4 py-3 font-bold"
                 >
@@ -329,18 +344,31 @@ export default function NewMemberPage() {
                 </button>
 
                 {assigningRfid && (
-                  <input
-                    ref={rfidRef}
-                    autoFocus
-                    className="mt-3 w-full rounded-2xl border border-blue-500 bg-white p-4 text-xl"
-                    placeholder="Pasa la chapita ahora..."
-                    onChange={(e) => {
-                      const value = e.target.value.trim();
-                      if (value) {
-                        void assignRfid(value);
+                  <form
+                    className="mt-3 space-y-2"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const cleanCode = normalizeRfidCode(rfidInput);
+                      if (!cleanCode || rfidProcessing) {
+                        focusRfidInput();
+                        return;
                       }
+                      void assignRfid(cleanCode);
                     }}
-                  />
+                  >
+                    <input
+                      ref={rfidRef}
+                      autoFocus
+                      className="w-full rounded-2xl border border-blue-500 bg-white p-4 text-xl"
+                      placeholder="Escanea la chapita o pega el codigo"
+                      value={rfidInput}
+                      onChange={(e) => setRfidInput(e.target.value)}
+                      disabled={rfidProcessing}
+                    />
+                    <p className="text-sm text-gray-500">
+                      Escanea la chapita o pega el codigo.
+                    </p>
+                  </form>
                 )}
               </>
             )}
