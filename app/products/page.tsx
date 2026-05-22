@@ -23,8 +23,6 @@ type ProductForm = {
   description: string;
   unit: ProductUnit;
   price: string;
-  stock: string;
-  reserveStock: string;
   category: ProductCategory;
   hashType: ProductHashType | "";
   minStock: string;
@@ -35,8 +33,6 @@ const initialForm: ProductForm = {
   description: "",
   unit: "G",
   price: "",
-  stock: "",
-  reserveStock: "",
   category: "CANNABIS",
   hashType: "",
   minStock: "5",
@@ -48,8 +44,6 @@ function toEditableForm(product: ProductSummary): ProductForm {
     description: product.description ?? "",
     unit: product.unit,
     price: String(product.price),
-    stock: String(product.stock),
-    reserveStock: String(product.reserveStock),
     category: product.category,
     hashType: product.hashType ?? "",
     minStock: String(product.minStock),
@@ -135,8 +129,6 @@ export default function ProductsPage() {
           description: form.description.trim() || null,
           unit: form.unit,
           price: Number(form.price),
-          stock: Number(form.stock || 0),
-          reserveStock: Number(form.reserveStock || 0),
           category: form.category,
           hashType: form.category === "HASH" ? form.hashType || null : null,
           minStock: Number(form.minStock || 5),
@@ -176,7 +168,6 @@ export default function ProductsPage() {
       description: string | null;
       unit: ProductUnit;
       price: number;
-      reserveStock: number;
       category: ProductCategory;
       hashType: ProductHashType | null;
       minStock: number;
@@ -215,7 +206,6 @@ export default function ProductsPage() {
       description: editForm.description.trim() || null,
       unit: editForm.unit,
       price: Number(editForm.price),
-      reserveStock: Number(editForm.reserveStock || 0),
       category: editForm.category,
       hashType: editForm.category === "HASH" ? editForm.hashType || null : null,
       minStock: Number(editForm.minStock || 0),
@@ -289,6 +279,10 @@ export default function ProductsPage() {
         <p className="mt-2 text-sm app-muted">
           Gestión completa para administrador con catálogo, stock, mínimos, activación e imágenes.
         </p>
+        <p className="mt-2 text-sm text-[#5e6b61]">
+          El stock se anade desde Compras o Movimientos de stock. Crear producto solo crea la
+          ficha.
+        </p>
       </div>
 
       {error ? (
@@ -333,26 +327,6 @@ export default function ProductsPage() {
           value={form.price}
           onChange={(e) => setForm({ ...form, price: e.target.value })}
           required
-        />
-
-        <input
-          className="rounded-2xl border border-black/10 bg-white/80 p-3"
-          placeholder="Disponible inicial para retiradas"
-          type="number"
-          min="0"
-          step="0.01"
-          value={form.stock}
-          onChange={(e) => setForm({ ...form, stock: e.target.value })}
-        />
-
-        <input
-          className="rounded-2xl border border-black/10 bg-white/80 p-3"
-          placeholder="Reserva inicial / almacen"
-          type="number"
-          min="0"
-          step="0.01"
-          value={form.reserveStock}
-          onChange={(e) => setForm({ ...form, reserveStock: e.target.value })}
         />
 
         <select
@@ -600,22 +574,16 @@ export default function ProductsPage() {
                         placeholder="Stock mínimo"
                       />
 
-                      <input
-                        className="rounded-2xl border border-black/10 bg-white p-3"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={editForm.reserveStock}
-                        onChange={(e) =>
-                          setEditForm({ ...editForm, reserveStock: e.target.value })
-                        }
-                        placeholder="Reserva"
-                      />
                     </div>
 
                     <div className="text-sm text-gray-600">
                       Disponible actual: {Number(product.stock).toFixed(2)} {product.unit} ·
                       Reserva actual: {Number(product.reserveStock).toFixed(2)} {product.unit}
+                    </div>
+
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                      Para modificar stock usa Compras o Stock. Desde producto solo se edita la
+                      ficha y el stock minimo.
                     </div>
 
                     <div className="flex flex-wrap gap-2">

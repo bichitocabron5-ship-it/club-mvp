@@ -58,6 +58,9 @@ export async function POST(req: Request) {
   }
 
   const category = parsed.data.category ?? "CANNABIS";
+  const ignoredStockFields = ["stock", "reserveStock"].filter((field) =>
+    Object.prototype.hasOwnProperty.call(body, field)
+  );
 
   if (category !== "HASH" && parsed.data.hashType) {
     return NextResponse.json(
@@ -72,8 +75,9 @@ export async function POST(req: Request) {
       description: parsed.data.description?.trim() || null,
       unit,
       price: parsed.data.price,
-      stock: parsed.data.stock ?? 0,
-      reserveStock: parsed.data.reserveStock ?? 0,
+      stock: 0,
+      reserveStock: 0,
+      averageCost: 0,
       category,
       hashType: category === "HASH" ? (parsed.data.hashType ?? null) : null,
       minStock: parsed.data.minStock ?? 5,
@@ -92,9 +96,11 @@ export async function POST(req: Request) {
       price: Number(product.price),
       stock: Number(product.stock),
       reserveStock: Number(product.reserveStock),
+      averageCost: Number(product.averageCost),
       description: product.description,
       category: product.category,
       active: product.active,
+      ignoredStockFields,
     },
   });
 
