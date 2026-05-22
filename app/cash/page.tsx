@@ -3,6 +3,7 @@
 import { normalizeCashMoveSource } from "@/lib/cash-move";
 import { CASH_MOVE_SOURCES } from "@/lib/cash-move";
 import type {
+  AccessCurrentResponse,
   CashMove,
   DayClosure,
   DayClosureInventoryOption,
@@ -76,16 +77,22 @@ export default function CashPage() {
   const [reopenReason, setReopenReason] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [accessStatus, setAccessStatus] = useState<AccessCurrentResponse>({
+    count: 0,
+    inside: [],
+  });
+  const [autoCheckoutMessage, setAutoCheckoutMessage] = useState("");
 
   async function loadCash() {
     setError("");
 
-    const [movesRes, closureRes] = await Promise.all([
+    const [movesRes, closureRes, accessRes] = await Promise.all([
       fetch("/api/cash"),
       fetch("/api/day-closure"),
+      fetch("/api/access/current"),
     ]);
 
-    if (!movesRes.ok || !closureRes.ok) {
+    if (!movesRes.ok || !closureRes.ok || !accessRes.ok) {
       const closureError = (await closureRes.json().catch(() => null)) as
         | { error?: string }
         | null;
@@ -94,11 +101,13 @@ export default function CashPage() {
 
     const movesData: CashMove[] = await movesRes.json();
     const closureData: ClosureResponse = await closureRes.json();
+    const accessData: AccessCurrentResponse = await accessRes.json();
 
     setMoves(movesData);
     setClosed(closureData.closed);
     setClosure(closureData.closure);
     setSummary(closureData.summary);
+    setAccessStatus(accessData);
     setInventoryCountId(
       closureData.closure?.inventoryCountId
         ? String(closureData.closure.inventoryCountId)
@@ -160,6 +169,7 @@ export default function CashPage() {
     setError("");
 
     try {
+      setAutoCheckoutMessage("");
       const res = await fetch("/api/day-closure", {
         method: "POST",
         headers: {
@@ -198,6 +208,7 @@ export default function CashPage() {
     setError("");
 
     try {
+      setAutoCheckoutMessage("");
       const res = await fetch("/api/day-closure/reopen", {
         method: "POST",
         headers: {
@@ -224,6 +235,50 @@ export default function CashPage() {
     }
   }
 
+  async function handleAutoCheckout() {
+    if (saving || accessStatus.count === 0) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Hay ${accessStatus.count} socios dentro. Se registrara salida automatica para todos.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    setAutoCheckoutMessage("");
+
+    try {
+      const res = await fetch("/api/access/auto-checkout", {
+        method: "POST",
+      });
+      const data = (await res.json().catch(() => null)) as
+        | { error?: string; count?: number }
+        | null;
+
+      if (!res.ok) {
+        throw new Error(data?.error || "Error al registrar salida automatica");
+      }
+
+      setAutoCheckoutMessage(
+        `Se registro la salida automatica de ${Number(data?.count || 0)} socio(s).`
+      );
+      await loadCash();
+    } catch (autoCheckoutError) {
+      setError(
+        autoCheckoutError instanceof Error
+          ? autoCheckoutError.message
+          : "Error al registrar salida automatica"
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <main className="mx-auto max-w-6xl p-4 md:p-6">
       <div className="mb-6">
@@ -240,10 +295,35 @@ export default function CashPage() {
         </div>
       ) : null}
 
+      {autoCheckoutMessage ? (
+        <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+          {autoCheckoutMessage}
+        </div>
+      ) : null}
+
       {hasOpenInventoryCounts ? (
         <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           Hay {summary?.inventoryCountsOpenCount} conteo(s) abiertos hoy. Puedes
           vincular uno al cierre, pero conviene revisarlos antes de cerrar caja.
+        </div>
+      ) : null}
+
+      {accessStatus.count > 0 ? (
+        <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+          <div>
+            Quedan {accessStatus.count} socio(s) dentro. Puedes marcar salida
+            automatica antes de cerrar.
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => void handleAutoCheckout()}
+              className="rounded-2xl bg-blue-600 px-4 py-3 font-bold text-white disabled:opacity-60"
+              disabled={saving}
+            >
+              Marcar salida de todos
+            </button>
+          </div>
         </div>
       ) : null}
 

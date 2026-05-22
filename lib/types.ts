@@ -519,6 +519,18 @@ export type AccessLogRecord = {
   createdAt: string;
 };
 
+export type AccessInsideMember = {
+  id: number;
+  fullName: string;
+  dni: string;
+  lastAccessAt: string;
+};
+
+export type AccessCurrentResponse = {
+  count: number;
+  inside: AccessInsideMember[];
+};
+
 export type StockMoveRecord = {
   id: number;
   productId: number;

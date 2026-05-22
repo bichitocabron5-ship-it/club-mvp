@@ -2,19 +2,8 @@
 "use client";
 
 import { normalizeRfidCode } from "@/lib/rfid";
+import type { AccessCurrentResponse } from "@/lib/types";
 import { useEffect, useRef, useState } from "react";
-
-type InsideMember = {
-  id: number;
-  fullName: string;
-  dni: string;
-  lastAccessAt: string;
-};
-
-type CurrentAccess = {
-  count: number;
-  inside: InsideMember[];
-};
 
 export default function AccessPage() {
   const [rfidInput, setRfidInput] = useState("");
@@ -24,11 +13,13 @@ export default function AccessPage() {
   const [lastAction, setLastAction] = useState<"IN" | "OUT" | "">("");
   const [screenStatus, setScreenStatus] = useState<"OK" | "DENIED" | "IDLE">("IDLE");
   const [processing, setProcessing] = useState(false);
+  const [autoCheckoutLoading, setAutoCheckoutLoading] = useState(false);
   const [lastReadCode, setLastReadCode] = useState("");
-  const [current, setCurrent] = useState<CurrentAccess>({
+  const [current, setCurrent] = useState<AccessCurrentResponse>({
     count: 0,
     inside: [],
   });
+  const [autoCheckoutMessage, setAutoCheckoutMessage] = useState("");
 
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -38,7 +29,7 @@ export default function AccessPage() {
 
   async function loadCurrent() {
     const res = await fetch("/api/access/current");
-    const data: CurrentAccess = await res.json();
+    const data: AccessCurrentResponse = await res.json();
     setCurrent(data);
   }
 
@@ -66,6 +57,7 @@ export default function AccessPage() {
     setLastMessage("");
     setLastMember("");
     setLastAction("");
+    setAutoCheckoutMessage("");
     setLastReadCode(code);
     setProcessing(true);
 
@@ -118,6 +110,57 @@ export default function AccessPage() {
     } finally {
       setRfidInput("");
       setProcessing(false);
+      focusInput();
+    }
+  }
+
+  async function handleAutoCheckout() {
+    if (autoCheckoutLoading || current.count === 0) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Hay ${current.count} socios dentro. Se registrara salida automatica para todos.`
+    );
+
+    if (!confirmed) {
+      focusInput();
+      return;
+    }
+
+    setAutoCheckoutLoading(true);
+    setError("");
+    setLastMessage("");
+    setLastMember("");
+    setLastAction("");
+    setAutoCheckoutMessage("");
+
+    try {
+      const res = await fetch("/api/access/auto-checkout", {
+        method: "POST",
+      });
+      const data = (await res.json().catch(() => null)) as
+        | { error?: string; count?: number }
+        | null;
+
+      if (!res.ok) {
+        throw new Error(data?.error || "Error registrando salida automatica");
+      }
+
+      const count = Number(data?.count || 0);
+      setScreenStatus("IDLE");
+      setAutoCheckoutMessage(
+        `Se registro la salida automatica de ${count} socio(s).`
+      );
+      await loadCurrent();
+    } catch (autoCheckoutError) {
+      setError(
+        autoCheckoutError instanceof Error
+          ? autoCheckoutError.message
+          : "Error registrando salida automatica"
+      );
+    } finally {
+      setAutoCheckoutLoading(false);
       focusInput();
     }
   }
@@ -208,10 +251,28 @@ export default function AccessPage() {
       <section className="rounded border p-4">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-xl font-bold">Dentro ahora</h2>
-          <div className="rounded bg-gray-900 px-4 py-2 text-white">
-            Aforo: <strong>{current.count}</strong>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => void handleAutoCheckout()}
+              disabled={autoCheckoutLoading || current.count === 0}
+              className="rounded bg-blue-600 px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:bg-gray-300"
+            >
+              {autoCheckoutLoading
+                ? "Registrando..."
+                : "Cerrar salidas pendientes"}
+            </button>
+            <div className="rounded bg-gray-900 px-4 py-2 text-white">
+              Aforo: <strong>{current.count}</strong>
+            </div>
           </div>
         </div>
+
+        {autoCheckoutMessage ? (
+          <div className="mb-4 rounded bg-blue-100 p-3 text-blue-800">
+            {autoCheckoutMessage}
+          </div>
+        ) : null}
 
         {current.inside.length === 0 && (
           <div className="rounded bg-gray-50 p-3 text-gray-500">
