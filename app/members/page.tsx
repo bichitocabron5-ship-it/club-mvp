@@ -198,10 +198,27 @@ export default function MembersPage() {
           return (
             <Link key={member.id} href={`/members/${member.id}`}>
               <div className="app-panel cursor-pointer rounded-3xl p-4 hover:bg-white/90">
-                <div className="font-medium">{member.fullName}</div>
-                <div className="text-sm app-muted">
-                  Nº {member.memberNumber ?? member.id} · {member.dni}
-                  {member.phone ? ` · ${member.phone}` : ""}
+                <div className="flex items-start gap-3">
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-black/8 bg-gray-100">
+                    {member.photoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={member.photoUrl}
+                        alt={`Foto de ${member.fullName}`}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-xs font-medium text-gray-500">Sin foto</span>
+                    )}
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium">{member.fullName}</div>
+                    <div className="text-sm app-muted">
+                      Nº {member.memberNumber ?? member.id} · {member.dni}
+                      {member.phone ? ` · ${member.phone}` : ""}
+                    </div>
+                  </div>
                 </div>
                 <div className="mt-1 text-xs app-muted">
                   {member.active ? "Activo" : "Inactivo"}

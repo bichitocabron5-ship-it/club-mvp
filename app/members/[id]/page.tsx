@@ -2,6 +2,7 @@
 "use client";
 
 import { MemberDocumentsCard } from "@/components/member-documents-card";
+import { MemberPhotoCard } from "@/components/member-photo-card";
 import { normalizeRfidCode } from "@/lib/rfid";
 import type {
   AccessLogRecord,
@@ -18,6 +19,8 @@ export default function MemberDetail() {
   const id = params.id;
   const { data: session, status } = useSession();
   const isAdmin = session?.user?.role === "ADMIN";
+  const canUploadPhoto =
+    session?.user?.role === "ADMIN" || session?.user?.role === "STAFF";
 
   const [data, setData] = useState<MemberHistoryData | null>(null);
   const [contracts, setContracts] = useState<MemberContractRecord[]>([]);
@@ -228,7 +231,14 @@ export default function MemberDetail() {
 
       {data.member && (
         <div className="app-panel mb-4 rounded-3xl p-4 md:p-5">
-          <div className="grid gap-4 md:grid-cols-2">
+          <MemberPhotoCard
+            memberId={id}
+            initialPhotoUrl={data.member.photoUrl}
+            canUpload={Boolean(authReady && canUploadPhoto)}
+            onUploaded={refreshMember}
+          />
+
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
             <div>
               <div className="text-sm text-gray-500">Número de socio</div>
               <div className="text-2xl font-semibold">

@@ -131,6 +131,7 @@ export type MemberSummary = {
   dni: string;
   phone: string | null;
   email?: string | null;
+  photoUrl?: string | null;
   dniFrontUrl?: string | null;
   dniBackUrl?: string | null;
   active: boolean;
@@ -483,6 +484,7 @@ export type MemberHistoryData = {
     dni: string;
     phone: string | null;
     email: string | null;
+    photoUrl: string | null;
     dniFrontUrl: string | null;
     dniBackUrl: string | null;
     active: boolean;

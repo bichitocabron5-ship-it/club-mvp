@@ -45,6 +45,14 @@ export function buildMemberDniPath(
   return `members/${memberId}/dni-${side}-${timestamp}.${extension}`;
 }
 
+export function buildMemberPhotoPath(
+  memberId: number,
+  timestamp: number,
+  extension: string
+) {
+  return `members/${memberId}/profile-${timestamp}.${extension}`;
+}
+
 export function buildStoragePublicUrl(path: string) {
   const baseUrl = process.env.SUPABASE_URL;
 
