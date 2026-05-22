@@ -12,9 +12,13 @@ type TodayTotals = {
   units: number;
 };
 
+type CartInputMode = "QTY" | "AMOUNT";
+
 type CartItem = {
   productId: number;
-  qty: number;
+  inputMode: CartInputMode;
+  qtyInput: string;
+  amountInput: string;
 };
 
 type MemberOperationalStatus = {
@@ -55,6 +59,95 @@ const emptyToday: TodayTotals = {
   grams: 0,
   units: 0,
 };
+
+const QTY_DECIMALS_G = 3;
+const QTY_EPSILON = 0.000001;
+
+function roundCurrency(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function normalizeDiscountPercent(value: number) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.min(100, Math.max(0, value));
+}
+
+function roundQty(value: number, unit: ProductSummary["unit"]) {
+  if (unit === "UD") {
+    return Math.round(value);
+  }
+
+  const factor = 10 ** QTY_DECIMALS_G;
+  return Math.round((value + Number.EPSILON) * factor) / factor;
+}
+
+function formatQtyInput(value: number, unit: ProductSummary["unit"]) {
+  if (unit === "UD") {
+    return String(Math.round(value));
+  }
+
+  return String(roundQty(value, unit));
+}
+
+function formatQtyLabel(value: number, unit: ProductSummary["unit"]) {
+  if (unit === "UD") {
+    return `${Math.round(value)} ud`;
+  }
+
+  return `${roundQty(value, unit).toFixed(QTY_DECIMALS_G)} g`;
+}
+
+function parsePositiveNumber(value: string) {
+  const normalized = value.replace(",", ".").trim();
+  if (!normalized) return null;
+
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function getPricingEstimate(qty: number, price: number, discountPercent: number) {
+  const originalAmount = roundCurrency(qty * price);
+  const discountAmount = roundCurrency(originalAmount * (discountPercent / 100));
+  const finalAmount = roundCurrency(originalAmount - discountAmount);
+
+  return {
+    originalAmount,
+    discountAmount,
+    finalAmount,
+  };
+}
+
+function findClosestGramQty(rawQty: number, price: number, discountPercent: number, targetFinalAmount: number) {
+  const rounded = roundQty(rawQty, "G");
+  const candidates = [rounded - 0.001, rounded, rounded + 0.001]
+    .filter((candidate) => candidate > 0)
+    .map((candidate) => roundQty(candidate, "G"));
+
+  let bestQty = candidates[0] ?? rounded;
+  let bestDiff = Number.POSITIVE_INFINITY;
+
+  for (const candidate of candidates) {
+    const candidateFinalAmount = getPricingEstimate(
+      candidate,
+      price,
+      discountPercent
+    ).finalAmount;
+    const diff = Math.abs(candidateFinalAmount - targetFinalAmount);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      bestQty = candidate;
+    }
+  }
+
+  return bestQty;
+}
 
 export default function SalesPage() {
   const [members, setMembers] = useState<MemberSummary[]>([]);
@@ -184,20 +277,85 @@ export default function SalesPage() {
       const product = products.find((candidate) => candidate.id === item.productId);
       const price = product ? Number(product.price) : 0;
       const stock = product ? Number(product.stock) : 0;
-      const originalAmount = item.qty * price;
-      const discountPercent = Number(memberStatus?.member.discountPercent || 0);
-      const discountAmount = originalAmount * (discountPercent / 100);
-      const finalAmount = originalAmount - discountAmount;
+      const parsedQtyInput = parsePositiveNumber(item.qtyInput);
+      const parsedAmountInput = parsePositiveNumber(item.amountInput);
+      const discountPercent = normalizeDiscountPercent(
+        Number(memberStatus?.member.discountPercent || 0)
+      );
+      let qty = 0;
+      let originalAmount = 0;
+      let discountAmount = 0;
+      let finalAmount = 0;
+      let conversionError = "";
+
+      if (!product) {
+        conversionError = "Producto no encontrado.";
+      } else if (item.inputMode === "QTY") {
+        if (parsedQtyInput === null) {
+          conversionError = "Introduce una cantidad mayor que 0.";
+        } else if (product.unit === "UD" && !Number.isInteger(parsedQtyInput)) {
+          conversionError = "Este producto se vende por unidades enteras.";
+        } else {
+          qty = roundQty(parsedQtyInput, product.unit);
+
+          if (qty <= 0) {
+            conversionError = "La cantidad final debe ser mayor que 0.";
+          } else {
+            const pricing = getPricingEstimate(qty, price, discountPercent);
+            originalAmount = pricing.originalAmount;
+            discountAmount = pricing.discountAmount;
+            finalAmount = pricing.finalAmount;
+          }
+        }
+      } else if (parsedAmountInput === null) {
+        conversionError = "Introduce un importe mayor que 0.";
+      } else if (price <= 0) {
+        conversionError = "El producto no tiene un precio valido.";
+      } else if (discountPercent >= 100) {
+        conversionError = "No se puede calcular por importe con descuento del 100 %.";
+      } else if (product.unit === "UD") {
+        const effectivePrice = price * (1 - discountPercent / 100);
+        const rawQty = parsedAmountInput / effectivePrice;
+        const roundedQty = Math.round(rawQty);
+
+        if (Math.abs(rawQty - roundedQty) > QTY_EPSILON) {
+          conversionError =
+            "Este producto se vende por unidades. Introduce un importe que corresponda a unidades completas.";
+        } else if (roundedQty <= 0) {
+          conversionError = "La cantidad final debe ser mayor que 0.";
+        } else {
+          qty = roundedQty;
+          const pricing = getPricingEstimate(qty, price, discountPercent);
+          originalAmount = pricing.originalAmount;
+          discountAmount = pricing.discountAmount;
+          finalAmount = pricing.finalAmount;
+        }
+      } else {
+        const effectivePrice = price * (1 - discountPercent / 100);
+        const rawQty = parsedAmountInput / effectivePrice;
+        qty = findClosestGramQty(rawQty, price, discountPercent, parsedAmountInput);
+
+        if (qty <= 0) {
+          conversionError = "La cantidad final debe ser mayor que 0.";
+        } else {
+          const pricing = getPricingEstimate(qty, price, discountPercent);
+          originalAmount = pricing.originalAmount;
+          discountAmount = pricing.discountAmount;
+          finalAmount = pricing.finalAmount;
+        }
+      }
 
       return {
         ...item,
         product,
         price,
         stock,
+        qty,
         originalAmount,
         discountPercent,
         discountAmount,
         finalAmount,
+        conversionError,
       };
     });
   }, [cart, memberStatus, products]);
@@ -232,12 +390,15 @@ export default function SalesPage() {
     return line.qty > line.stock;
   });
 
+  const conversionProblems = cartLines.filter((line) => line.conversionError);
+
   const invalid =
     !memberId ||
     !memberStatus?.canWithdraw ||
     cart.length === 0 ||
     overGrams ||
     overUnits ||
+    conversionProblems.length > 0 ||
     stockProblems.length > 0 ||
     loading;
 
@@ -249,7 +410,16 @@ export default function SalesPage() {
 
       if (existing) {
         return prev.map((item) =>
-          item.productId === product.id ? { ...item, qty: existing.qty + 1 } : item
+          item.productId === product.id
+            ? {
+                ...item,
+                inputMode: "QTY",
+                qtyInput: formatQtyInput(
+                  (parsePositiveNumber(existing.qtyInput) ?? 0) + 1,
+                  product.unit
+                ),
+              }
+            : item
         );
       }
 
@@ -257,23 +427,90 @@ export default function SalesPage() {
         ...prev,
         {
           productId: product.id,
-          qty: 1,
+          inputMode: "QTY",
+          qtyInput: "1",
+          amountInput: "",
         },
       ];
     });
   }
 
   function updateQty(productId: number, value: string) {
+    setCart((prev) =>
+      prev.map((item) => (item.productId === productId ? { ...item, qtyInput: value } : item))
+    );
+  }
+
+  function updateAmount(productId: number, value: string) {
+    setCart((prev) =>
+      prev.map((item) =>
+        item.productId === productId ? { ...item, amountInput: value } : item
+      )
+    );
+  }
+
+  function updateInputMode(productId: number, inputMode: CartInputMode) {
     const product = products.find((candidate) => candidate.id === productId);
     if (!product) return;
 
-    let qty = Number(value);
-
-    if (!Number.isFinite(qty) || qty < 0) qty = 0;
-    if (product.unit === "UD") qty = Math.floor(qty);
-
     setCart((prev) =>
-      prev.map((item) => (item.productId === productId ? { ...item, qty } : item))
+      prev.map((item) => {
+        if (item.productId !== productId) return item;
+
+        if (inputMode === "QTY") {
+          const parsedAmount = parsePositiveNumber(item.amountInput);
+          let nextQtyInput = item.qtyInput;
+          const discountPercent = normalizeDiscountPercent(
+            Number(memberStatus?.member.discountPercent || 0)
+          );
+
+          if (
+            parsedAmount !== null &&
+            Number(product.price) > 0 &&
+            discountPercent < 100
+          ) {
+            const effectivePrice =
+              Number(product.price) * (1 - discountPercent / 100);
+            const nextQty =
+              product.unit === "UD"
+                ? Math.round(parsedAmount / effectivePrice)
+                : findClosestGramQty(
+                    parsedAmount / effectivePrice,
+                    Number(product.price),
+                    discountPercent,
+                    parsedAmount
+                  );
+
+            if (nextQty > 0) {
+              nextQtyInput = formatQtyInput(nextQty, product.unit);
+            }
+          }
+
+          return {
+            ...item,
+            inputMode,
+            qtyInput: nextQtyInput,
+          };
+        }
+
+        const parsedQty = parsePositiveNumber(item.qtyInput);
+        const discountPercent = normalizeDiscountPercent(
+          Number(memberStatus?.member.discountPercent || 0)
+        );
+        return {
+          ...item,
+          inputMode,
+          amountInput:
+            item.amountInput ||
+            (parsedQty !== null
+              ? getPricingEstimate(
+                  parsedQty,
+                  Number(product.price),
+                  discountPercent
+                ).finalAmount.toFixed(2)
+              : ""),
+        };
+      })
     );
   }
 
@@ -293,6 +530,19 @@ export default function SalesPage() {
     e.preventDefault();
     if (invalid) return;
 
+    const items = cartLines
+      .filter((line) => !line.conversionError)
+      .map((line) => ({
+        productId: line.productId,
+        qty: line.qty,
+      }))
+      .filter((item) => item.qty > 0);
+
+    if (items.length !== cart.length) {
+      alert("Hay lineas con errores de conversion. Revisa el carrito antes de enviar.");
+      return;
+    }
+
     setLoading(true);
 
     const res = await fetch("/api/sales/bulk", {
@@ -302,7 +552,7 @@ export default function SalesPage() {
       },
       body: JSON.stringify({
         memberId: Number(memberId),
-        items: cart.filter((item) => item.qty > 0),
+        items,
       }),
     });
 
@@ -640,6 +890,10 @@ export default function SalesPage() {
                     <div className="text-sm text-gray-500">
                       Stock: {line.stock.toFixed(2)} {line.product?.unit}
                     </div>
+                    <div className="text-sm text-gray-500">
+                      Precio unitario: {line.price.toFixed(2)} EUR /{" "}
+                      {line.product?.unit === "G" ? "g" : "ud"}
+                    </div>
                   </div>
 
                   <button
@@ -651,53 +905,129 @@ export default function SalesPage() {
                   </button>
                 </div>
 
-                <div className="mt-3 grid grid-cols-2 gap-2">
+                <div className="mt-3">
+                  <label className="text-xs text-gray-500">Modo de entrada</label>
+                  <select
+                    className="mt-1 w-full rounded-2xl border border-black/10 bg-white p-3 text-sm font-medium"
+                    value={line.inputMode}
+                    onChange={(e) =>
+                      updateInputMode(line.productId, e.target.value as CartInputMode)
+                    }
+                  >
+                    <option value="QTY">Por cantidad</option>
+                    <option value="AMOUNT">Por importe</option>
+                  </select>
+                </div>
+
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
                   <div>
-                    <label className="text-xs text-gray-500">Cantidad</label>
+                    {line.inputMode === "QTY" ? (
+                      <>
+                        <label className="text-xs text-gray-500">Cantidad</label>
 
-                    <div className="mt-1 flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          updateQty(line.productId, String(Math.max(0, line.qty - 1)))
-                        }
-                        className="h-11 w-11 rounded bg-gray-200 text-xl font-bold"
-                      >
-                        -
-                      </button>
+                        <div className="mt-1 flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateQty(
+                                line.productId,
+                                formatQtyInput(
+                                  Math.max(
+                                    0,
+                                    line.qty -
+                                      (line.product?.unit === "UD" ? 1 : 0.001)
+                                  ),
+                                  line.product?.unit === "UD" ? "UD" : "G"
+                                )
+                              )
+                            }
+                            className="h-11 w-11 rounded bg-gray-200 text-xl font-bold"
+                          >
+                            -
+                          </button>
 
-                      <input
-                        className="h-11 w-24 rounded-2xl border border-black/10 bg-white p-2 text-center text-lg font-bold"
-                        type="number"
-                        step={line.product?.unit === "UD" ? "1" : "0.01"}
-                        min="0"
-                        value={line.qty}
-                        onChange={(e) => updateQty(line.productId, e.target.value)}
-                      />
+                          <input
+                            className="h-11 w-full rounded-2xl border border-black/10 bg-white p-2 text-center text-lg font-bold"
+                            type="number"
+                            step={line.product?.unit === "UD" ? "1" : "0.001"}
+                            min="0"
+                            value={line.qtyInput}
+                            onChange={(e) => updateQty(line.productId, e.target.value)}
+                          />
 
-                      <button
-                        type="button"
-                        onClick={() => updateQty(line.productId, String(line.qty + 1))}
-                        className="h-11 w-11 rounded-2xl bg-gray-900 text-xl font-bold text-white"
-                      >
-                        +
-                      </button>
-                    </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateQty(
+                                line.productId,
+                                formatQtyInput(
+                                  line.qty +
+                                    (line.product?.unit === "UD" ? 1 : 0.001),
+                                  line.product?.unit === "UD" ? "UD" : "G"
+                                )
+                              )
+                            }
+                            className="h-11 w-11 rounded-2xl bg-gray-900 text-xl font-bold text-white"
+                          >
+                            +
+                          </button>
+                        </div>
+
+                        <div className="mt-2 text-xs text-gray-500">
+                          Importe final estimado: {line.finalAmount.toFixed(2)} EUR
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <label className="text-xs text-gray-500">Importe en euros</label>
+                        <input
+                          className="mt-1 h-11 w-full rounded-2xl border border-black/10 bg-white p-2 text-center text-lg font-bold"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={line.amountInput}
+                          onChange={(e) => updateAmount(line.productId, e.target.value)}
+                        />
+
+                        <div className="mt-2 text-xs text-gray-500">
+                          Cantidad calculada: {formatQtyLabel(line.qty, line.product?.unit ?? "G")}
+                        </div>
+                      </>
+                    )}
                   </div>
 
-                  <div>
-                    <label className="text-xs text-gray-500">Total linea</label>
-                    <div className="rounded-2xl border border-black/8 bg-gray-50 p-2">
-                      {line.finalAmount.toFixed(2)} EUR
+                  <div className="space-y-2">
+                    <div>
+                      <label className="text-xs text-gray-500">Cantidad final</label>
+                      <div className="rounded-2xl border border-black/8 bg-gray-50 p-2">
+                        {formatQtyLabel(line.qty, line.product?.unit ?? "G")}
+                      </div>
                     </div>
+
+                    <div>
+                      <label className="text-xs text-gray-500">Importe final estimado</label>
+                      <div className="rounded-2xl border border-black/8 bg-gray-50 p-2">
+                        {line.finalAmount.toFixed(2)} EUR
+                      </div>
+                    </div>
+
+                    <div className="text-xs text-gray-500">
+                      Importe base estimado: {line.originalAmount.toFixed(2)} EUR
+                    </div>
+
                     {line.discountAmount > 0 && (
-                      <div className="mt-1 text-xs text-blue-700">
-                        Antes: {line.originalAmount.toFixed(2)} EUR ? descuento{" "}
-                        {line.discountAmount.toFixed(2)} EUR
+                      <div className="text-xs text-blue-700">
+                        Descuento estimado: {line.discountAmount.toFixed(2)} EUR
                       </div>
                     )}
                   </div>
                 </div>
+
+                {line.conversionError && (
+                  <div className="mt-2 rounded-2xl bg-red-100 p-2 text-sm text-red-700">
+                    {line.conversionError}
+                  </div>
+                )}
 
                 {line.qty > line.stock && (
                   <div className="mt-2 rounded-2xl bg-red-100 p-2 text-sm text-red-700">
@@ -747,6 +1077,12 @@ export default function SalesPage() {
           {stockProblems.length > 0 && (
             <div className="mt-3 rounded-2xl bg-red-100 p-3 text-sm text-red-700">
               Hay productos sin stock suficiente.
+            </div>
+          )}
+
+          {conversionProblems.length > 0 && (
+            <div className="mt-3 rounded-2xl bg-red-100 p-3 text-sm text-red-700">
+              Hay lineas con errores de conversion. Corrigelas antes de registrar.
             </div>
           )}
 
