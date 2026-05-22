@@ -24,7 +24,7 @@ export default function MemberContractPage() {
     const data = await res.json();
 
     if (!res.ok) {
-      setError(data.error || "No se pudo crear la sesi�n de firma");
+      setError(data.error || "No se pudo crear la sesión de firma");
       return;
     }
 
@@ -62,7 +62,7 @@ export default function MemberContractPage() {
           onClick={createSession}
           className="rounded bg-blue-600 p-4 font-bold text-white"
         >
-          Crear sesion de firma
+          Crear sesión de firma
         </button>
       )}
 
@@ -97,7 +97,7 @@ export default function MemberContractPage() {
                 onFocus={(e) => e.currentTarget.select()}
               />
               <p className="mt-2 text-sm text-gray-500">
-                Si la tablet esta en la misma red, usa la IP local del ordenador
+                Si la tablet está en la misma red, usa la IP local del ordenador
                 en lugar de localhost.
               </p>
             </div>

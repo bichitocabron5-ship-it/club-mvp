@@ -21,7 +21,7 @@ export async function GET(
   }
 
   if (!contractId || Number.isNaN(contractId)) {
-    return NextResponse.json({ error: "Contrato inv�lido" }, { status: 400 });
+    return NextResponse.json({ error: "Contrato inválido" }, { status: 400 });
   }
 
   try {

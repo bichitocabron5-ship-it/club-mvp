@@ -56,7 +56,7 @@ export async function ensureActiveAdminRemains(
   });
 
   if (activeAdmins <= 1) {
-    throw new Error("No puedes desactivar o degradar el ultimo ADMIN activo");
+    throw new Error("No puedes desactivar o degradar el último ADMIN activo");
   }
 
   return existingUser;
@@ -102,6 +102,6 @@ export async function assertMemberLinkAvailable(
   });
 
   if (existing) {
-    throw new Error("Ese socio ya esta vinculado a otro usuario");
+    throw new Error("Ese socio ya está vinculado a otro usuario");
   }
 }

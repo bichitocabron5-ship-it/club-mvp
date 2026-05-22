@@ -91,7 +91,7 @@ const adminQuickLinks = [
   { href: "/cash", label: "Caja", description: "Cierre y movimientos" },
   { href: "/stock/counts", label: "Conteos", description: "Inventario abierto" },
   { href: "/stock", label: "Stock", description: "Niveles y ajustes" },
-  { href: "/admin/audit", label: "AuditorÃ­a", description: "Trazabilidad" },
+  { href: "/admin/audit", label: "Auditoría", description: "Trazabilidad" },
   { href: "/members/new", label: "Alta socio", description: "Nuevo miembro" },
 ];
 
@@ -111,7 +111,7 @@ function QuickLinks({
     <section className="app-panel-strong rounded-[2rem] p-5">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-black">Accesos rÃ¡pidos</h2>
+          <h2 className="text-lg font-black">Accesos rápidos</h2>
           <p className="mt-1 text-sm app-muted">Atajos a las tareas del turno.</p>
         </div>
       </div>
@@ -164,7 +164,7 @@ export default function PanelPage() {
       <main className="mx-auto max-w-7xl p-4 md:p-6">
         <PageHeader
           title="Panel"
-          description="Resumen diario del club para abrir el dÃ­a con criterio operativo."
+          description="Resumen diario del club para abrir el día con criterio operativo."
         />
         <EmptyState message={error} />
       </main>
@@ -183,7 +183,7 @@ export default function PanelPage() {
       <main className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
         <PageHeader
           title="Panel operativo"
-          description="Vista reducida para personal con accesos directos y alertas operativas bÃ¡sicas."
+          description="Vista reducida para personal con accesos directos y alertas operativas básicas."
         />
 
         <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -203,7 +203,7 @@ export default function PanelPage() {
           <section className="app-panel rounded-[2rem] p-5">
             <h2 className="text-lg font-black">Stock bajo</h2>
             <p className="mt-1 text-sm app-muted">
-              Productos por debajo del mÃ­nimo configurado.
+              Productos por debajo del mínimo configurado.
             </p>
 
             <div className="mt-4 space-y-2">
@@ -218,7 +218,7 @@ export default function PanelPage() {
                     <div>
                       <div className="font-semibold">{product.name}</div>
                       <div className="text-sm app-muted">
-                        MÃ­nimo {product.minStock.toFixed(2)} {product.unit}
+                        Mínimo {product.minStock.toFixed(2)} {product.unit}
                       </div>
                     </div>
                     <div className="font-black text-red-700">
@@ -231,7 +231,7 @@ export default function PanelPage() {
           </section>
 
           <section className="app-panel rounded-[2rem] p-5">
-            <h2 className="text-lg font-black">Ãšltimos accesos</h2>
+            <h2 className="text-lg font-black">Últimos accesos</h2>
             <p className="mt-1 text-sm app-muted">
               Movimiento reciente de socios en el acceso.
             </p>
@@ -305,7 +305,7 @@ export default function PanelPage() {
 
       {data.summary.marginIsEstimated ? (
         <div className="rounded-[1.5rem] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          El margen de hoy es estimado porque existen ventas sin coste histÃ³rico completo.
+          El margen de hoy es estimado porque existen ventas sin coste histórico completo.
         </div>
       ) : null}
 
@@ -315,7 +315,7 @@ export default function PanelPage() {
         <section className="app-panel-strong rounded-[2rem] p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 className="text-lg font-black">Caja del dÃ­a</h2>
+              <h2 className="text-lg font-black">Caja del día</h2>
               <p className="mt-1 text-sm app-muted">
                 Estado actual del cierre y caja esperada.
               </p>
@@ -374,7 +374,7 @@ export default function PanelPage() {
             <div>
               <h2 className="text-lg font-black">Stock valorizado</h2>
               <p className="mt-1 text-sm app-muted">
-                Valor comercial y coste estimado del stock fÃ­sico.
+                Valor comercial y coste estimado del stock físico.
               </p>
             </div>
             {data.stockSummary?.stockCostValueEstimated ? (
@@ -398,13 +398,13 @@ export default function PanelPage() {
               </div>
             </div>
             <div className="rounded-[1.5rem] border border-black/8 bg-white/85 p-4">
-              <div className="text-sm app-muted">Valor del stock fÃ­sico</div>
+              <div className="text-sm app-muted">Valor del stock físico</div>
               <div className="mt-1 text-3xl font-black">
                 {formatCurrency(data.stockSummary?.totalPhysicalStockValue || 0)}
               </div>
             </div>
             <div className="rounded-[1.5rem] border border-black/8 bg-white/85 p-4">
-              <div className="text-sm app-muted">Coste del stock fÃ­sico</div>
+              <div className="text-sm app-muted">Coste del stock físico</div>
               <div className="mt-1 text-3xl font-black">
                 {formatCurrency(data.stockSummary?.stockCostValue || 0)}
               </div>
@@ -433,7 +433,7 @@ export default function PanelPage() {
                     <div>
                       <div className="font-semibold">{product.name}</div>
                       <div className="mt-1 text-sm app-muted">
-                        {product.salesCount} venta(s) Â· {formatQty(product.qty, product.unit)}
+                        {product.salesCount} venta(s) · {formatQty(product.qty, product.unit)}
                       </div>
                     </div>
                     <MarginBadge
@@ -478,7 +478,7 @@ export default function PanelPage() {
                     <div>
                       <div className="font-semibold">{member.fullName}</div>
                       <div className="mt-1 text-sm app-muted">
-                        {member.dni} Â· {member.salesCount} venta(s) Â· {formatQty(member.totalQty)}
+                        {member.dni} · {member.salesCount} venta(s) · {formatQty(member.totalQty)}
                       </div>
                     </div>
                     <MarginBadge
@@ -509,7 +509,7 @@ export default function PanelPage() {
 
       <section className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
         <section className="app-panel rounded-[2rem] p-5">
-          <h2 className="text-lg font-black">Finanzas Ãºltimos 7 dÃ­as</h2>
+          <h2 className="text-lg font-black">Finanzas últimos 7 días</h2>
           <p className="mt-1 text-sm app-muted">
             Ingresos y gastos de caja junto al beneficio bruto por ventas.
           </p>
@@ -560,7 +560,7 @@ export default function PanelPage() {
         <section className="app-panel rounded-[2rem] p-5">
           <h2 className="text-lg font-black">Ventas recientes</h2>
           <p className="mt-1 text-sm app-muted">
-            Ãšltimas ventas del dÃ­a con coste unitario congelado y beneficio.
+            Últimas ventas del día con coste unitario congelado y beneficio.
           </p>
 
           <div className="mt-4 space-y-2">
@@ -575,10 +575,10 @@ export default function PanelPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="font-semibold">
-                        {sale.member.fullName} Â· {sale.product.name}
+                        {sale.member.fullName} · {sale.product.name}
                       </div>
                       <div className="mt-1 text-sm app-muted">
-                        {formatQty(sale.qty, sale.product.unit)} Â· {formatTime(sale.createdAt)}
+                        {formatQty(sale.qty, sale.product.unit)} · {formatTime(sale.createdAt)}
                       </div>
                     </div>
                     <div className="text-right">
@@ -659,15 +659,15 @@ export default function PanelPage() {
         </section>
 
         <section className="app-panel rounded-[2rem] p-5">
-          <h2 className="text-lg font-black">Ultimas acciones</h2>
+          <h2 className="text-lg font-black">Últimas acciones</h2>
           <p className="mt-1 text-sm app-muted">
-            Ãšltimos eventos de auditorÃ­a registrados en el sistema.
+            Últimos eventos de auditoría registrados en el sistema.
           </p>
 
           <div className="mt-4 space-y-3">
             {data.recentAuditLogs.length === 0 ? (
               <EmptyState
-                message="Sin eventos recientes de auditorÃ­a."
+                message="Sin eventos recientes de auditoría."
                 className="rounded-[1.5rem]"
               />
             ) : (
@@ -680,7 +680,7 @@ export default function PanelPage() {
                     <div>
                       <div className="font-semibold">{log.summary}</div>
                       <div className="mt-1 text-sm app-muted">
-                        {log.actorUser?.name || log.actorEmail || "Sistema"} Â· {log.entityType}
+                        {log.actorUser?.name || log.actorEmail || "Sistema"} · {log.entityType}
                         {log.entityId ? ` #${log.entityId}` : ""}
                       </div>
                     </div>
@@ -752,7 +752,7 @@ export default function PanelPage() {
         <section className="app-panel rounded-[2rem] p-5">
           <h2 className="text-lg font-black">Stock bajo</h2>
           <p className="mt-1 text-sm app-muted">
-            Prioridades de reposiciÃ³n o ajuste de inventario.
+            Prioridades de reposición o ajuste de inventario.
           </p>
 
           <div className="mt-4 grid gap-2">
@@ -767,7 +767,7 @@ export default function PanelPage() {
                   <div>
                     <div className="font-semibold">{product.name}</div>
                     <div className="text-sm app-muted">
-                      MÃ­nimo {product.minStock.toFixed(2)} {product.unit}
+                      Mínimo {product.minStock.toFixed(2)} {product.unit}
                     </div>
                   </div>
                   <div className="text-right">
