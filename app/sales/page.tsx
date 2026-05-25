@@ -2,7 +2,6 @@
 
 import { EmptyState } from "@/components/ui/empty-state";
 import { fetchJson } from "@/lib/fetch-json";
-import { DAILY_LIMIT_G, DAILY_LIMIT_UD } from "@/lib/sales-rules";
 import { PRODUCT_HASH_TYPES } from "@/lib/types";
 import type { MemberSummary, ProductHashType, ProductSummary } from "@/lib/types";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -10,6 +9,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 type TodayTotals = {
   grams: number;
   units: number;
+  monthlyGrams: number;
+  limits: {
+    dailyLimitG: number;
+    dailyLimitUd: number;
+    monthlyLimitG: number | null;
+  };
 };
 
 type CartInputMode = "QTY" | "AMOUNT";
@@ -27,6 +32,9 @@ type MemberOperationalStatus = {
     expiresAt: string | null;
   };
   hasContract: boolean;
+  contract: {
+    monthlyLimitG: number | null;
+  } | null;
   expired: boolean;
   canWithdraw: boolean;
   reasons: {
@@ -58,6 +66,12 @@ const hashTypeLabelMap = new Map(
 const emptyToday: TodayTotals = {
   grams: 0,
   units: 0,
+  monthlyGrams: 0,
+  limits: {
+    dailyLimitG: 10,
+    dailyLimitUd: 15,
+    monthlyLimitG: null,
+  },
 };
 
 const QTY_DECIMALS_G = 3;
@@ -382,8 +396,12 @@ export default function SalesPage() {
 
   const gramsAfter = visibleToday.grams + cartG;
   const unitsAfter = visibleToday.units + cartUD;
-  const overGrams = gramsAfter > DAILY_LIMIT_G;
-  const overUnits = unitsAfter > DAILY_LIMIT_UD;
+  const monthGramsAfter = visibleToday.monthlyGrams + cartG;
+  const overGrams = gramsAfter > visibleToday.limits.dailyLimitG;
+  const overUnits = unitsAfter > visibleToday.limits.dailyLimitUd;
+  const overMonthly =
+    visibleToday.limits.monthlyLimitG !== null &&
+    monthGramsAfter > visibleToday.limits.monthlyLimitG;
 
   const stockProblems = cartLines.filter((line) => {
     if (!line.product) return true;
@@ -398,6 +416,7 @@ export default function SalesPage() {
     cart.length === 0 ||
     overGrams ||
     overUnits ||
+    overMonthly ||
     conversionProblems.length > 0 ||
     stockProblems.length > 0 ||
     loading;
@@ -625,9 +644,9 @@ export default function SalesPage() {
         </div>
 
         <div className="app-panel rounded-2xl p-3 text-sm">
-          Hoy: <strong>{visibleToday.grams.toFixed(2)} g</strong> / {DAILY_LIMIT_G} g
+          Hoy: <strong>{visibleToday.grams.toFixed(2)} g</strong> / {visibleToday.limits.dailyLimitG} g
           {" · "}
-          <strong>{visibleToday.units.toFixed(0)} ud</strong> / {DAILY_LIMIT_UD} ud
+          <strong>{visibleToday.units.toFixed(0)} ud</strong> / {visibleToday.limits.dailyLimitUd} ud
         </div>
       </div>
 
@@ -743,6 +762,12 @@ export default function SalesPage() {
                       {Number(memberStatus.member.discountPercent || 0).toFixed(2)}%
                       descuento
                     </span>
+
+                    {memberStatus.contract?.monthlyLimitG !== null ? (
+                      <span className="rounded bg-amber-100 px-3 py-1 text-amber-800">
+                        Mensual {memberStatus.contract?.monthlyLimitG} g
+                      </span>
+                    ) : null}
                   </div>
 
                   {!memberStatus.canWithdraw && (
@@ -1060,17 +1085,31 @@ export default function SalesPage() {
             <strong className={overUnits ? "text-red-600" : "text-green-700"}>
               {unitsAfter.toFixed(0)} ud
             </strong>
+            {visibleToday.limits.monthlyLimitG !== null ? (
+              <>
+                {" / "}
+                <strong className={overMonthly ? "text-red-600" : "text-green-700"}>
+                  {monthGramsAfter.toFixed(2)} / {visibleToday.limits.monthlyLimitG} g mes
+                </strong>
+              </>
+            ) : null}
           </div>
 
           {overGrams && (
             <div className="mt-3 rounded-2xl bg-red-100 p-3 text-sm text-red-700">
-              Se supera el límite diario de {DAILY_LIMIT_G} g.
+              Se supera el límite diario de {visibleToday.limits.dailyLimitG} g.
             </div>
           )}
 
           {overUnits && (
             <div className="mt-3 rounded-2xl bg-red-100 p-3 text-sm text-red-700">
-              Se supera el límite diario de {DAILY_LIMIT_UD} ud.
+              Se supera el límite diario de {visibleToday.limits.dailyLimitUd} ud.
+            </div>
+          )}
+
+          {overMonthly && visibleToday.limits.monthlyLimitG !== null && (
+            <div className="mt-3 rounded-2xl bg-red-100 p-3 text-sm text-red-700">
+              Se supera el límite mensual de {visibleToday.limits.monthlyLimitG} g.
             </div>
           )}
 

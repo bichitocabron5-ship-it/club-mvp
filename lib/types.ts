@@ -459,6 +459,12 @@ export type MemberContractRecord = {
   contractTemplate?: ContractTemplateRecord | null;
 };
 
+export type ClubSettingsRecord = {
+  dailyLimitG: number;
+  dailyLimitUd: number;
+  defaultMonthlyLimitG: number;
+};
+
 export type MemberHistorySale = {
   id: number;
   qty: number;
@@ -512,6 +518,9 @@ export type SigningSessionData = {
   member: MemberSummary;
   contract?: MemberContractRecord | null;
   contractTemplate: ContractTemplateRecord | null;
+  clubSettings?: {
+    defaultMonthlyLimitG: number;
+  };
 };
 
 export type AccessLogRecord = {

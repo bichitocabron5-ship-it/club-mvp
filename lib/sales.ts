@@ -1,16 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import type { ProductUnit } from "@/lib/types";
 import {
-  DAILY_LIMIT_G,
-  DAILY_LIMIT_UD,
   getDailyTotals,
   getTodayRange,
   normalizeUnit,
 } from "@/lib/sales-rules";
 
 export {
-  DAILY_LIMIT_G,
-  DAILY_LIMIT_UD,
   getDailyTotals,
   getTodayRange,
   normalizeUnit,

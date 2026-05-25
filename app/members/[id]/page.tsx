@@ -30,6 +30,7 @@ export default function MemberDetail() {
   const [rfidMessage, setRfidMessage] = useState("");
   const [rfidInput, setRfidInput] = useState("");
   const [rfidProcessing, setRfidProcessing] = useState(false);
+  const [savingContractId, setSavingContractId] = useState<number | null>(null);
   const rfidRef = useRef<HTMLInputElement | null>(null);
 
   const [editForm, setEditForm] = useState({
@@ -62,6 +63,61 @@ export default function MemberDetail() {
 
     const historyData: MemberHistoryData = await historyRes.json();
     setData(historyData);
+
+    const contractsRes = await fetch(`/api/members/${id}/contracts`, {
+      cache: "no-store",
+    });
+
+    if (contractsRes.ok) {
+      const contractsData: MemberContractRecord[] = await contractsRes.json();
+      setContracts(contractsData);
+    }
+  }
+
+  async function updateContractMonthlyLimit(
+    contractId: number,
+    currentValue: number | null
+  ) {
+    const nextValue = prompt(
+      "Nuevo límite mensual en gramos. Deja vacío para quitarlo.",
+      currentValue !== null ? String(currentValue) : ""
+    );
+
+    if (nextValue === null) return;
+
+    const trimmed = nextValue.trim();
+    const payload =
+      trimmed === ""
+        ? { consumptionGrams: null }
+        : { consumptionGrams: Number(trimmed) };
+
+    if (
+      payload.consumptionGrams !== null &&
+      (!Number.isInteger(payload.consumptionGrams) || payload.consumptionGrams <= 0)
+    ) {
+      alert("Introduce un número entero mayor que 0");
+      return;
+    }
+
+    setSavingContractId(contractId);
+
+    const res = await fetch(`/api/contracts/${contractId}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    setSavingContractId(null);
+
+    if (!res.ok) {
+      const err: { error?: string } = await res.json();
+      alert(err.error || "No se pudo actualizar el límite mensual");
+      return;
+    }
+
+    await refreshMember();
   }
 
   useEffect(() => {
@@ -652,6 +708,24 @@ export default function MemberDetail() {
                   Consumo mensual: {contract.consumptionGrams}g
                 </div>
               )}
+
+              {isAdmin ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void updateContractMonthlyLimit(
+                      contract.id,
+                      contract.consumptionGrams
+                    );
+                  }}
+                  disabled={savingContractId === contract.id}
+                  className="mt-3 inline-block rounded-full bg-amber-600 px-4 py-2 text-white disabled:opacity-40"
+                >
+                  {savingContractId === contract.id
+                    ? "Guardando..."
+                    : "Editar límite mensual"}
+                </button>
+              ) : null}
 
               {contract.signatureImage && (
                 <Image

@@ -1,12 +1,11 @@
 import { Prisma } from "@prisma/client";
 
 import { createAuditLog } from "@/lib/audit";
+import { getClubSettings } from "@/lib/club-settings";
 import { formatLocalDay } from "@/lib/cash-move";
 import { isClosureOpen } from "@/lib/day-closure";
 import { prisma } from "@/lib/prisma";
 import {
-  DAILY_LIMIT_G,
-  DAILY_LIMIT_UD,
   getDailyTotals,
   getMemberSalePricing,
   getTodayRange,
@@ -36,6 +35,7 @@ type TransactionMember = {
   expiresAt: Date | null;
   commercialProfile: string;
   discountPercent: number;
+  monthlyLimitG: number | null;
 };
 
 type ProductRecord = {
@@ -91,7 +91,8 @@ async function getSaleMemberStatusTx(
     }),
     tx.memberContract.findFirst({
       where: { memberId },
-      select: { id: true },
+      select: { id: true, consumptionGrams: true },
+      orderBy: { signedAt: "desc" },
     }),
   ]);
 
@@ -111,7 +112,27 @@ async function getSaleMemberStatusTx(
     throw new Error("El socio no ha firmado el contrato");
   }
 
-  return member satisfies TransactionMember;
+  return {
+    ...member,
+    monthlyLimitG: contract.consumptionGrams ?? null,
+  } satisfies TransactionMember;
+}
+
+function getMonthRange() {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  start.setDate(1);
+
+  const end = new Date(start);
+  end.setMonth(end.getMonth() + 1);
+
+  return { start, end };
+}
+
+function getMonthlyGramTotal(sales: Array<{ qty: number; product: { unit: string } }>) {
+  return sales.reduce((total, sale) => {
+    return normalizeUnit(sale.product.unit) === "G" ? total + sale.qty : total;
+  }, 0);
 }
 
 function getLinePricing(
@@ -174,6 +195,7 @@ export async function createSaleTransaction({
   const result = await prisma.$transaction(
     async (tx) => {
       const { start, day } = getTodayRange();
+      const { start: monthStart, end: monthEnd } = getMonthRange();
 
       const todayClosed = await tx.dayClosure.findUnique({
         where: { day },
@@ -229,17 +251,33 @@ export async function createSaleTransaction({
         ])
       );
 
-      const salesToday = await tx.sale.findMany({
-        where: {
-          memberId,
-          createdAt: { gte: start },
-        },
-        include: {
-          product: true,
-        },
-      });
+      const [settings, salesToday, salesThisMonth] = await Promise.all([
+        getClubSettings(),
+        tx.sale.findMany({
+          where: {
+            memberId,
+            createdAt: { gte: start },
+          },
+          include: {
+            product: true,
+          },
+        }),
+        tx.sale.findMany({
+          where: {
+            memberId,
+            createdAt: {
+              gte: monthStart,
+              lt: monthEnd,
+            },
+          },
+          include: {
+            product: true,
+          },
+        }),
+      ]);
 
       const { grams: todayG, units: todayUD } = getDailyTotals(salesToday);
+      const monthG = getMonthlyGramTotal(salesThisMonth);
 
       let cartG = 0;
       let cartUD = 0;
@@ -298,13 +336,21 @@ export async function createSaleTransaction({
         });
       }
 
-      if (todayG + cartG > DAILY_LIMIT_G) {
-        throw new Error(`Limite diario de gramos superado (${DAILY_LIMIT_G} g)`);
+      if (todayG + cartG > settings.dailyLimitG) {
+        throw new Error(
+          `Limite diario de gramos superado (${settings.dailyLimitG} g)`
+        );
       }
 
-      if (todayUD + cartUD > DAILY_LIMIT_UD) {
+      if (todayUD + cartUD > settings.dailyLimitUd) {
         throw new Error(
-          `Limite diario de unidades superado (${DAILY_LIMIT_UD} ud)`
+          `Limite diario de unidades superado (${settings.dailyLimitUd} ud)`
+        );
+      }
+
+      if (member.monthlyLimitG !== null && monthG + cartG > member.monthlyLimitG) {
+        throw new Error(
+          `Limite mensual de gramos superado (${member.monthlyLimitG} g)`
         );
       }
 

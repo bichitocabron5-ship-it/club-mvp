@@ -270,6 +270,14 @@ model SigningSession {
   contract MemberContract?
 }
 
+model ClubSetting {
+  id                   Int      @id @default(1)
+  dailyLimitG          Float    @default(10)
+  dailyLimitUd         Int      @default(15)
+  defaultMonthlyLimitG Int      @default(30)
+  updatedAt            DateTime @updatedAt
+}
+
 model Supplier {
   id        Int      @id @default(autoincrement())
   name      String

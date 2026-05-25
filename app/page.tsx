@@ -91,6 +91,7 @@ const adminQuickLinks = [
   { href: "/cash", label: "Caja", description: "Cierre y movimientos" },
   { href: "/stock/counts", label: "Conteos", description: "Inventario abierto" },
   { href: "/stock", label: "Stock", description: "Niveles y ajustes" },
+  { href: "/admin/settings", label: "Límites", description: "Topes y consumo" },
   { href: "/admin/audit", label: "Auditoría", description: "Trazabilidad" },
   { href: "/members/new", label: "Alta socio", description: "Nuevo miembro" },
 ];

@@ -1,9 +1,6 @@
 import type { ProductUnit } from "@/lib/types";
 import { formatLocalDay } from "@/lib/cash-move";
 
-export const DAILY_LIMIT_G = 10;
-export const DAILY_LIMIT_UD = 15;
-
 type ProductWithUnit = {
   unit: string;
 };

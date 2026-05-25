@@ -30,6 +30,10 @@ export async function GET(
   const contract = await prisma.memberContract.findFirst({
     where: { memberId },
     orderBy: { signedAt: "desc" },
+    select: {
+      id: true,
+      consumptionGrams: true,
+    },
   });
 
   const expired =
@@ -40,6 +44,11 @@ export async function GET(
   return NextResponse.json({
     member,
     hasContract: !!contract,
+    contract: contract
+      ? {
+          monthlyLimitG: contract.consumptionGrams,
+        }
+      : null,
     expired,
     canWithdraw,
     reasons: {

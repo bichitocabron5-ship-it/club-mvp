@@ -24,7 +24,7 @@ const emptyForm: SignForm = {
   birthDate: "",
   phone: "",
   email: "",
-  consumptionGrams: "30",
+  consumptionGrams: "",
 };
 
 export default function SignPage() {
@@ -63,7 +63,9 @@ export default function SignPage() {
         birthDate: "",
         phone: sessionData.member?.phone || "",
         email: sessionData.member?.email || "",
-        consumptionGrams: "30",
+        consumptionGrams: String(
+          sessionData.clubSettings?.defaultMonthlyLimitG ?? 30
+        ),
       });
     });
 

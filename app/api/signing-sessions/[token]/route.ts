@@ -4,6 +4,7 @@ import {
   findActiveContractTemplate,
   resolveContractTemplateForContract,
 } from "@/lib/contract-templates";
+import { getClubSettings } from "@/lib/club-settings";
 import { isSigningSessionExpired } from "@/lib/signing-session";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
@@ -88,10 +89,14 @@ async function serializeSigningSession(
   const contractTemplate = session.contract?.contractTemplateId
     ? await resolveContractTemplateForContract(session.contract.contractTemplateId)
     : await findActiveContractTemplate();
+  const settings = await getClubSettings();
 
   return {
     ...session,
     contractTemplate,
+    clubSettings: {
+      defaultMonthlyLimitG: settings.defaultMonthlyLimitG,
+    },
   };
 }
 
