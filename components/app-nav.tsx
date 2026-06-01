@@ -9,6 +9,7 @@ import { LogoutButton } from "@/components/logout-button";
 const commonLinks = [
   { href: "/", label: "Panel" },
   { href: "/access", label: "Acceso" },
+  { href: "/tasks", label: "Tareas" },
   { href: "/sales", label: "Retiradas" },
   { href: "/members", label: "Socios" },
   { href: "/products", label: "Productos" },

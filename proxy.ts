@@ -14,6 +14,7 @@ const protectedPaths = [
   "/sales",
   "/stock",
   "/suppliers",
+  "/tasks",
 ];
 
 const adminPaths = [
@@ -84,5 +85,6 @@ export const config = {
     "/sales/:path*",
     "/stock/:path*",
     "/suppliers/:path*",
+    "/tasks/:path*",
   ],
 };

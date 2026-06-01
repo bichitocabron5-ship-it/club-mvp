@@ -61,6 +61,8 @@ model AppUser {
   reopenedDayClosures      DayClosure[]     @relation("DayClosureReopenedByUser")
   createdCashMoves         CashMove[]       @relation("CashMoveCreatedByUser")
   cancelledExpenses        Expense[]        @relation("ExpenseCancelledByUser")
+  createdOperationalTasks   OperationalTask[] @relation("OperationalTaskCreatedByUser")
+  completedOperationalTasks OperationalTask[] @relation("OperationalTaskCompletedByUser")
 }
 
 model AuditLog {
@@ -227,6 +229,25 @@ model Expense {
   cancelReason      String?
 
   cancelledByUser AppUser? @relation("ExpenseCancelledByUser", fields: [cancelledByUserId], references: [id])
+}
+
+model OperationalTask {
+  id                Int       @id @default(autoincrement())
+  title             String
+  description       String?
+  category          String    @default("GENERAL")
+  priority          String    @default("NORMAL")
+  status            String    @default("OPEN")
+  dueAt             DateTime?
+  createdByUserId   Int?
+  completedByUserId Int?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  completedAt       DateTime?
+  cancelledAt       DateTime?
+
+  createdByUser   AppUser? @relation("OperationalTaskCreatedByUser", fields: [createdByUserId], references: [id])
+  completedByUser AppUser? @relation("OperationalTaskCompletedByUser", fields: [completedByUserId], references: [id])
 }
 
 model ContractTemplate {
