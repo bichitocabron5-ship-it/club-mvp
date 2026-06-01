@@ -1,72 +1,48 @@
-// proxy.ts
 import { getToken } from "next-auth/jwt";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 
-const protectedPaths = [
-  "/",
-  "/access",
-  "/admin",
-  "/cash",
-  "/expenses",
-  "/members",
-  "/products",
-  "/purchases",
-  "/sales",
-  "/stock",
-  "/suppliers",
-  "/tasks",
-];
+const PUBLIC_PAGE_PREFIXES = ["/catalog", "/sign"];
+const PUBLIC_PAGES = new Set(["/login"]);
+const ADMIN_PAGE_PREFIXES = ["/admin"];
 
-const adminPaths = [
-  "/cash",
-  "/expenses",
-  "/purchases",
-  "/stock",
-  "/suppliers",
-  "/admin",
-];
-
-const publicPaths = [
-  "/login",
-  "/sign",
-];
-
-export async function proxy(req: NextRequest) {
-  const { pathname } = req.nextUrl;
-
-  const isPublic = publicPaths.some(
-    (path) => pathname === path || pathname.startsWith(`${path}/`)
+function isPublicPage(pathname: string) {
+  return (
+    PUBLIC_PAGES.has(pathname) ||
+    PUBLIC_PAGE_PREFIXES.some(
+      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+    )
   );
+}
 
-  if (isPublic) {
-    return NextResponse.next();
-  }
-
-  const isProtected = protectedPaths.some(
-    (path) => pathname === path || pathname.startsWith(`${path}/`)
+function isAdminPage(pathname: string) {
+  return ADMIN_PAGE_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
   );
+}
 
-  if (!isProtected) {
-    return NextResponse.next();
-  }
-
+export async function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl;
   const token = await getToken({
-    req,
+    req: request,
     secret: process.env.AUTH_SECRET,
   });
 
+  if (pathname === "/login" && token) {
+    return NextResponse.redirect(new URL("/", request.url));
+  }
+
+  if (isPublicPage(pathname)) {
+    return NextResponse.next();
+  }
+
   if (!token) {
-    const loginUrl = new URL("/login", req.url);
-    loginUrl.searchParams.set("callbackUrl", pathname);
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("callbackUrl", request.nextUrl.pathname);
     return NextResponse.redirect(loginUrl);
   }
 
-  const isAdminPath = adminPaths.some(
-    (path) => pathname === path || pathname.startsWith(`${path}/`)
-  );
-
-  if (isAdminPath && token.role !== "ADMIN") {
-    return NextResponse.redirect(new URL("/", req.url));
+  if (isAdminPage(pathname) && token.role !== "ADMIN") {
+    return NextResponse.redirect(new URL("/", request.url));
   }
 
   return NextResponse.next();
@@ -74,17 +50,6 @@ export async function proxy(req: NextRequest) {
 
 export const config = {
   matcher: [
-    "/",
-    "/access/:path*",
-    "/admin/:path*",
-    "/cash/:path*",
-    "/expenses/:path*",
-    "/members/:path*",
-    "/products/:path*",
-    "/purchases/:path*",
-    "/sales/:path*",
-    "/stock/:path*",
-    "/suppliers/:path*",
-    "/tasks/:path*",
+    "/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|webp|svg|ico|css|js|map)$).*)",
   ],
 };
