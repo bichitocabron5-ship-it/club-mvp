@@ -34,3 +34,21 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Sprint 2A Operational Readiness
+
+Sprint 2A adds non-destructive operational indexes for frequent dashboard,
+audit, access, sales, stock, cash, signing-session, inventory-count, and purchase
+queries.
+
+The migration is:
+
+```bash
+prisma/migrations/20260601210000_add_operational_indexes/migration.sql
+```
+
+Production deployments must apply Prisma migrations with:
+
+```bash
+npx prisma migrate deploy
+```

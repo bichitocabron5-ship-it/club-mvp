@@ -1,0 +1,14 @@
+CREATE INDEX "AccessLog_memberId_createdAt_idx" ON "AccessLog"("memberId", "createdAt");
+CREATE INDEX "AccessLog_createdAt_idx" ON "AccessLog"("createdAt");
+CREATE INDEX "Sale_memberId_createdAt_idx" ON "Sale"("memberId", "createdAt");
+CREATE INDEX "Sale_productId_createdAt_idx" ON "Sale"("productId", "createdAt");
+CREATE INDEX "Sale_createdAt_idx" ON "Sale"("createdAt");
+CREATE INDEX "CashMove_day_createdAt_idx" ON "CashMove"("day", "createdAt");
+CREATE INDEX "CashMove_createdAt_idx" ON "CashMove"("createdAt");
+CREATE INDEX "AuditLog_createdAt_idx" ON "AuditLog"("createdAt");
+CREATE INDEX "InventoryCount_status_createdAt_idx" ON "InventoryCount"("status", "createdAt");
+CREATE INDEX "SigningSession_status_expiresAt_idx" ON "SigningSession"("status", "expiresAt");
+CREATE INDEX "StockMove_productId_createdAt_idx" ON "StockMove"("productId", "createdAt");
+CREATE INDEX "StockMove_createdAt_idx" ON "StockMove"("createdAt");
+CREATE INDEX "Purchase_supplierId_createdAt_idx" ON "Purchase"("supplierId", "createdAt");
+CREATE INDEX "Purchase_createdAt_idx" ON "Purchase"("createdAt");
