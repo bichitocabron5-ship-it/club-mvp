@@ -79,6 +79,7 @@ model AuditLog {
 model Product {
   id          Int    @id @default(autoincrement())
   name        String
+  sku         String? @unique
   description String? @db.Text
   unit        String // "G" o "UD"
   price       Float

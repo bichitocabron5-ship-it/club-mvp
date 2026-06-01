@@ -148,6 +148,7 @@ export type MemberSummary = {
 export type ProductSummary = {
   id: number;
   name: string;
+  sku?: string | null;
   description?: string | null;
   unit: ProductUnit;
   price: number;
@@ -164,6 +165,7 @@ export type ProductSummary = {
 export type CatalogProductSummary = {
   id: number;
   name: string;
+  sku?: string | null;
   description?: string | null;
   category: ProductCategory;
   hashType: ProductHashType | null;

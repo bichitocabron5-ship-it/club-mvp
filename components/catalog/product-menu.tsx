@@ -41,7 +41,7 @@ export function ProductMenu({
   loading = false,
   error = "",
   note = "Solo lectura. Sin stock ni datos internos.",
-  searchPlaceholder = "Buscar por nombre, categoría o subtipo",
+  searchPlaceholder = "Buscar por referencia, nombre, categoría o subtipo",
   emptyMessage = "No hay productos que coincidan con los filtros.",
   logoutLabel = "Salir del catálogo",
   loggingOut = false,
@@ -113,6 +113,7 @@ export function ProductMenu({
     }
 
     const haystack = [
+      product.sku ?? "",
       product.name,
       product.description ?? "",
       product.category,
@@ -298,6 +299,11 @@ export function ProductMenu({
                           </div>
 
                           <div className="mt-3 flex flex-wrap gap-2">
+                            {product.sku ? (
+                              <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-[#627166] ring-1 ring-black/8">
+                                Ref. {product.sku}
+                              </span>
+                            ) : null}
                             <span className="rounded-full bg-[#eef4e4] px-3 py-1 text-xs font-bold text-[#31584d]">
                               {getProductCategoryLabel(product.category)}
                             </span>

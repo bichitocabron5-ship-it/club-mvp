@@ -63,6 +63,10 @@ const hashTypeLabelMap = new Map(
   PRODUCT_HASH_TYPES.map((hashType) => [hashType.value, hashType.label])
 );
 
+const categoryLabelMap = new Map(
+  PRODUCT_CATEGORIES.map((category) => [category.value, category.label])
+);
+
 const emptyToday: TodayTotals = {
   grams: 0,
   units: 0,
@@ -269,7 +273,31 @@ export default function SalesPage() {
       })
       .filter((product) => {
         if (!query) return true;
-        return product.name.toLowerCase().includes(query);
+        const categoryLabel = categoryLabelMap.get(product.category) ?? product.category;
+        const hashTypeLabel = product.hashType
+          ? hashTypeLabelMap.get(product.hashType) ?? product.hashType
+          : "";
+        const haystack = [
+          product.sku ?? "",
+          product.name,
+          product.category,
+          categoryLabel,
+          product.hashType ?? "",
+          hashTypeLabel,
+        ]
+          .join(" ")
+          .toLowerCase();
+
+        return haystack.includes(query);
+      })
+      .sort((left, right) => {
+        if (!query) return 0;
+
+        const leftExactSku = (left.sku ?? "").toLowerCase() === query;
+        const rightExactSku = (right.sku ?? "").toLowerCase() === query;
+
+        if (leftExactSku === rightExactSku) return 0;
+        return leftExactSku ? -1 : 1;
       });
   }, [products, search, selectedCategory, selectedHashType]);
 
@@ -545,6 +573,26 @@ export default function SalesPage() {
     }
   }
 
+  function handleProductSearchKeyDown(
+    event: React.KeyboardEvent<HTMLInputElement>
+  ) {
+    if (event.key !== "Enter") return;
+
+    event.preventDefault();
+
+    const query = search.trim().toLowerCase();
+    if (!query) return;
+
+    const exactSkuMatches = filteredProducts.filter(
+      (product) =>
+        (product.sku ?? "").toLowerCase() === query && Number(product.stock) > 0
+    );
+
+    if (exactSkuMatches.length === 1) {
+      addProduct(exactSkuMatches[0]);
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (invalid) return;
@@ -784,9 +832,10 @@ export default function SalesPage() {
             </label>
             <input
               className="w-full rounded-2xl border border-black/10 bg-white/80 p-3 text-base"
-              placeholder="Buscar por nombre..."
+              placeholder="Buscar por código o nombre..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={handleProductSearchKeyDown}
             />
           </div>
 
@@ -852,51 +901,59 @@ export default function SalesPage() {
             </div>
           ) : null}
 
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
-            {filteredProducts.map((product) => {
-              const noStock = Number(product.stock) <= 0;
+          {filteredProducts.length ? (
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+              {filteredProducts.map((product) => {
+                const noStock = Number(product.stock) <= 0;
 
-              return (
-                <button
-                  key={product.id}
-                  type="button"
-                  onClick={() => addProduct(product)}
-                  disabled={noStock}
-                  className={`min-h-36 rounded-xl border p-4 text-left shadow-sm transition hover:scale-[1.02] disabled:opacity-40 ${
-                    noStock ? "bg-gray-100" : "bg-white hover:bg-blue-50"
-                  }`}
-                >
-                  <div className="text-lg font-black">{product.name}</div>
+                return (
+                  <button
+                    key={product.id}
+                    type="button"
+                    onClick={() => addProduct(product)}
+                    disabled={noStock}
+                    className={`min-h-36 rounded-xl border p-4 text-left shadow-sm transition hover:scale-[1.02] disabled:opacity-40 ${
+                      noStock ? "bg-gray-100" : "bg-white hover:bg-blue-50"
+                    }`}
+                  >
+                    <div className="text-lg font-black">
+                      {product.sku ? `${product.sku} · ${product.name}` : product.name}
+                    </div>
 
-                  <div className="mt-1 text-xs font-bold text-gray-500">
-                    {product.category}
-                    {product.hashType
-                      ? ` · ${hashTypeLabelMap.get(product.hashType) ?? product.hashType}`
-                      : ""}
-                  </div>
+                    <div className="mt-1 text-xs font-bold text-gray-500">
+                      {product.category}
+                      {product.hashType
+                        ? ` · ${hashTypeLabelMap.get(product.hashType) ?? product.hashType}`
+                        : ""}
+                    </div>
 
-                  <div className="mt-2 text-2xl font-bold text-blue-700">
-                    {Number(product.price).toFixed(2)} EUR
-                  </div>
+                    <div className="mt-2 text-2xl font-bold text-blue-700">
+                      {Number(product.price).toFixed(2)} EUR
+                    </div>
 
-                  <div className="text-xs text-gray-500">
-                    por {product.unit === "G" ? "gramo" : "unidad"}
-                  </div>
+                    <div className="text-xs text-gray-500">
+                      por {product.unit === "G" ? "gramo" : "unidad"}
+                    </div>
 
-                  <div className="mt-3 text-sm">
-                    Stock:{" "}
-                    <strong>
-                      {Number(product.stock).toFixed(2)} {product.unit}
-                    </strong>
-                  </div>
+                    <div className="mt-3 text-sm">
+                      Stock:{" "}
+                      <strong>
+                        {Number(product.stock).toFixed(2)} {product.unit}
+                      </strong>
+                    </div>
 
-                  <div className="mt-3 rounded bg-gray-900 px-3 py-2 text-center text-sm font-bold text-white">
-                    {noStock ? "SIN STOCK" : "AÑADIR"}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+                    <div className="mt-3 rounded bg-gray-900 px-3 py-2 text-center text-sm font-bold text-white">
+                      {noStock ? "SIN STOCK" : "AÑADIR"}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-black/10 bg-white/70 p-6 text-center text-sm font-semibold text-gray-600">
+              No hay productos con ese código o nombre.
+            </div>
+          )}
         </section>
 
         <aside className="app-panel-strong rounded-3xl p-4 xl:sticky xl:top-24 xl:self-start">

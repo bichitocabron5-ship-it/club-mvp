@@ -1,9 +1,16 @@
 // app/api/products/[id]/route.ts
 import { requireAdmin } from "@/lib/auth-server";
 import { createAuditLog } from "@/lib/audit";
+import {
+  PRODUCT_SKU_DUPLICATE_MESSAGE,
+  PRODUCT_SKU_MAX_LENGTH,
+  isProductSkuUniqueConstraintError,
+  normalizeProductSku,
+} from "@/lib/product-sku";
 import { prisma } from "@/lib/prisma";
 import { normalizeUnit } from "@/lib/sales";
 import { PRODUCT_CATEGORY_VALUES, PRODUCT_HASH_TYPE_VALUES } from "@/lib/types";
+import type { Product } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -13,6 +20,7 @@ const hashTypeSchema = z.enum(PRODUCT_HASH_TYPE_VALUES);
 const productPatchSchema = z
   .object({
     name: z.string().trim().min(1).optional(),
+    sku: z.string().trim().max(PRODUCT_SKU_MAX_LENGTH).nullable().optional(),
     description: z.string().trim().max(500).nullable().optional(),
     unit: z.string().trim().min(1).optional(),
     price: z.coerce.number().positive().optional(),
@@ -63,6 +71,7 @@ export async function PATCH(
     select: {
       id: true,
       name: true,
+      sku: true,
       description: true,
       unit: true,
       price: true,
@@ -93,6 +102,7 @@ export async function PATCH(
   }
 
   const nextCategory = parsed.data.category ?? existingProduct.category;
+  const sku = normalizeProductSku(parsed.data.sku);
 
   if (nextCategory !== "HASH" && parsed.data.hashType) {
     return NextResponse.json(
@@ -101,31 +111,48 @@ export async function PATCH(
     );
   }
 
-  const updated = await prisma.product.update({
-    where: { id: productId },
-    data: {
-      name: parsed.data.name,
-      description:
-        parsed.data.description === undefined
-          ? undefined
-          : parsed.data.description?.trim() || null,
-      unit,
-      price: parsed.data.price,
-      category: parsed.data.category,
-      hashType:
-        nextCategory === "HASH"
-          ? parsed.data.hashType === undefined
+  let updated: Product;
+
+  try {
+    updated = await prisma.product.update({
+      where: { id: productId },
+      data: {
+        name: parsed.data.name,
+        sku,
+        description:
+          parsed.data.description === undefined
             ? undefined
-            : parsed.data.hashType
-          : null,
-      minStock: parsed.data.minStock,
-      active: parsed.data.active,
-    },
-  });
+            : parsed.data.description?.trim() || null,
+        unit,
+        price: parsed.data.price,
+        category: parsed.data.category,
+        hashType:
+          nextCategory === "HASH"
+            ? parsed.data.hashType === undefined
+              ? undefined
+              : parsed.data.hashType
+            : null,
+        minStock: parsed.data.minStock,
+        active: parsed.data.active,
+      },
+    });
+  } catch (error) {
+    if (isProductSkuUniqueConstraintError(error)) {
+      return NextResponse.json(
+        { error: PRODUCT_SKU_DUPLICATE_MESSAGE },
+        { status: 400 }
+      );
+    }
+
+    throw error;
+  }
 
   const changedFields: string[] = [];
 
   if (updated.name !== existingProduct.name) changedFields.push("name");
+  if ((updated.sku ?? null) !== (existingProduct.sku ?? null)) {
+    changedFields.push("sku");
+  }
   if ((updated.description ?? null) !== (existingProduct.description ?? null)) {
     changedFields.push("description");
   }

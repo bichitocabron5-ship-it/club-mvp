@@ -1,9 +1,16 @@
 // app/api/products/route.ts
 import { requireAdmin, requireAuth } from "@/lib/auth-server";
 import { createAuditLog } from "@/lib/audit";
+import {
+  PRODUCT_SKU_DUPLICATE_MESSAGE,
+  PRODUCT_SKU_MAX_LENGTH,
+  isProductSkuUniqueConstraintError,
+  normalizeProductSku,
+} from "@/lib/product-sku";
 import { prisma } from "@/lib/prisma";
 import { normalizeUnit } from "@/lib/sales";
 import { PRODUCT_CATEGORY_VALUES, PRODUCT_HASH_TYPE_VALUES } from "@/lib/types";
+import type { Product } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -12,6 +19,7 @@ const hashTypeSchema = z.enum(PRODUCT_HASH_TYPE_VALUES);
 
 const productSchema = z.object({
   name: z.string().trim().min(1),
+  sku: z.string().trim().max(PRODUCT_SKU_MAX_LENGTH).nullable().optional(),
   description: z.string().trim().max(500).nullable().optional(),
   unit: z.string().trim().min(1),
   price: z.coerce.number().positive(),
@@ -58,6 +66,7 @@ export async function POST(req: Request) {
   }
 
   const category = parsed.data.category ?? "CANNABIS";
+  const sku = normalizeProductSku(parsed.data.sku) ?? null;
   const ignoredStockFields = ["stock", "reserveStock"].filter((field) =>
     Object.prototype.hasOwnProperty.call(body, field)
   );
@@ -69,20 +78,34 @@ export async function POST(req: Request) {
     );
   }
 
-  const product = await prisma.product.create({
-    data: {
-      name: parsed.data.name,
-      description: parsed.data.description?.trim() || null,
-      unit,
-      price: parsed.data.price,
-      stock: 0,
-      reserveStock: 0,
-      averageCost: 0,
-      category,
-      hashType: category === "HASH" ? (parsed.data.hashType ?? null) : null,
-      minStock: parsed.data.minStock ?? 5,
-    },
-  });
+  let product: Product;
+
+  try {
+    product = await prisma.product.create({
+      data: {
+        name: parsed.data.name,
+        sku,
+        description: parsed.data.description?.trim() || null,
+        unit,
+        price: parsed.data.price,
+        stock: 0,
+        reserveStock: 0,
+        averageCost: 0,
+        category,
+        hashType: category === "HASH" ? (parsed.data.hashType ?? null) : null,
+        minStock: parsed.data.minStock ?? 5,
+      },
+    });
+  } catch (error) {
+    if (isProductSkuUniqueConstraintError(error)) {
+      return NextResponse.json(
+        { error: PRODUCT_SKU_DUPLICATE_MESSAGE },
+        { status: 400 }
+      );
+    }
+
+    throw error;
+  }
 
   await createAuditLog({
     actorUserId: Number(auth.session.user.id),
@@ -97,6 +120,7 @@ export async function POST(req: Request) {
       stock: Number(product.stock),
       reserveStock: Number(product.reserveStock),
       averageCost: Number(product.averageCost),
+      sku: product.sku,
       description: product.description,
       category: product.category,
       active: product.active,

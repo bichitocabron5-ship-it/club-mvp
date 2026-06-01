@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
     select: {
       id: true,
       name: true,
+      sku: true,
       description: true,
       category: true,
       hashType: true,
@@ -39,6 +40,7 @@ export async function GET(req: NextRequest) {
   const catalogProducts: CatalogProductSummary[] = products.map((product) => ({
     id: product.id,
     name: product.name,
+    sku: product.sku,
     description: product.description,
     category: product.category as CatalogProductSummary["category"],
     hashType: product.hashType as CatalogProductSummary["hashType"],

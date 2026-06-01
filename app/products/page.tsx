@@ -20,6 +20,7 @@ import { useEffect, useState } from "react";
 
 type ProductForm = {
   name: string;
+  sku: string;
   description: string;
   unit: ProductUnit;
   price: string;
@@ -30,6 +31,7 @@ type ProductForm = {
 
 const initialForm: ProductForm = {
   name: "",
+  sku: "",
   description: "",
   unit: "G",
   price: "",
@@ -41,6 +43,7 @@ const initialForm: ProductForm = {
 function toEditableForm(product: ProductSummary): ProductForm {
   return {
     name: product.name,
+    sku: product.sku ?? "",
     description: product.description ?? "",
     unit: product.unit,
     price: String(product.price),
@@ -54,6 +57,7 @@ function toCatalogProduct(product: ProductSummary): CatalogProductSummary {
   return {
     id: product.id,
     name: product.name,
+    sku: product.sku ?? null,
     description: product.description ?? null,
     category: product.category,
     hashType: product.hashType,
@@ -126,6 +130,7 @@ export default function ProductsPage() {
         },
         body: JSON.stringify({
           name: form.name,
+          sku: form.sku,
           description: form.description.trim() || null,
           unit: form.unit,
           price: Number(form.price),
@@ -165,6 +170,7 @@ export default function ProductsPage() {
     productId: number,
     payload: Partial<{
       name: string;
+      sku: string | null;
       description: string | null;
       unit: ProductUnit;
       price: number;
@@ -203,6 +209,7 @@ export default function ProductsPage() {
 
     await patchProduct(productId, {
       name: editForm.name,
+      sku: editForm.sku,
       description: editForm.description.trim() || null,
       unit: editForm.unit,
       price: Number(editForm.price),
@@ -299,6 +306,19 @@ export default function ProductsPage() {
           onChange={(e) => setForm({ ...form, name: e.target.value })}
           required
         />
+
+        <div>
+          <label className="mb-1 block text-xs font-bold text-gray-500">
+            Código interno
+          </label>
+          <input
+            className="w-full rounded-2xl border border-black/10 bg-white/80 p-3"
+            placeholder="Ej. 1010"
+            value={form.sku}
+            onChange={(e) => setForm({ ...form, sku: e.target.value })}
+            maxLength={32}
+          />
+        </div>
 
         <textarea
           className="rounded-2xl border border-black/10 bg-white/80 p-3 md:col-span-2 xl:col-span-2"
@@ -441,6 +461,12 @@ export default function ProductsPage() {
                           : ""}
                       </div>
 
+                      {product.sku ? (
+                        <div className="mt-1 text-sm text-gray-500">
+                          Código: {product.sku}
+                        </div>
+                      ) : null}
+
                       {product.description ? (
                         <div className="mt-2 text-sm text-gray-600">
                           {product.description}
@@ -482,6 +508,21 @@ export default function ProductsPage() {
                       }
                       placeholder="Nombre"
                     />
+
+                    <div>
+                      <label className="mb-1 block text-xs font-bold text-gray-500">
+                        Código interno
+                      </label>
+                      <input
+                        className="w-full rounded-2xl border border-black/10 bg-white p-3"
+                        value={editForm.sku}
+                        onChange={(e) =>
+                          setEditForm({ ...editForm, sku: e.target.value })
+                        }
+                        placeholder="Ej. 1010"
+                        maxLength={32}
+                      />
+                    </div>
 
                     <textarea
                       className="rounded-2xl border border-black/10 bg-white p-3"
