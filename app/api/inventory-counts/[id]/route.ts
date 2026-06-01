@@ -43,6 +43,7 @@ const inventoryCountInclude = {
           name: true,
           unit: true,
           stock: true,
+          reserveStock: true,
           active: true,
         },
       },
