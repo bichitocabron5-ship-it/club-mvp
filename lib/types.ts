@@ -179,7 +179,7 @@ export type CashMove = {
   type: "income" | "expense";
   amount: number;
   note: string | null;
-  source: "SALE" | "EXPENSE" | "PURCHASE_PAYMENT" | "MANUAL" | "ADJUSTMENT" | "OTHER" | string;
+  source: "SALE" | "EXPENSE" | "EXPENSE_CANCELLED" | "PURCHASE_PAYMENT" | "MANUAL" | "ADJUSTMENT" | "OTHER" | string;
   sourceId: string | null;
   paymentMethod: "CASH" | "CARD" | "TRANSFER" | "OTHER" | string;
   createdByUserId: number | null;

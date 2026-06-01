@@ -60,6 +60,7 @@ model AppUser {
   closedDayClosures        DayClosure[]     @relation("DayClosureClosedByUser")
   reopenedDayClosures      DayClosure[]     @relation("DayClosureReopenedByUser")
   createdCashMoves         CashMove[]       @relation("CashMoveCreatedByUser")
+  cancelledExpenses        Expense[]        @relation("ExpenseCancelledByUser")
 }
 
 model AuditLog {
@@ -175,7 +176,7 @@ model CashMove {
   type            String // income / expense
   amount          Float
   note            String?
-  source          String   @default("MANUAL") // SALE | EXPENSE | PURCHASE_PAYMENT | MANUAL | ADJUSTMENT | OTHER
+  source          String   @default("MANUAL") // SALE | EXPENSE | EXPENSE_CANCELLED | PURCHASE_PAYMENT | MANUAL | ADJUSTMENT | OTHER
   sourceId        String?
   paymentMethod   String   @default("CASH") // CASH | CARD | TRANSFER | OTHER
   createdByUserId Int?
@@ -214,12 +215,18 @@ model DayClosure {
 }
 
 model Expense {
-  id          Int      @id @default(autoincrement())
-  category    String
-  description String
-  amount      Float
-  paidMethod  String   @default("CASH")
-  createdAt   DateTime @default(now())
+  id                Int      @id @default(autoincrement())
+  category          String
+  description       String
+  amount            Float
+  paidMethod        String   @default("CASH")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  cancelledAt       DateTime?
+  cancelledByUserId Int?
+  cancelReason      String?
+
+  cancelledByUser AppUser? @relation("ExpenseCancelledByUser", fields: [cancelledByUserId], references: [id])
 }
 
 model ContractTemplate {

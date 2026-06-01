@@ -28,6 +28,8 @@ function formatSourceLabel(source: CashMove["source"]) {
       return "Ventas";
     case "EXPENSE":
       return "Gastos";
+    case "EXPENSE_CANCELLED":
+      return "Gastos anulados";
     case "PURCHASE_PAYMENT":
       return "Pagos de compras";
     case "MANUAL":

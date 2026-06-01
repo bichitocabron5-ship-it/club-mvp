@@ -2,6 +2,10 @@
 import { requireAdmin } from "@/lib/auth-server";
 import { createAuditLog } from "@/lib/audit";
 import { formatLocalDay, normalizeCashMovePaymentMethod } from "@/lib/cash-move";
+import {
+  buildExpenseCashNote,
+  isPurchaseManagedExpense,
+} from "@/lib/expenses";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -26,7 +30,29 @@ export async function GET() {
     take: 100,
   });
 
-  return NextResponse.json(expenses);
+  const cashMoves = await prisma.cashMove.findMany({
+    where: {
+      source: "EXPENSE",
+      sourceId: {
+        in: expenses.map((expense) => String(expense.id)),
+      },
+    },
+    select: {
+      id: true,
+      sourceId: true,
+    },
+  });
+  const cashMoveByExpenseId = new Map(
+    cashMoves.map((move) => [move.sourceId, move.id])
+  );
+
+  return NextResponse.json(
+    expenses.map((expense) => ({
+      ...expense,
+      directCashMoveId: cashMoveByExpenseId.get(String(expense.id)) ?? null,
+      managedByPurchase: isPurchaseManagedExpense(expense),
+    }))
+  );
 }
 
 export async function POST(req: Request) {
@@ -58,7 +84,7 @@ export async function POST(req: Request) {
       data: {
         type: "expense",
         amount: parsed.data.amount,
-        note: `${parsed.data.category}: ${parsed.data.description}`,
+        note: buildExpenseCashNote(created),
         source: "EXPENSE",
         sourceId: String(created.id),
         paymentMethod: created.paidMethod,

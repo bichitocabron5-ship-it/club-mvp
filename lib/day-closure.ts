@@ -56,6 +56,7 @@ export async function buildTodayDayClosureSummary(): Promise<DayClosureSummary> 
     }),
     prisma.expense.findMany({
       where: {
+        cancelledAt: null,
         createdAt: {
           gte: start,
           lt: end,

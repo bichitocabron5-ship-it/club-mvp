@@ -1,6 +1,7 @@
 export const CASH_MOVE_SOURCES = [
   "SALE",
   "EXPENSE",
+  "EXPENSE_CANCELLED",
   "PURCHASE_PAYMENT",
   "MANUAL",
   "ADJUSTMENT",
