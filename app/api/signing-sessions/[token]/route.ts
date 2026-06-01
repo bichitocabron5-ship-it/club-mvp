@@ -1,39 +1,176 @@
-import type { Prisma } from "@prisma/client";
 import { ensureSignedContractPdf } from "@/lib/contract-pdf";
-import {
-  findActiveContractTemplate,
-  resolveContractTemplateForContract,
-} from "@/lib/contract-templates";
-import { getClubSettings } from "@/lib/club-settings";
-import { isSigningSessionExpired } from "@/lib/signing-session";
+import { findActiveContractTemplate } from "@/lib/contract-templates";
 import { prisma } from "@/lib/prisma";
+import {
+  checkRateLimit,
+  getClientIp,
+  rateLimitResponse,
+} from "@/lib/rate-limit";
+import {
+  InvalidJsonBodyError,
+  readJsonBodyWithLimit,
+  RequestBodyTooLargeError,
+} from "@/lib/request-body";
+import {
+  isSigningSessionExpired,
+  serializePublicSigningSession,
+} from "@/lib/signing-session";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-const tokenSchema = z.string().trim().regex(/^[a-f0-9]{48}$/i);
+const SIGNATURE_IMAGE_PREFIX = "data:image/png;base64,";
+export const SIGNATURE_IMAGE_MAX_BYTES = 512 * 1024;
+const SIGNATURE_PAYLOAD_MAX_BYTES = 768 * 1024;
+const SIGNATURE_BASE64_MAX_CHARS = Math.ceil(SIGNATURE_IMAGE_MAX_BYTES / 3) * 4;
+const PUBLIC_SIGNING_ERROR = "La sesion de firma no esta disponible";
+const INVALID_SIGNING_PAYLOAD_ERROR = "No se pudo procesar la firma";
 
-const signPayloadSchema = z.object({
-  signatureImage: z.string().trim().regex(/^data:image\/png;base64,/),
-  form: z
-    .object({
-      fullName: z.string().trim().optional(),
-      dni: z.string().trim().optional(),
-      address: z.string().trim().optional(),
-      birthPlace: z.string().trim().optional(),
-      birthDate: z.string().trim().optional(),
-      phone: z.string().trim().optional(),
-      email: z.string().trim().optional(),
-      consumptionGrams: z.union([z.string().trim(), z.number()]).optional(),
-    })
-    .optional(),
-});
+const tokenSchema = z
+  .string()
+  .trim()
+  .regex(/^[a-f0-9]{48}$/i)
+  .transform((value) => value.toLowerCase());
 
-type SigningSessionWithRelations = Prisma.SigningSessionGetPayload<{
-  include: {
-    member: true;
-    contract: true;
-  };
-}>;
+const optionalText = (maxLength: number) =>
+  z.string().trim().max(maxLength).optional();
+
+function isPngSignatureDataUrl(value: string) {
+  if (!value.startsWith(SIGNATURE_IMAGE_PREFIX)) {
+    return false;
+  }
+
+  const base64 = value.slice(SIGNATURE_IMAGE_PREFIX.length);
+
+  if (
+    !base64 ||
+    base64.length > SIGNATURE_BASE64_MAX_CHARS ||
+    base64.length % 4 !== 0 ||
+    !/^[A-Za-z0-9+/]+={0,2}$/.test(base64)
+  ) {
+    return false;
+  }
+
+  const bytes = Buffer.from(base64, "base64");
+
+  if (bytes.length === 0 || bytes.length > SIGNATURE_IMAGE_MAX_BYTES) {
+    return false;
+  }
+
+  return (
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  );
+}
+
+const signPayloadSchema = z
+  .object({
+    signatureImage: z
+      .string()
+      .trim()
+      .max(SIGNATURE_IMAGE_PREFIX.length + SIGNATURE_BASE64_MAX_CHARS)
+      .refine(isPngSignatureDataUrl),
+    form: z
+      .object({
+        fullName: optionalText(120),
+        dni: optionalText(40),
+        address: optionalText(240),
+        birthPlace: optionalText(120),
+        birthDate: optionalText(10),
+        phone: optionalText(40),
+        email: optionalText(254),
+        consumptionGrams: z
+          .union([z.string().trim().max(6), z.number()])
+          .optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+
+function publicSigningError(status: number) {
+  return NextResponse.json({ error: PUBLIC_SIGNING_ERROR }, { status });
+}
+
+function invalidSigningPayload(status = 400) {
+  return NextResponse.json({ error: INVALID_SIGNING_PAYLOAD_ERROR }, { status });
+}
+
+function enforceSigningRateLimit(req: Request, token: string, action: "get" | "post") {
+  const ip = getClientIp(req);
+  const tokenKey = token.length <= 128 ? token.toLowerCase() : "invalid-token";
+  const ipLimit = checkRateLimit({
+    namespace: `signing-session:${action}:ip`,
+    key: ip,
+    limit: action === "post" ? 12 : 120,
+    windowMs: action === "post" ? 10 * 60_000 : 60_000,
+  });
+
+  if (!ipLimit.ok) {
+    return rateLimitResponse(ipLimit);
+  }
+
+  const tokenLimit = checkRateLimit({
+    namespace: `signing-session:${action}:token`,
+    key: tokenKey,
+    limit: action === "post" ? 5 : 120,
+    windowMs: action === "post" ? 10 * 60_000 : 60_000,
+  });
+
+  if (!tokenLimit.ok) {
+    return rateLimitResponse(tokenLimit);
+  }
+
+  return null;
+}
+
+function trimToNull(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function parseBirthDate(value: string | null | undefined) {
+  const trimmed = trimToNull(value);
+
+  if (!trimmed) {
+    return null;
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return "INVALID" as const;
+  }
+
+  const date = new Date(`${trimmed}T00:00:00.000Z`);
+
+  if (Number.isNaN(date.getTime())) {
+    return "INVALID" as const;
+  }
+
+  return date;
+}
+
+function parseConsumptionGrams(value: string | number | null | undefined) {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+
+  const numericValue = typeof value === "number" ? value : Number(value);
+
+  if (
+    !Number.isInteger(numericValue) ||
+    numericValue <= 0 ||
+    numericValue > 1000
+  ) {
+    return "INVALID" as const;
+  }
+
+  return numericValue;
+}
 
 async function getPublicSigningSession(token: string) {
   const parsedToken = tokenSchema.safeParse(token);
@@ -41,7 +178,7 @@ async function getPublicSigningSession(token: string) {
   if (!parsedToken.success) {
     return {
       ok: false as const,
-      response: NextResponse.json({ error: "Token inválido" }, { status: 400 }),
+      response: publicSigningError(404),
     };
   }
 
@@ -56,20 +193,14 @@ async function getPublicSigningSession(token: string) {
   if (!session) {
     return {
       ok: false as const,
-      response: NextResponse.json(
-        { error: "Sesión no encontrada" },
-        { status: 404 }
-      ),
+      response: publicSigningError(404),
     };
   }
 
   if (isSigningSessionExpired(session.expiresAt)) {
     return {
       ok: false as const,
-      response: NextResponse.json(
-        { error: "La sesión de firma ha caducado" },
-        { status: 410 }
-      ),
+      response: publicSigningError(410),
     };
   }
 
@@ -79,45 +210,31 @@ async function getPublicSigningSession(token: string) {
   };
 }
 
-async function serializeSigningSession(
-  session: SigningSessionWithRelations | null
-) {
-  if (!session) {
-    return null;
-  }
-
-  const contractTemplate = session.contract?.contractTemplateId
-    ? await resolveContractTemplateForContract(session.contract.contractTemplateId)
-    : await findActiveContractTemplate();
-  const settings = await getClubSettings();
-
-  return {
-    ...session,
-    contractTemplate,
-    clubSettings: {
-      defaultMonthlyLimitG: settings.defaultMonthlyLimitG,
-    },
-  };
-}
-
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ token: string }> }
 ) {
   const { token } = await params;
+  const rateLimitResult = enforceSigningRateLimit(req, token, "get");
+
+  if (rateLimitResult) {
+    return rateLimitResult;
+  }
+
   const result = await getPublicSigningSession(token);
 
   if (!result.ok) {
     return result.response;
   }
 
-  const payload = await serializeSigningSession(result.session);
+  if (result.session.status !== "PENDING" && result.session.status !== "SIGNED") {
+    return publicSigningError(404);
+  }
+
+  const payload = await serializePublicSigningSession(result.session);
 
   if (!payload?.contractTemplate && payload?.status !== "SIGNED") {
-    return NextResponse.json(
-      { error: "No hay plantilla de contrato activa configurada" },
-      { status: 400 }
-    );
+    return publicSigningError(503);
   }
 
   return NextResponse.json(payload);
@@ -128,6 +245,12 @@ export async function POST(
   { params }: { params: Promise<{ token: string }> }
 ) {
   const { token } = await params;
+  const rateLimitResult = enforceSigningRateLimit(req, token, "post");
+
+  if (rateLimitResult) {
+    return rateLimitResult;
+  }
+
   const sessionResult = await getPublicSigningSession(token);
 
   if (!sessionResult.ok) {
@@ -136,43 +259,50 @@ export async function POST(
 
   const existingSession = sessionResult.session;
 
-  if (existingSession.status === "SIGNED" && existingSession.contract) {
-    if (!existingSession.contract.signedPdfUrl) {
-      await ensureSignedContractPdf(existingSession.contract.id);
-    }
-
-    const refreshedSession = await prisma.signingSession.findUnique({
-      where: { token },
-      include: {
-        member: true,
-        contract: true,
-      },
-    });
-
-    return NextResponse.json(await serializeSigningSession(refreshedSession));
+  if (existingSession.status !== "PENDING" || existingSession.contract) {
+    return publicSigningError(409);
   }
 
   const contractTemplate = await findActiveContractTemplate();
 
   if (!contractTemplate) {
-    return NextResponse.json(
-      { error: "No hay plantilla de contrato activa configurada" },
-      { status: 400 }
-    );
+    return publicSigningError(503);
   }
 
-  const body = await req.json();
+  let body: unknown;
+
+  try {
+    body = await readJsonBodyWithLimit(req, SIGNATURE_PAYLOAD_MAX_BYTES);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      return invalidSigningPayload(413);
+    }
+
+    if (error instanceof InvalidJsonBodyError) {
+      return invalidSigningPayload(400);
+    }
+
+    return invalidSigningPayload(400);
+  }
+
   const parsedBody = signPayloadSchema.safeParse(body);
 
   if (!parsedBody.success) {
-    return NextResponse.json({ error: "Datos inválidos" }, { status: 400 });
+    return invalidSigningPayload(400);
   }
 
   const form = parsedBody.data.form || {};
-  const mergedFullName = form.fullName || existingSession.member.fullName;
-  const mergedDni = form.dni || existingSession.member.dni;
-  const mergedPhone = form.phone || existingSession.member.phone || null;
-  const mergedEmail = form.email || existingSession.member.email || null;
+  const birthDate = parseBirthDate(form.birthDate);
+  const consumptionGrams = parseConsumptionGrams(form.consumptionGrams);
+
+  if (birthDate === "INVALID" || consumptionGrams === "INVALID") {
+    return invalidSigningPayload(400);
+  }
+
+  const mergedFullName = trimToNull(form.fullName) || existingSession.member.fullName;
+  const mergedDni = trimToNull(form.dni) || existingSession.member.dni;
+  const mergedPhone = trimToNull(form.phone) || existingSession.member.phone || null;
+  const mergedEmail = trimToNull(form.email) || existingSession.member.email || null;
 
   const session = await prisma.$transaction(async (tx) => {
     await tx.member.update({
@@ -186,7 +316,7 @@ export async function POST(
     });
 
     const updatedSession = await tx.signingSession.update({
-      where: { token },
+      where: { token: existingSession.token },
       data: {
         status: "SIGNED",
         signatureImage: parsedBody.data.signatureImage,
@@ -205,14 +335,12 @@ export async function POST(
 
         fullName: mergedFullName,
         dni: mergedDni,
-        address: form.address || null,
-        birthPlace: form.birthPlace || null,
-        birthDate: form.birthDate ? new Date(form.birthDate) : null,
+        address: trimToNull(form.address),
+        birthPlace: trimToNull(form.birthPlace),
+        birthDate,
         phone: mergedPhone,
         email: mergedEmail,
-        consumptionGrams: form.consumptionGrams
-          ? Number(form.consumptionGrams)
-          : null,
+        consumptionGrams,
 
         signatureImage: parsedBody.data.signatureImage,
       },
@@ -226,12 +354,12 @@ export async function POST(
   await ensureSignedContractPdf(session.contractId);
 
   const refreshedSession = await prisma.signingSession.findUnique({
-    where: { token },
+    where: { token: existingSession.token },
     include: {
       member: true,
       contract: true,
     },
   });
 
-  return NextResponse.json(await serializeSigningSession(refreshedSession));
+  return NextResponse.json(await serializePublicSigningSession(refreshedSession));
 }

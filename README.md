@@ -130,3 +130,77 @@ Production deployments must apply Prisma migrations with:
 ```bash
 npx prisma migrate deploy
 ```
+
+## Sprint 2B Public Security And Document Privacy
+
+Sprint 2B hardens the public catalog/kiosko and public signing endpoints without
+adding external infrastructure.
+
+### Rate limiting MVP
+
+The app includes an in-memory defensive rate limiter for public-sensitive routes:
+
+- Catalog login: `10` attempts per IP every `10` minutes.
+- Catalog products API: `120` requests per IP per minute.
+- Catalog logout: `60` requests per IP per minute.
+- Public signing session GET: `120` requests per IP per minute and `120` per token per minute.
+- Public signing session POST: `12` requests per IP every `10` minutes and `5` per token every `10` minutes.
+
+When the limit is exceeded the API returns `429` with a generic error and a
+`Retry-After` header. This limiter is intentionally simple for MVP: it is local
+to the current Node.js process and is not global across serverless instances,
+regions, deployments, or restarts. For production with multiple instances,
+replace `lib/rate-limit.ts` with a shared Redis/Upstash-backed counter using the
+same namespace/key/window model.
+
+### Public signing hardening
+
+`/sign/[token]` and `/api/signing-sessions/[token]` now validate public signing
+sessions more strictly:
+
+- Tokens must be 48 hex characters.
+- Expired sessions are rejected.
+- Cancelled or unknown sessions return generic unavailable errors.
+- Signing POST only accepts sessions in `PENDING` state and does not accept
+  already signed sessions as a mutation target.
+- The JSON body is limited to `768 KB` before parsing.
+- `signatureImage` must be `data:image/png;base64,...`.
+- The decoded signature PNG is limited to `512 KB`.
+- Form fields have defensive length limits and generic validation errors.
+- Public responses expose only the fields required by the signing UI, not the
+  full member record.
+
+Do not log catalog passwords, signing tokens, signature images, DNI images, PDF
+URLs, or signed URL values. Audit metadata should record actions and booleans,
+not document paths or document contents.
+
+### Document privacy and Supabase Storage
+
+Sensitive documents should live in private Supabase Storage buckets. The storage
+helpers can parse both legacy public Supabase URLs and stable `bucket/path`
+references, then return temporary signed URLs for client display.
+
+Current signed URL TTL is `15` minutes. Existing data is not migrated, and Sprint
+2B does not delete existing files. Replacing photos, DNI files, product images,
+or PDFs may leave old objects in storage until a future explicit cleanup task is
+implemented.
+
+Recommended Supabase buckets:
+
+- `member-documents`: private bucket for DNI/front/back documents.
+- `signed-contracts`: private bucket for generated signed PDFs.
+- `contract-templates`: private bucket for base contract PDFs.
+- `STORAGE_BUCKET` (default `club-uploads`): private bucket if used for member
+  photos, legacy DNI uploads, and product images. Product/catalog APIs now return
+  signed image URLs, so this bucket does not need to be public for the app UI.
+
+Required Vercel/Supabase environment configuration remains:
+
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `STORAGE_BUCKET`
+- `CATALOG_PASSWORD`
+- `AUTH_SECRET`
+- `NEXTAUTH_URL`
+
+No new environment variables are required for Sprint 2B.
