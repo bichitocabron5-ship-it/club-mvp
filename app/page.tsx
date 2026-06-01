@@ -1,13 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
+import { PanelLoadingSkeleton } from "@/components/dashboard/panel-loading-skeleton";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { fetchJson } from "@/lib/fetch-json";
 import type { DashboardAlert, DashboardAuditLog, DashboardData } from "@/lib/types";
+
+type LoadMode = "initial" | "refresh";
 
 function formatCurrency(value: number) {
   return `${Number(value || 0).toFixed(2)} EUR`;
@@ -67,6 +70,11 @@ function actionTone(action: DashboardAuditLog["action"]) {
   }
 
   return "text-emerald-700 bg-emerald-100";
+}
+
+function dashboardErrorMessage(err: unknown, verb: "cargar" | "actualizar") {
+  const detail = err instanceof Error ? `: ${err.message}` : "";
+  return `No se pudo ${verb} el panel${detail}`;
 }
 
 function MarginBadge({
@@ -133,47 +141,123 @@ function QuickLinks({
   );
 }
 
+function DashboardStatusBar({
+  generatedAt,
+  isRefreshing,
+  refreshError,
+  onRefresh,
+}: {
+  generatedAt: string;
+  isRefreshing: boolean;
+  refreshError: string;
+  onRefresh: () => void;
+}) {
+  return (
+    <div
+      aria-live="polite"
+      className="flex flex-col gap-3 rounded-[1.5rem] border border-black/8 bg-white/75 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+    >
+      <div>
+        <div className="font-semibold">
+          {isRefreshing ? "Actualizando..." : "Panel actualizado"}
+        </div>
+        <div className="mt-1 app-muted">
+          Ultima lectura: {formatDateTime(generatedAt)}
+        </div>
+        {refreshError ? (
+          <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
+            {refreshError}. Se mantienen los datos anteriores.
+          </div>
+        ) : null}
+      </div>
+
+      <button
+        type="button"
+        onClick={onRefresh}
+        disabled={isRefreshing}
+        className="app-button-secondary inline-flex items-center justify-center rounded-full px-4 py-2 font-bold disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {isRefreshing ? "Actualizando..." : "Refrescar"}
+      </button>
+    </div>
+  );
+}
+
 export default function PanelPage() {
   const [data, setData] = useState<DashboardData | null>(null);
-  const [error, setError] = useState("");
+  const [initialError, setInitialError] = useState("");
+  const [refreshError, setRefreshError] = useState("");
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  async function loadPanel() {
+  const loadPanel = useCallback(async (mode: LoadMode = "initial") => {
+    const isRefresh = mode === "refresh";
+
+    if (isRefresh) {
+      setIsRefreshing(true);
+      setRefreshError("");
+    } else {
+      setIsInitialLoading(true);
+      setInitialError("");
+    }
+
     try {
       const json = await fetchJson<DashboardData>("/api/dashboard");
       setData(json);
-      setError("");
+      setInitialError("");
+      setRefreshError("");
     } catch (err) {
       console.error("[dashboard] Error loading /api/dashboard", err);
-      setError(
-        err instanceof Error
-          ? `No se pudo cargar el panel: ${err.message}`
-          : "No se pudo cargar el panel"
-      );
+      if (isRefresh) {
+        setRefreshError(dashboardErrorMessage(err, "actualizar"));
+      } else {
+        setInitialError(dashboardErrorMessage(err, "cargar"));
+      }
+    } finally {
+      if (isRefresh) {
+        setIsRefreshing(false);
+      } else {
+        setIsInitialLoading(false);
+      }
     }
-  }
+  }, []);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
-      void loadPanel();
+      void loadPanel("initial");
     }, 0);
 
     return () => clearTimeout(timeout);
-  }, []);
+  }, [loadPanel]);
 
-  if (error) {
+  if (isInitialLoading && !data) {
+    return <PanelLoadingSkeleton />;
+  }
+
+  if (!data && initialError) {
     return (
       <main className="mx-auto max-w-7xl p-4 md:p-6">
         <PageHeader
           title="Panel"
           description="Resumen diario del club para abrir el día con criterio operativo."
         />
-        <EmptyState message={error} />
+        <section className="app-panel-strong rounded-[2rem] p-5">
+          <EmptyState message={initialError} className="bg-white/70" />
+          <button
+            type="button"
+            onClick={() => void loadPanel("initial")}
+            disabled={isInitialLoading}
+            className="app-button-primary mt-4 rounded-full px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isInitialLoading ? "Reintentando..." : "Reintentar"}
+          </button>
+        </section>
       </main>
     );
   }
 
   if (!data) {
-    return <main className="p-6 app-muted">Cargando panel...</main>;
+    return <PanelLoadingSkeleton />;
   }
 
   const isAdmin = data.role === "ADMIN";
@@ -185,6 +269,13 @@ export default function PanelPage() {
         <PageHeader
           title="Panel operativo"
           description="Vista reducida para personal con accesos directos y alertas operativas básicas."
+        />
+
+        <DashboardStatusBar
+          generatedAt={data.generatedAt}
+          isRefreshing={isRefreshing}
+          refreshError={refreshError}
+          onRefresh={() => void loadPanel("refresh")}
         />
 
         <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -277,6 +368,13 @@ export default function PanelPage() {
       <PageHeader
         title="Panel ejecutivo"
         description={`Corte generado ${formatDateTime(data.generatedAt)} con beneficio basado en Sale.profit y costes congelados por venta.`}
+      />
+
+      <DashboardStatusBar
+        generatedAt={data.generatedAt}
+        isRefreshing={isRefreshing}
+        refreshError={refreshError}
+        onRefresh={() => void loadPanel("refresh")}
       />
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
