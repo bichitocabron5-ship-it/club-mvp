@@ -543,6 +543,13 @@ export type PublicSigningSessionData = {
   };
 };
 
+export type InternalSigningSessionData = PublicSigningSessionData & {
+  token: string;
+  signUrl: string;
+  expiresAt: string;
+  signatureImage?: string | null;
+};
+
 export type AccessLogRecord = {
   id: number;
   memberId: number;

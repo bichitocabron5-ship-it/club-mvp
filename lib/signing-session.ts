@@ -6,7 +6,10 @@ import {
   findActiveContractTemplate,
   resolveContractTemplateForContract,
 } from "@/lib/contract-templates";
-import type { PublicSigningSessionData } from "@/lib/types";
+import type {
+  InternalSigningSessionData,
+  PublicSigningSessionData,
+} from "@/lib/types";
 
 export const SIGNING_SESSION_TTL_HOURS = 24;
 
@@ -60,5 +63,26 @@ export async function serializePublicSigningSession(
     clubSettings: {
       defaultMonthlyLimitG: settings.defaultMonthlyLimitG,
     },
+  };
+}
+
+export async function serializeInternalSigningSession(
+  session: SigningSessionWithPublicRelations | null,
+  req: Request
+): Promise<InternalSigningSessionData | null> {
+  const payload = await serializePublicSigningSession(session);
+
+  if (!session || !payload) {
+    return null;
+  }
+
+  return {
+    ...payload,
+    token: session.token,
+    signUrl: new URL(
+      `/sign/${encodeURIComponent(session.token)}`,
+      req.url
+    ).toString(),
+    expiresAt: session.expiresAt.toISOString(),
   };
 }
