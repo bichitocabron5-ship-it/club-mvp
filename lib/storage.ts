@@ -75,7 +75,9 @@ export function buildStoragePublicUrl(path: string, bucket = STORAGE_BUCKET) {
 }
 
 export async function uploadImageToStorage(file: File, path: string) {
-  const upload = await getSupabaseAdmin().storage
+  const supabaseAdmin = getSupabaseAdmin();
+
+  const upload = await supabaseAdmin.storage
     .from(STORAGE_BUCKET)
     .upload(path, Buffer.from(await file.arrayBuffer()), {
       contentType: file.type,
@@ -195,7 +197,9 @@ export async function createStorageSignedUrl(
   ref: StorageObjectRef,
   expiresIn = STORAGE_SIGNED_URL_TTL_SECONDS
 ) {
-  const signed = await getSupabaseAdmin().storage
+  const supabaseAdmin = getSupabaseAdmin();
+
+  const signed = await supabaseAdmin.storage
     .from(ref.bucket)
     .createSignedUrl(ref.path, expiresIn);
 

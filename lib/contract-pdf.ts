@@ -1,10 +1,16 @@
 import "server-only";
 
-import { downloadAllowedStorageObject } from "@/lib/contract-storage";
+import {
+  createSignedUrlForAllowedStorageRef,
+  downloadAllowedStorageObject,
+  serializeAllowedStorageRef,
+} from "@/lib/contract-storage";
 import { resolveContractTemplateForContract } from "@/lib/contract-templates";
 import { prisma } from "@/lib/prisma";
-import { supabaseAdmin } from "@/lib/supabase-admin";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+
+const SIGNED_CONTRACT_BUCKET = "signed-contracts";
 
 function formatLongDate(value: string | Date | null | undefined) {
   if (!value) return "-";
@@ -52,8 +58,14 @@ export async function ensureSignedContractPdf(
   }
 
   if (contract.signedPdfUrl && !options?.force) {
+    const signedUrl = await createSignedUrlForAllowedStorageRef(contract.signedPdfUrl);
+
+    if (!signedUrl) {
+      throw new Error("No se pudo generar URL temporal del contrato firmado");
+    }
+
     return {
-      url: contract.signedPdfUrl,
+      url: signedUrl,
       contract,
       template: contract.contractTemplate,
     };
@@ -232,9 +244,10 @@ export async function ensureSignedContractPdf(
     contract.member.memberNumber || String(contract.member.id)
   ).replace(/[^a-zA-Z0-9_-]/g, "-");
   const filePath = `contracts/member-${pdfMemberIdentifier}/contract-${contract.id}.pdf`;
+  const supabaseAdmin = getSupabaseAdmin();
 
   const upload = await supabaseAdmin.storage
-    .from("signed-contracts")
+    .from(SIGNED_CONTRACT_BUCKET)
     .upload(filePath, Buffer.from(pdfBytes), {
       contentType: "application/pdf",
       upsert: true,
@@ -244,20 +257,26 @@ export async function ensureSignedContractPdf(
     throw new Error(upload.error.message);
   }
 
-  const { data } = supabaseAdmin.storage
-    .from("signed-contracts")
-    .getPublicUrl(filePath);
+  const storedPdfRef = serializeAllowedStorageRef({
+    bucket: SIGNED_CONTRACT_BUCKET,
+    path: filePath,
+  });
+  const signedUrl = await createSignedUrlForAllowedStorageRef(storedPdfRef);
+
+  if (!signedUrl) {
+    throw new Error("No se pudo generar URL temporal del contrato firmado");
+  }
 
   await prisma.memberContract.update({
     where: { id: contract.id },
     data: {
       contractTemplateId: contract.contractTemplateId ?? template.id,
-      signedPdfUrl: data.publicUrl,
+      signedPdfUrl: storedPdfRef,
     },
   });
 
   return {
-    url: data.publicUrl,
+    url: signedUrl,
     contract,
     template,
   };

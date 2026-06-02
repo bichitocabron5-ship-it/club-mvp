@@ -1,7 +1,8 @@
 import "server-only";
 
+import { buildStoredStorageRef } from "@/lib/storage";
 import { prisma } from "@/lib/prisma";
-import { supabaseAdmin } from "@/lib/supabase-admin";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 const CONTRACT_TEMPLATE_BUCKET = "contract-templates";
 
@@ -22,6 +23,8 @@ function buildTemplateVersion(updatedAt: string | null | undefined) {
 }
 
 async function bootstrapContractTemplateFromStorage() {
+  const supabaseAdmin = getSupabaseAdmin();
+
   const { data: files, error } = await supabaseAdmin.storage
     .from(CONTRACT_TEMPLATE_BUCKET)
     .list("", {
@@ -50,10 +53,6 @@ async function bootstrapContractTemplateFromStorage() {
     return left - right;
   })[0];
 
-  const { data } = supabaseAdmin.storage
-    .from(CONTRACT_TEMPLATE_BUCKET)
-    .getPublicUrl(latestFile.name);
-
   await prisma.contractTemplate.updateMany({
     where: { active: true },
     data: { active: false },
@@ -63,7 +62,7 @@ async function bootstrapContractTemplateFromStorage() {
     data: {
       name: buildTemplateName(latestFile.name),
       version: buildTemplateVersion(latestFile.updated_at ?? latestFile.created_at),
-      fileUrl: data.publicUrl,
+      fileUrl: buildStoredStorageRef(CONTRACT_TEMPLATE_BUCKET, latestFile.name),
       active: true,
     },
   });
