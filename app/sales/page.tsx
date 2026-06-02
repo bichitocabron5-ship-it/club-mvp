@@ -26,6 +26,10 @@ type CartItem = {
   amountInput: string;
 };
 
+type AddProductOptions = {
+  focusInput?: boolean;
+};
+
 type MemberOperationalStatus = {
   member: MemberSummary & {
     active: boolean;
@@ -184,12 +188,38 @@ export default function SalesPage() {
   const [selectedHashType, setSelectedHashType] = useState<"ALL" | ProductHashType>(
     "ALL"
   );
+  const [focusedCartProductId, setFocusedCartProductId] = useState<number | null>(
+    null
+  );
 
   const rfidRef = useRef<HTMLInputElement | null>(null);
+  const productSearchRef = useRef<HTMLInputElement | null>(null);
+  const cartInputRefs = useRef<Map<number, HTMLInputElement>>(new Map());
+  const submittingRef = useRef(false);
 
   useEffect(() => {
-    rfidRef.current?.focus();
-  }, []);
+    const focusTimer = window.setTimeout(() => {
+      if (memberId) {
+        productSearchRef.current?.focus();
+        return;
+      }
+
+      rfidRef.current?.focus();
+    }, 0);
+
+    return () => window.clearTimeout(focusTimer);
+  }, [memberId]);
+
+  useEffect(() => {
+    if (focusedCartProductId === null) return;
+
+    const input = cartInputRefs.current.get(focusedCartProductId);
+    if (!input) return;
+
+    input.focus();
+    input.select();
+    setFocusedCartProductId(null);
+  }, [cart, focusedCartProductId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -449,37 +479,81 @@ export default function SalesPage() {
     stockProblems.length > 0 ||
     loading;
 
-  function addProduct(product: ProductSummary) {
-    if (Number(product.stock) <= 0) return;
+  function focusProductSearchInput() {
+    window.setTimeout(() => {
+      productSearchRef.current?.focus();
+      productSearchRef.current?.select();
+    }, 0);
+  }
+
+  function setCartValueInputRef(
+    productId: number,
+    node: HTMLInputElement | null
+  ) {
+    if (node) {
+      cartInputRefs.current.set(productId, node);
+      return;
+    }
+
+    cartInputRefs.current.delete(productId);
+  }
+
+  function addProduct(
+    product: ProductSummary,
+    options: AddProductOptions = {}
+  ) {
+    if (Number(product.stock) <= 0) return false;
+
+    if (options.focusInput) {
+      setFocusedCartProductId(product.id);
+    }
 
     setCart((prev) => {
       const existing = prev.find((item) => item.productId === product.id);
 
       if (existing) {
-        return prev.map((item) =>
-          item.productId === product.id
-            ? {
-                ...item,
-                inputMode: "QTY",
-                qtyInput: formatQtyInput(
-                  (parsePositiveNumber(existing.qtyInput) ?? 0) + 1,
-                  product.unit
-                ),
-              }
-            : item
-        );
+        return prev.map((item) => {
+          if (item.productId !== product.id) return item;
+
+          if (item.inputMode === "QTY") {
+            return {
+              ...item,
+              qtyInput: formatQtyInput(
+                (parsePositiveNumber(existing.qtyInput) ?? 0) + 1,
+                product.unit
+              ),
+            };
+          }
+
+          const discountPercent = normalizeDiscountPercent(
+            Number(memberStatus?.member.discountPercent || 0)
+          );
+          const currentAmount = parsePositiveNumber(item.amountInput) ?? 0;
+          const addedAmount = getPricingEstimate(
+            1,
+            Number(product.price),
+            discountPercent
+          ).finalAmount;
+
+          return {
+            ...item,
+            amountInput: roundCurrency(currentAmount + addedAmount).toFixed(2),
+          };
+        });
       }
 
       return [
         ...prev,
         {
           productId: product.id,
-          inputMode: "QTY",
+          inputMode: "AMOUNT",
           qtyInput: "1",
           amountInput: "",
         },
       ];
     });
+
+    return true;
   }
 
   function updateQty(productId: number, value: string) {
@@ -580,22 +654,43 @@ export default function SalesPage() {
 
     event.preventDefault();
 
-    const query = search.trim().toLowerCase();
+    const query = event.currentTarget.value.trim().toLowerCase();
     if (!query) return;
 
-    const exactSkuMatches = filteredProducts.filter(
+    const exactSkuMatches = products.filter(
       (product) =>
-        (product.sku ?? "").toLowerCase() === query && Number(product.stock) > 0
+        product.active && (product.sku ?? "").trim().toLowerCase() === query
     );
 
-    if (exactSkuMatches.length === 1) {
-      addProduct(exactSkuMatches[0]);
+    if (
+      exactSkuMatches.length === 1 &&
+      Number(exactSkuMatches[0].stock) > 0 &&
+      addProduct(exactSkuMatches[0], { focusInput: true })
+    ) {
+      setSearch("");
     }
   }
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (invalid) return;
+  function handleCartValueKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Enter") return;
+
+    event.preventDefault();
+    focusProductSearchInput();
+  }
+
+  function handleRegisterButtonKeyDown(
+    event: React.KeyboardEvent<HTMLButtonElement>
+  ) {
+    if (event.key !== "Enter" && event.key !== "NumpadEnter") return;
+
+    event.preventDefault();
+  }
+
+  async function handleRegisterWithdrawal() {
+    if (invalid || submittingRef.current) return;
+
+    submittingRef.current = true;
+    const selectedMemberId = memberId;
 
     const items = cartLines
       .filter((line) => !line.conversionError)
@@ -607,51 +702,57 @@ export default function SalesPage() {
 
     if (items.length !== cart.length) {
       alert("Hay lineas con errores de conversion. Revisa el carrito antes de enviar.");
+      submittingRef.current = false;
       return;
     }
 
     setLoading(true);
 
-    const res = await fetch("/api/sales/bulk", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        memberId: Number(memberId),
-        items,
-      }),
-    });
+    try {
+      const res = await fetch("/api/sales/bulk", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          memberId: Number(selectedMemberId),
+          items,
+        }),
+      });
 
-    setLoading(false);
+      if (!res.ok) {
+        const err: { error?: string } = await res.json();
+        alert(err.error || "Error al registrar retirada");
+        return;
+      }
 
-    if (!res.ok) {
-      const err: { error?: string } = await res.json();
-      alert(err.error || "Error al registrar retirada");
-      return;
+      alert("Retirada registrada");
+
+      setCart([]);
+
+      const refreshedProducts = await fetchJson<ProductSummary[]>("/api/products");
+      setProducts(refreshedProducts);
+
+      const refreshedToday = await fetchJson<TodayTotals>(
+        `/api/members/${selectedMemberId}/today`
+      );
+      setToday(refreshedToday);
+
+      setMemberId("");
+      setMemberSearch("");
+      setRfidInput("");
+      setToday(emptyToday);
+      setMemberStatus(null);
+
+      setTimeout(() => {
+        rfidRef.current?.focus();
+      }, 0);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Error al registrar retirada");
+    } finally {
+      submittingRef.current = false;
+      setLoading(false);
     }
-
-    alert("Retirada registrada");
-
-    setCart([]);
-
-    const refreshedProducts = await fetchJson<ProductSummary[]>("/api/products");
-    setProducts(refreshedProducts);
-
-    const refreshedToday = await fetchJson<TodayTotals>(
-      `/api/members/${memberId}/today`
-    );
-    setToday(refreshedToday);
-
-    setMemberId("");
-    setMemberSearch("");
-    setRfidInput("");
-    setToday(emptyToday);
-    setMemberStatus(null);
-
-    setTimeout(() => {
-      rfidRef.current?.focus();
-    }, 0);
   }
 
   async function handleRfidSubmit(e: React.FormEvent) {
@@ -676,9 +777,7 @@ export default function SalesPage() {
     setCart([]);
     setRfidInput("");
 
-    setTimeout(() => {
-      rfidRef.current?.focus();
-    }, 0);
+    focusProductSearchInput();
   }
 
   return (
@@ -720,7 +819,7 @@ export default function SalesPage() {
         )}
       </form>
 
-      <form onSubmit={handleSubmit} className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.7fr)]">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.7fr)]">
         <section className="space-y-4">
           <div className="app-panel rounded-3xl p-4 space-y-3">
             <label className="block text-sm font-medium">Socio</label>
@@ -833,9 +932,11 @@ export default function SalesPage() {
             <input
               className="w-full rounded-2xl border border-black/10 bg-white/80 p-3 text-base"
               placeholder="Buscar por código o nombre..."
+              ref={productSearchRef}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={handleProductSearchKeyDown}
+              autoComplete="off"
             />
           </div>
 
@@ -910,7 +1011,7 @@ export default function SalesPage() {
                   <button
                     key={product.id}
                     type="button"
-                    onClick={() => addProduct(product)}
+                    onClick={() => addProduct(product, { focusInput: true })}
                     disabled={noStock}
                     className={`min-h-36 rounded-xl border p-4 text-left shadow-sm transition hover:scale-[1.02] disabled:opacity-40 ${
                       noStock ? "bg-gray-100" : "bg-white hover:bg-blue-50"
@@ -976,6 +1077,14 @@ export default function SalesPage() {
                       Precio unitario: {line.price.toFixed(2)} EUR /{" "}
                       {line.product?.unit === "G" ? "g" : "ud"}
                     </div>
+                    <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold">
+                      <span className="rounded-full bg-green-100 px-3 py-1 text-green-700">
+                        Producto agregado
+                      </span>
+                      <span className="rounded-full bg-blue-100 px-3 py-1 text-blue-700">
+                        Modo {line.inputMode === "AMOUNT" ? "Por importe" : "Por cantidad"}
+                      </span>
+                    </div>
                   </div>
 
                   <button
@@ -996,8 +1105,8 @@ export default function SalesPage() {
                       updateInputMode(line.productId, e.target.value as CartInputMode)
                     }
                   >
-                    <option value="QTY">Por cantidad</option>
                     <option value="AMOUNT">Por importe</option>
+                    <option value="QTY">Por cantidad</option>
                   </select>
                 </div>
 
@@ -1029,12 +1138,14 @@ export default function SalesPage() {
                           </button>
 
                           <input
+                            ref={(node) => setCartValueInputRef(line.productId, node)}
                             className="h-11 w-full rounded-2xl border border-black/10 bg-white p-2 text-center text-lg font-bold"
                             type="number"
                             step={line.product?.unit === "UD" ? "1" : "0.001"}
                             min="0"
                             value={line.qtyInput}
                             onChange={(e) => updateQty(line.productId, e.target.value)}
+                            onKeyDown={handleCartValueKeyDown}
                           />
 
                           <button
@@ -1063,12 +1174,14 @@ export default function SalesPage() {
                       <>
                         <label className="text-xs text-gray-500">Importe en euros</label>
                         <input
+                          ref={(node) => setCartValueInputRef(line.productId, node)}
                           className="mt-1 h-11 w-full rounded-2xl border border-black/10 bg-white p-2 text-center text-lg font-bold"
                           type="number"
                           step="0.01"
                           min="0"
                           value={line.amountInput}
                           onChange={(e) => updateAmount(line.productId, e.target.value)}
+                          onKeyDown={handleCartValueKeyDown}
                         />
 
                         <div className="mt-2 text-xs text-gray-500">
@@ -1183,13 +1296,16 @@ export default function SalesPage() {
           )}
 
           <button
-            disabled={invalid}
+            type="button"
+            onClick={handleRegisterWithdrawal}
+            onKeyDown={handleRegisterButtonKeyDown}
+            disabled={invalid || loading}
             className="app-button-primary mt-4 w-full rounded-3xl p-6 text-2xl font-black shadow-lg disabled:opacity-40"
           >
             {loading ? "Registrando..." : "COBRAR / REGISTRAR"}
           </button>
         </aside>
-      </form>
+      </div>
     </main>
   );
 }
