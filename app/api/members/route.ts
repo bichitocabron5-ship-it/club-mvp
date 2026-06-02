@@ -9,6 +9,7 @@ import {
 } from "@/lib/member-number";
 import { prisma } from "@/lib/prisma";
 import { normalizeRfidCode } from "@/lib/rfid";
+import { resolveStorageUrlForResponse } from "@/lib/storage";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -44,10 +45,19 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
   });
 
-  const result = members.map((member) => ({
-    ...member,
-    hasContract: member.contracts.length > 0,
-  }));
+  const result = await Promise.all(
+    members.map(async (member) => {
+      const { contracts, ...memberData } = member;
+
+      return {
+        ...memberData,
+        photoUrl: await resolveStorageUrlForResponse(member.photoUrl),
+        dniFrontUrl: null,
+        dniBackUrl: null,
+        hasContract: contracts.length > 0,
+      };
+    })
+  );
 
   return NextResponse.json(result);
 }

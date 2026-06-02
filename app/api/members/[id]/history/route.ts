@@ -1,6 +1,7 @@
 // app/api/members/[id]/history/route.ts
 import { requireAuth } from "@/lib/auth-server";
 import { prisma } from "@/lib/prisma";
+import { resolveStorageUrlForResponse } from "@/lib/storage";
 import { NextResponse } from "next/server";
 
 export async function GET(
@@ -45,7 +46,12 @@ export async function GET(
   );
 
   return NextResponse.json({
-    member,
+    member: {
+      ...member,
+      photoUrl: await resolveStorageUrlForResponse(member.photoUrl),
+      dniFrontUrl: await resolveStorageUrlForResponse(member.dniFrontUrl),
+      dniBackUrl: await resolveStorageUrlForResponse(member.dniBackUrl),
+    },
     sales,
     totalSpent,
     count: sales.length,

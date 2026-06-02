@@ -2,7 +2,10 @@
 import { requireStaffOrAdmin } from "@/lib/auth-server";
 import { findActiveContractTemplate } from "@/lib/contract-templates";
 import { prisma } from "@/lib/prisma";
-import { getSigningSessionExpiresAt } from "@/lib/signing-session";
+import {
+  getSigningSessionExpiresAt,
+  serializePublicSigningSession,
+} from "@/lib/signing-session";
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 
@@ -41,8 +44,17 @@ export async function POST(req: Request) {
     },
   });
 
-  return NextResponse.json({
+  const payload = await serializePublicSigningSession({
     ...session,
-    contractTemplate,
+    contract: null,
   });
+
+  if (!payload) {
+    return NextResponse.json(
+      { error: "No se pudo crear la sesion de firma" },
+      { status: 500 }
+    );
+  }
+
+  return NextResponse.json(payload);
 }

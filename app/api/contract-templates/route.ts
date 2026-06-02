@@ -1,6 +1,9 @@
 // app/api/contract-templates/route.ts
 import { requireAdmin } from "@/lib/auth-server";
-import { parseAllowedStorageRef } from "@/lib/contract-storage";
+import {
+  createSignedUrlForAllowedStorageRef,
+  parseAllowedStorageRef,
+} from "@/lib/contract-storage";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -22,7 +25,16 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
   });
 
-  return NextResponse.json(templates);
+  const response = await Promise.all(
+    templates.map(async (template) => ({
+      ...template,
+      fileUrl:
+        (await createSignedUrlForAllowedStorageRef(template.fileUrl)) ??
+        template.fileUrl,
+    }))
+  );
+
+  return NextResponse.json(response);
 }
 
 export async function POST(req: Request) {
@@ -51,10 +63,15 @@ export async function POST(req: Request) {
     data: {
       name: parsed.data.name,
       version: parsed.data.version,
-      fileUrl: storageRef.publicUrl,
+      fileUrl: storageRef.storageRef,
       active: parsed.data.active ?? true,
     },
   });
 
-  return NextResponse.json(template);
+  return NextResponse.json({
+    ...template,
+    fileUrl:
+      (await createSignedUrlForAllowedStorageRef(template.fileUrl)) ??
+      template.fileUrl,
+  });
 }

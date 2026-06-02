@@ -3,6 +3,7 @@ import { createAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import {
   buildProductImagePath,
+  createStorageSignedUrl,
   getImageExtension,
   parseStorageUrl,
   uploadImageToStorage,
@@ -91,7 +92,7 @@ export async function POST(
     const updated = await prisma.product.update({
       where: { id: productId },
       data: {
-        imageUrl: uploaded.publicUrl,
+        imageUrl: uploaded.storageRef,
       },
     });
 
@@ -116,7 +117,10 @@ export async function POST(
 
     return NextResponse.json({
       id: updated.id,
-      imageUrl: updated.imageUrl,
+      imageUrl: await createStorageSignedUrl({
+        bucket: uploaded.bucket,
+        path: uploaded.path,
+      }),
     });
   } catch (error) {
     return NextResponse.json(
