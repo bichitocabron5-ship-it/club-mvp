@@ -8,7 +8,7 @@ import {
   uploadImageToStorage,
   validateImageFile,
 } from "@/lib/storage";
-import { supabaseAdmin } from "@/lib/supabase-admin";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { NextResponse } from "next/server";
 
 function getUploadedImage(formData: FormData) {
@@ -111,6 +111,7 @@ export async function POST(
       sideValue === "front" ? member.dniFrontUrl : member.dniBackUrl
     );
     if (previousRef) {
+      const supabaseAdmin = getSupabaseAdmin();
       await supabaseAdmin.storage.from(previousRef.bucket).remove([previousRef.path]);
     }
 
