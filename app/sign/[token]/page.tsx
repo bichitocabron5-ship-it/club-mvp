@@ -28,46 +28,75 @@ const emptyForm: SignForm = {
 };
 
 export default function SignPage() {
-  const params = useParams<{ token: string }>();
-  const token = params.token;
+  const params = useParams<{ token?: string | string[] }>();
+  const token = typeof params.token === "string" ? params.token : "";
 
   const sigRef = useRef<SignatureCanvas | null>(null);
-  const [session, setSession] = useState<PublicSigningSessionData | null>(null);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState("");
+  const [sessionState, setSessionState] = useState<{
+    token: string;
+    data: PublicSigningSessionData;
+  } | null>(null);
+  const [savedToken, setSavedToken] = useState("");
+  const [errorState, setErrorState] = useState<{
+    token: string;
+    message: string;
+  } | null>(null);
   const [form, setForm] = useState<SignForm>(emptyForm);
+  const session = sessionState?.token === token ? sessionState.data : null;
+  const saved = savedToken === token;
+  const error = !token
+    ? "Falta el token de firma en la URL."
+    : errorState?.token === token
+      ? errorState.message
+      : "";
 
   useEffect(() => {
-    if (!token) return;
+    if (!token) {
+      return;
+    }
 
     let cancelled = false;
 
-    void fetch(`/api/signing-sessions/${token}`).then(async (res) => {
-      const data = await res.json();
+    void fetch(`/api/signing-sessions/${token}`)
+      .then(async (res) => {
+        const data = await res.json();
 
-      if (cancelled) return;
+        if (cancelled) return;
 
-      if (!res.ok) {
-        setError(data.error || "La sesión de firma no está disponible");
-        return;
-      }
+        if (!res.ok) {
+          setErrorState({
+            token,
+            message: data.error || "La sesion de firma no esta disponible",
+          });
+          return;
+        }
 
-      const sessionData = data as PublicSigningSessionData;
+        const sessionData = data as PublicSigningSessionData;
 
-      setSession(sessionData);
-      setForm({
-        fullName: sessionData.member?.fullName || "",
-        dni: "",
-        address: "",
-        birthPlace: "",
-        birthDate: "",
-        phone: "",
-        email: "",
-        consumptionGrams: String(
-          sessionData.clubSettings?.defaultMonthlyLimitG ?? 30
-        ),
+        setErrorState(null);
+        setSavedToken("");
+        setSessionState({ token, data: sessionData });
+        setForm({
+          fullName: sessionData.member?.fullName || "",
+          dni: "",
+          address: "",
+          birthPlace: "",
+          birthDate: "",
+          phone: "",
+          email: "",
+          consumptionGrams: String(
+            sessionData.clubSettings?.defaultMonthlyLimitG ?? 30
+          ),
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setErrorState({
+            token,
+            message: "La sesion de firma no esta disponible",
+          });
+        }
       });
-    });
 
     return () => {
       cancelled = true;
@@ -75,6 +104,10 @@ export default function SignPage() {
   }, [token]);
 
   async function saveSignature() {
+    if (!token) {
+      return;
+    }
+
     if (!sigRef.current || sigRef.current.isEmpty()) {
       alert("Firma antes de guardar.");
       return;
@@ -98,7 +131,7 @@ export default function SignPage() {
       return;
     }
 
-    setSaved(true);
+    setSavedToken(token);
   }
 
   if (error) {

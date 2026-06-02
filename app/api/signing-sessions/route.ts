@@ -4,7 +4,7 @@ import { findActiveContractTemplate } from "@/lib/contract-templates";
 import { prisma } from "@/lib/prisma";
 import {
   getSigningSessionExpiresAt,
-  serializePublicSigningSession,
+  serializeInternalSigningSession,
 } from "@/lib/signing-session";
 import { NextResponse } from "next/server";
 import crypto from "crypto";
@@ -44,10 +44,13 @@ export async function POST(req: Request) {
     },
   });
 
-  const payload = await serializePublicSigningSession({
-    ...session,
-    contract: null,
-  });
+  const payload = await serializeInternalSigningSession(
+    {
+      ...session,
+      contract: null,
+    },
+    req
+  );
 
   if (!payload) {
     return NextResponse.json(

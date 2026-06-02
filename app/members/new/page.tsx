@@ -4,7 +4,10 @@
 import { PageHeader } from "@/components/ui/page-header";
 import { fetchJson } from "@/lib/fetch-json";
 import { normalizeRfidCode } from "@/lib/rfid";
-import type { SigningSessionData } from "@/lib/types";
+import type {
+  InternalSigningSessionData,
+  PublicSigningSessionData,
+} from "@/lib/types";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
@@ -20,17 +23,36 @@ type CreatedMember = {
   rfidCode: string | null;
 };
 
+function isInternalSigningSessionData(
+  value: unknown
+): value is InternalSigningSessionData {
+  const session = value as Partial<InternalSigningSessionData> | null;
+
+  return (
+    !!session &&
+    typeof session.status === "string" &&
+    typeof session.token === "string" &&
+    session.token.length > 0 &&
+    session.token !== "undefined" &&
+    typeof session.signUrl === "string" &&
+    session.signUrl.length > 0 &&
+    !session.signUrl.endsWith("/undefined")
+  );
+}
+
 export default function NewMemberPage() {
   const rfidRef = useRef<HTMLInputElement | null>(null);
 
   const [createdMember, setCreatedMember] = useState<CreatedMember | null>(null);
-  const [signingSession, setSigningSession] = useState<SigningSessionData | null>(null);
+  const [signingSession, setSigningSession] =
+    useState<InternalSigningSessionData | null>(null);
   const [assigningRfid, setAssigningRfid] = useState(false);
   const [loading, setLoading] = useState(false);
   const [contractSigned, setContractSigned] = useState(false);
   const [rfidMessage, setRfidMessage] = useState("");
   const [rfidInput, setRfidInput] = useState("");
   const [rfidProcessing, setRfidProcessing] = useState(false);
+  const [signingError, setSigningError] = useState("");
 
   const [form, setForm] = useState({
     fullName: "",
@@ -114,6 +136,7 @@ export default function NewMemberPage() {
 
   async function createSigningSession() {
     if (!createdMember) return;
+    setSigningError("");
 
     const res = await fetch("/api/signing-sessions", {
       method: "POST",
@@ -125,29 +148,49 @@ export default function NewMemberPage() {
       }),
     });
 
+    const data: unknown = await res.json();
+
     if (!res.ok) {
-      alert("Error creando sesión de firma");
+      const error =
+        data && typeof data === "object" && "error" in data
+          ? String(data.error)
+          : "Error creando sesion de firma";
+      setSigningError(error);
+      alert(error);
       return;
     }
 
-    const session: SigningSessionData = await res.json();
-    setSigningSession(session);
-    setContractSigned(session.status === "SIGNED");
+    if (!isInternalSigningSessionData(data)) {
+      const error =
+        "La sesion de firma se creo, pero no devolvio un enlace valido. No se abrira /sign/undefined.";
+      setSigningError(error);
+      alert(error);
+      return;
+    }
+
+    setSigningSession(data);
+    setContractSigned(data.status === "SIGNED");
   }
 
-  const signUrl =
-    signingSession && `${window.location.origin}/sign/${signingSession.token}`;
+  const signUrl = signingSession?.signUrl ?? "";
 
   useEffect(() => {
     if (!signingSession?.token || contractSigned) return;
 
     const interval = setInterval(async () => {
       try {
-        const data = await fetchJson<SigningSessionData>(
+        const data = await fetchJson<PublicSigningSessionData>(
           `/api/signing-sessions/${signingSession.token}`
         );
 
-        setSigningSession(data);
+        setSigningSession((current) =>
+          current
+            ? {
+                ...current,
+                ...data,
+              }
+            : current
+        );
 
         if (data.status === "SIGNED") {
           setContractSigned(true);
@@ -381,6 +424,12 @@ export default function NewMemberPage() {
               volver a escribirlos.
             </p>
 
+            {signingError && (
+              <div className="mb-3 rounded border border-red-200 bg-red-50 p-3 text-red-700">
+                {signingError}
+              </div>
+            )}
+
             {!signingSession && (
               <button
                 type="button"
@@ -411,12 +460,19 @@ export default function NewMemberPage() {
                     </div>
                   )}
 
-                  <input
-                    className="w-full rounded-2xl border border-black/10 bg-white/80 p-3"
-                    value={signUrl || ""}
-                    readOnly
-                    onFocus={(e) => e.currentTarget.select()}
-                  />
+                  {!signUrl && !contractSigned ? (
+                    <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-red-700">
+                      Falta el enlace de firma. Crea una nueva sesion antes de
+                      abrir la tablet.
+                    </div>
+                  ) : (
+                    <input
+                      className="w-full rounded-2xl border border-black/10 bg-white/80 p-3"
+                      value={signUrl}
+                      readOnly
+                      onFocus={(e) => e.currentTarget.select()}
+                    />
+                  )}
 
                   <p className="mt-2 text-sm text-gray-500">
                     En la tablet cambia `localhost` por la IP local del ordenador
@@ -539,6 +595,7 @@ export default function NewMemberPage() {
                   setContractSigned(false);
                   setAssigningRfid(false);
                   setRfidMessage("");
+                  setSigningError("");
                   setForm({
                     fullName: "",
                     dni: "",

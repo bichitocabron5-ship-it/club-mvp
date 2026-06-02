@@ -1,18 +1,44 @@
 "use client";
 
-import type { SigningSessionData } from "@/lib/types";
+import type {
+  InternalSigningSessionData,
+  PublicSigningSessionData,
+} from "@/lib/types";
 import Image from "next/image";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+
+function isInternalSigningSessionData(
+  value: unknown
+): value is InternalSigningSessionData {
+  const session = value as Partial<InternalSigningSessionData> | null;
+
+  return (
+    !!session &&
+    typeof session.status === "string" &&
+    typeof session.token === "string" &&
+    session.token.length > 0 &&
+    session.token !== "undefined" &&
+    typeof session.signUrl === "string" &&
+    session.signUrl.length > 0 &&
+    !session.signUrl.endsWith("/undefined")
+  );
+}
 
 export default function MemberContractPage() {
   const params = useParams<{ id: string }>();
   const memberId = Number(params.id);
 
-  const [session, setSession] = useState<SigningSessionData | null>(null);
+  const [session, setSession] =
+    useState<InternalSigningSessionData | null>(null);
   const [error, setError] = useState("");
 
   async function createSession() {
+    if (!Number.isInteger(memberId) || memberId <= 0) {
+      setError("Socio invalido para crear la sesion de firma");
+      return;
+    }
+
     const res = await fetch("/api/signing-sessions", {
       method: "POST",
       headers: {
@@ -21,10 +47,21 @@ export default function MemberContractPage() {
       body: JSON.stringify({ memberId }),
     });
 
-    const data = await res.json();
+    const data: unknown = await res.json();
 
     if (!res.ok) {
-      setError(data.error || "No se pudo crear la sesión de firma");
+      const error =
+        data && typeof data === "object" && "error" in data
+          ? String(data.error)
+          : "No se pudo crear la sesion de firma";
+      setError(error);
+      return;
+    }
+
+    if (!isInternalSigningSessionData(data)) {
+      setError(
+        "La sesion de firma se creo, pero no devolvio un enlace valido. No se abrira /sign/undefined."
+      );
       return;
     }
 
@@ -37,15 +74,28 @@ export default function MemberContractPage() {
 
     const interval = setInterval(async () => {
       const res = await fetch(`/api/signing-sessions/${session.token}`);
-      const data: SigningSessionData = await res.json();
-      setSession(data);
+
+      if (!res.ok) {
+        setError("No se pudo actualizar el estado de la firma");
+        clearInterval(interval);
+        return;
+      }
+
+      const data: PublicSigningSessionData = await res.json();
+      setSession((current) =>
+        current
+          ? {
+              ...current,
+              ...data,
+            }
+          : current
+      );
     }, 2000);
 
     return () => clearInterval(interval);
   }, [session?.status, session?.token]);
 
-  const signUrl =
-    session ? `${window.location.origin}/sign/${session.token}` : "";
+  const signUrl = session?.signUrl ?? "";
 
   return (
     <main>
@@ -90,12 +140,19 @@ export default function MemberContractPage() {
                 </div>
               )}
               <p className="mb-2 font-semibold">Abre este enlace en la tablet:</p>
-              <input
-                className="w-full border p-2"
-                value={signUrl}
-                readOnly
-                onFocus={(e) => e.currentTarget.select()}
-              />
+              {signUrl ? (
+                <input
+                  className="w-full border p-2"
+                  value={signUrl}
+                  readOnly
+                  onFocus={(e) => e.currentTarget.select()}
+                />
+              ) : (
+                <div className="rounded border border-red-200 bg-red-50 p-3 text-red-700">
+                  Falta el enlace de firma. Crea una nueva sesion antes de
+                  abrir la tablet.
+                </div>
+              )}
               <p className="mt-2 text-sm text-gray-500">
                 Si la tablet está en la misma red, usa la IP local del ordenador
                 en lugar de localhost.
