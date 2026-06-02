@@ -1,6 +1,6 @@
 "use client";
 
-import type { SigningSessionData } from "@/lib/types";
+import type { PublicSigningSessionData } from "@/lib/types";
 import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import SignatureCanvas from "react-signature-canvas";
@@ -32,7 +32,7 @@ export default function SignPage() {
   const token = params.token;
 
   const sigRef = useRef<SignatureCanvas | null>(null);
-  const [session, setSession] = useState<SigningSessionData | null>(null);
+  const [session, setSession] = useState<PublicSigningSessionData | null>(null);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
   const [form, setForm] = useState<SignForm>(emptyForm);
@@ -52,17 +52,17 @@ export default function SignPage() {
         return;
       }
 
-      const sessionData = data as SigningSessionData;
+      const sessionData = data as PublicSigningSessionData;
 
       setSession(sessionData);
       setForm({
         fullName: sessionData.member?.fullName || "",
-        dni: sessionData.member?.dni || "",
+        dni: "",
         address: "",
         birthPlace: "",
         birthDate: "",
-        phone: sessionData.member?.phone || "",
-        email: sessionData.member?.email || "",
+        phone: "",
+        email: "",
         consumptionGrams: String(
           sessionData.clubSettings?.defaultMonthlyLimitG ?? 30
         ),
@@ -131,7 +131,7 @@ export default function SignPage() {
         </p>
         <p className="text-sm text-gray-600">
           Nº de socio:{" "}
-          <strong>{session.member.memberNumber ?? session.member.id}</strong>
+          <strong>{session.member.displayNumber ?? "-"}</strong>
         </p>
         <p className="text-sm text-gray-500">
           Vas a firmar la plantilla real activa del contrato.

@@ -1,6 +1,7 @@
-import { supabaseAdmin } from "@/lib/supabase-admin";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 const STORAGE_PUBLIC_PREFIX = "/storage/v1/object/public/";
+const STORAGE_SIGNED_PREFIX = "/storage/v1/object/sign/";
 const ALLOWED_IMAGE_TYPES = {
   "image/jpeg": "jpg",
   "image/png": "png",
@@ -9,6 +10,12 @@ const ALLOWED_IMAGE_TYPES = {
 
 export const STORAGE_BUCKET = process.env.STORAGE_BUCKET || "club-uploads";
 export const STORAGE_MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
+export const STORAGE_SIGNED_URL_TTL_SECONDS = 15 * 60;
+
+export type StorageObjectRef = {
+  bucket: string;
+  path: string;
+};
 
 type AllowedImageType = keyof typeof ALLOWED_IMAGE_TYPES;
 
@@ -53,17 +60,23 @@ export function buildMemberPhotoPath(
   return `members/${memberId}/profile-${timestamp}.${extension}`;
 }
 
-export function buildStoragePublicUrl(path: string) {
+export function buildStoredStorageRef(bucket: string, path: string) {
+  return `${bucket}/${path}`;
+}
+
+export function buildStoragePublicUrl(path: string, bucket = STORAGE_BUCKET) {
   const baseUrl = process.env.SUPABASE_URL;
 
   if (!baseUrl) {
     throw new Error("SUPABASE_URL no configurada");
   }
 
-  return `${baseUrl.replace(/\/+$/, "")}${STORAGE_PUBLIC_PREFIX}${STORAGE_BUCKET}/${path}`;
+  return `${baseUrl.replace(/\/+$/, "")}${STORAGE_PUBLIC_PREFIX}${bucket}/${path}`;
 }
 
 export async function uploadImageToStorage(file: File, path: string) {
+  const supabaseAdmin = getSupabaseAdmin();
+
   const upload = await supabaseAdmin.storage
     .from(STORAGE_BUCKET)
     .upload(path, Buffer.from(await file.arrayBuffer()), {
@@ -72,46 +85,140 @@ export async function uploadImageToStorage(file: File, path: string) {
     });
 
   if (upload.error) {
-    throw new Error(`Error subiendo archivo a storage: ${upload.error.message}`);
+    throw new Error("No se pudo subir el archivo a storage");
   }
 
   return {
     bucket: STORAGE_BUCKET,
     path,
+    storageRef: buildStoredStorageRef(STORAGE_BUCKET, path),
     publicUrl: buildStoragePublicUrl(path),
   };
 }
 
-export function parseStorageUrl(value: string | null | undefined) {
+function parseStoragePath(
+  value: string,
+  defaultBucket: string | undefined
+): StorageObjectRef | null {
+  const [firstPart, ...pathParts] = value.split("/").filter(Boolean);
+
+  if (!firstPart) {
+    return null;
+  }
+
+  if (pathParts.length === 0) {
+    return defaultBucket ? { bucket: defaultBucket, path: firstPart } : null;
+  }
+
+  if (defaultBucket && ["members", "products", "contracts"].includes(firstPart)) {
+    return {
+      bucket: defaultBucket,
+      path: [firstPart, ...pathParts].join("/"),
+    };
+  }
+
+  return {
+    bucket: firstPart,
+    path: pathParts.join("/"),
+  };
+}
+
+export function parseStorageUrl(
+  value: string | null | undefined,
+  options?: { defaultBucket?: string; allowedBuckets?: readonly string[] }
+): StorageObjectRef | null {
   if (!value) {
     return null;
   }
 
+  const trimmedValue = value.trim();
+  const defaultBucket = options?.defaultBucket ?? STORAGE_BUCKET;
+
+  if (!trimmedValue) {
+    return null;
+  }
+
+  let ref: StorageObjectRef | null = null;
   const baseUrl = process.env.SUPABASE_URL;
 
-  if (!baseUrl) {
-    return null;
-  }
+  if (!trimmedValue.includes("://")) {
+    if (trimmedValue.startsWith("/")) {
+      const prefix = [STORAGE_PUBLIC_PREFIX, STORAGE_SIGNED_PREFIX].find((item) =>
+        trimmedValue.startsWith(item)
+      );
 
-  try {
-    const url = new URL(value);
-    const parsedBase = new URL(baseUrl);
+      if (!prefix) {
+        return null;
+      }
 
-    if (url.origin !== parsedBase.origin) {
+      ref = parseStoragePath(trimmedValue.slice(prefix.length), undefined);
+    } else {
+      ref = parseStoragePath(trimmedValue, defaultBucket);
+    }
+  } else {
+    if (!baseUrl) {
       return null;
     }
 
-    if (!url.pathname.startsWith(`${STORAGE_PUBLIC_PREFIX}${STORAGE_BUCKET}/`)) {
+    try {
+      const url = new URL(trimmedValue);
+      const parsedBase = new URL(baseUrl);
+
+      if (url.origin !== parsedBase.origin) {
+        return null;
+      }
+
+      const prefix = [STORAGE_PUBLIC_PREFIX, STORAGE_SIGNED_PREFIX].find((item) =>
+        url.pathname.startsWith(item)
+      );
+
+      if (!prefix) {
+        return null;
+      }
+
+      ref = parseStoragePath(url.pathname.slice(prefix.length), undefined);
+    } catch {
       return null;
     }
+  }
 
-    return {
-      bucket: STORAGE_BUCKET,
-      path: url.pathname.slice(
-        `${STORAGE_PUBLIC_PREFIX}${STORAGE_BUCKET}/`.length
-      ),
-    };
-  } catch {
+  if (!ref?.bucket || !ref.path) {
     return null;
   }
+
+  if (options?.allowedBuckets && !options.allowedBuckets.includes(ref.bucket)) {
+    return null;
+  }
+
+  return ref;
+}
+
+export async function createStorageSignedUrl(
+  ref: StorageObjectRef,
+  expiresIn = STORAGE_SIGNED_URL_TTL_SECONDS
+) {
+  const supabaseAdmin = getSupabaseAdmin();
+
+  const signed = await supabaseAdmin.storage
+    .from(ref.bucket)
+    .createSignedUrl(ref.path, expiresIn);
+
+  if (signed.error || !signed.data?.signedUrl) {
+    throw new Error("No se pudo generar URL temporal de storage");
+  }
+
+  return signed.data.signedUrl;
+}
+
+export async function resolveStorageUrlForResponse(
+  value: string | null | undefined,
+  options?: { defaultBucket?: string; allowedBuckets?: readonly string[] }
+) {
+  const ref = parseStorageUrl(value, options);
+
+  if (!ref) {
+    return null;
+  }
+
+  return createStorageSignedUrl(ref);
 }

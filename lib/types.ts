@@ -525,6 +525,24 @@ export type SigningSessionData = {
   };
 };
 
+export type PublicSigningSessionData = {
+  status: "PENDING" | "SIGNED" | "CANCELLED" | string;
+  member: {
+    fullName: string;
+    memberNumber?: string | number | null;
+    displayNumber: string | number | null;
+  };
+  contractTemplate: {
+    id: number;
+    name: string;
+    version: string;
+    fileUrl: string;
+  } | null;
+  clubSettings?: {
+    defaultMonthlyLimitG: number;
+  };
+};
+
 export type AccessLogRecord = {
   id: number;
   memberId: number;

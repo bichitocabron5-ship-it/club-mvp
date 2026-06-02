@@ -3,12 +3,13 @@ import { createAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import {
   buildMemberDniPath,
+  createStorageSignedUrl,
   getImageExtension,
   parseStorageUrl,
   uploadImageToStorage,
   validateImageFile,
 } from "@/lib/storage";
-import { supabaseAdmin } from "@/lib/supabase-admin";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { NextResponse } from "next/server";
 
 function getUploadedImage(formData: FormData) {
@@ -98,8 +99,8 @@ export async function POST(
       where: { id: memberId },
       data:
         sideValue === "front"
-          ? { dniFrontUrl: uploaded.publicUrl }
-          : { dniBackUrl: uploaded.publicUrl },
+          ? { dniFrontUrl: uploaded.storageRef }
+          : { dniBackUrl: uploaded.storageRef },
       select: {
         id: true,
         dniFrontUrl: true,
@@ -111,6 +112,7 @@ export async function POST(
       sideValue === "front" ? member.dniFrontUrl : member.dniBackUrl
     );
     if (previousRef) {
+      const supabaseAdmin = getSupabaseAdmin();
       await supabaseAdmin.storage.from(previousRef.bucket).remove([previousRef.path]);
     }
 
@@ -123,14 +125,23 @@ export async function POST(
       summary: `DNI ${sideValue === "front" ? "frontal" : "trasero"} actualizado para socio #${member.memberNumber ?? member.id}`,
       metadata: {
         side: sideValue,
-        storagePath: uploaded.path,
       },
     });
 
     return NextResponse.json(
       sideValue === "front"
-        ? { dniFrontUrl: updatedMember.dniFrontUrl }
-        : { dniBackUrl: updatedMember.dniBackUrl }
+        ? {
+            dniFrontUrl: await createStorageSignedUrl({
+              bucket: uploaded.bucket,
+              path: uploaded.path,
+            }),
+          }
+        : {
+            dniBackUrl: await createStorageSignedUrl({
+              bucket: uploaded.bucket,
+              path: uploaded.path,
+            }),
+          }
     );
   } catch (error) {
     return NextResponse.json(

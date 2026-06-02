@@ -11,7 +11,7 @@ import {
   type MemberDocumentSide,
 } from "@/lib/member-documents";
 import { prisma } from "@/lib/prisma";
-import { supabaseAdmin } from "@/lib/supabase-admin";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { NextResponse } from "next/server";
 
 function getUploadedFile(formData: FormData, side: MemberDocumentSide) {
@@ -55,6 +55,7 @@ async function uploadMemberDocument(
 
   const extension = getMemberDocumentExtension(file.type);
   const path = buildMemberDocumentPath(memberId, side, extension);
+  const supabaseAdmin = getSupabaseAdmin();
   const upload = await supabaseAdmin.storage
     .from(MEMBER_DOCUMENT_BUCKET)
     .upload(path, Buffer.from(await file.arrayBuffer()), {
@@ -63,7 +64,7 @@ async function uploadMemberDocument(
     });
 
   if (upload.error) {
-    throw new Error(upload.error.message);
+    throw new Error("No se pudo subir el documento");
   }
 
   return buildStoredMemberDocumentRef(path);
@@ -114,12 +115,16 @@ export async function GET(
     );
   }
 
+  const supabaseAdmin = getSupabaseAdmin();
   const download = await supabaseAdmin.storage
     .from(storedRef.bucket)
     .download(storedRef.path);
 
   if (download.error) {
-    return NextResponse.json({ error: download.error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: "No se pudo cargar el documento" },
+      { status: 500 }
+    );
   }
 
   const fileName = storedRef.path.split("/").pop() || `dni-${side}`;
@@ -194,21 +199,14 @@ export async function POST(
       dniFrontUrl?: string;
       dniBackUrl?: string;
     } = {};
-    const staleRefs: string[] = [];
 
     if (frontFile) {
       const nextFrontRef = await uploadMemberDocument(memberId, "front", frontFile);
-      if (member.dniFrontUrl && member.dniFrontUrl !== nextFrontRef) {
-        staleRefs.push(member.dniFrontUrl);
-      }
       updates.dniFrontUrl = nextFrontRef;
     }
 
     if (backFile) {
       const nextBackRef = await uploadMemberDocument(memberId, "back", backFile);
-      if (member.dniBackUrl && member.dniBackUrl !== nextBackRef) {
-        staleRefs.push(member.dniBackUrl);
-      }
       updates.dniBackUrl = nextBackRef;
     }
 
@@ -222,16 +220,6 @@ export async function POST(
         dniBackUrl: true,
       },
     });
-
-    const removablePaths = staleRefs
-      .map((ref) => parseStoredMemberDocumentRef(ref))
-      .filter((ref): ref is { bucket: string; path: string } => Boolean(ref))
-      .filter((ref) => ref.bucket === MEMBER_DOCUMENT_BUCKET)
-      .map((ref) => ref.path);
-
-    if (removablePaths.length > 0) {
-      await supabaseAdmin.storage.from(MEMBER_DOCUMENT_BUCKET).remove(removablePaths);
-    }
 
     await createAuditLog({
       actorUserId: Number(auth.session.user.id),
@@ -257,9 +245,7 @@ export async function POST(
     return NextResponse.json(
       {
         error:
-          error instanceof Error
-            ? error.message
-            : "No se pudo subir el documento",
+          error instanceof Error ? error.message : "No se pudo subir el documento",
       },
       { status: 500 }
     );

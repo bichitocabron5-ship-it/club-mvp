@@ -1,5 +1,6 @@
 // app/api/members/[id]/contracts/route.ts
 import { requireStaffOrAdmin } from "@/lib/auth-server";
+import { createSignedUrlForAllowedStorageRef } from "@/lib/contract-storage";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
@@ -23,5 +24,23 @@ export async function GET(
     orderBy: { signedAt: "desc" },
   });
 
-  return NextResponse.json(contracts);
+  const response = await Promise.all(
+    contracts.map(async (contract) => ({
+      ...contract,
+      signedPdfUrl:
+        (await createSignedUrlForAllowedStorageRef(contract.signedPdfUrl)) ??
+        null,
+      contractTemplate: contract.contractTemplate
+        ? {
+            ...contract.contractTemplate,
+            fileUrl:
+              (await createSignedUrlForAllowedStorageRef(
+                contract.contractTemplate.fileUrl
+              )) ?? contract.contractTemplate.fileUrl,
+          }
+        : null,
+    }))
+  );
+
+  return NextResponse.json(response);
 }

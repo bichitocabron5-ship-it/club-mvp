@@ -3,12 +3,13 @@ import { createAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import {
   buildProductImagePath,
+  createStorageSignedUrl,
   getImageExtension,
   parseStorageUrl,
   uploadImageToStorage,
   validateImageFile,
 } from "@/lib/storage";
-import { supabaseAdmin } from "@/lib/supabase-admin";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { NextResponse } from "next/server";
 
 function getUploadedImage(formData: FormData) {
@@ -91,12 +92,13 @@ export async function POST(
     const updated = await prisma.product.update({
       where: { id: productId },
       data: {
-        imageUrl: uploaded.publicUrl,
+        imageUrl: uploaded.storageRef,
       },
     });
 
     const previousRef = parseStorageUrl(product.imageUrl);
     if (previousRef) {
+      const supabaseAdmin = getSupabaseAdmin();
       await supabaseAdmin.storage.from(previousRef.bucket).remove([previousRef.path]);
     }
 
@@ -115,7 +117,10 @@ export async function POST(
 
     return NextResponse.json({
       id: updated.id,
-      imageUrl: updated.imageUrl,
+      imageUrl: await createStorageSignedUrl({
+        bucket: uploaded.bucket,
+        path: uploaded.path,
+      }),
     });
   } catch (error) {
     return NextResponse.json(
