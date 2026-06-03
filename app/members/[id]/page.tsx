@@ -808,39 +808,61 @@ export default function MemberDetail() {
       </div>
 
       <div className="space-y-2">
-        {data.sales.map((sale) => (
-          <div
-            key={sale.id}
-            className="app-panel flex flex-col gap-2 rounded-3xl p-4 md:flex-row md:justify-between"
-          >
-            <div>
-              <div>{sale.product.name}</div>
-              <div className="text-sm text-gray-500">
-                {sale.qty} {sale.product.unit}
-              </div>
-              {sale.discountAmount > 0 && (
-                <div className="text-xs text-blue-700">
-                  {sale.discountReason}: -{Number(sale.discountAmount).toFixed(2)} EUR
-                </div>
-              )}
-            </div>
+        {data.sales.map((sale) => {
+          const cancelled = Boolean(sale.cancelledAt);
 
-            <div className="text-right">
-              <div className="font-semibold">
-                {Number(sale.totalAmount).toFixed(2)} EUR
-              </div>
-              {sale.originalAmount !== null &&
-                Number(sale.originalAmount) !== Number(sale.totalAmount) && (
-                  <div className="text-xs text-gray-500 line-through">
-                    {Number(sale.originalAmount).toFixed(2)} EUR
+          return (
+            <div
+              key={sale.id}
+              className={`app-panel flex flex-col gap-2 rounded-3xl p-4 md:flex-row md:justify-between ${
+                cancelled ? "opacity-70" : ""
+              }`}
+            >
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span>{sale.product.name}</span>
+                  {cancelled ? (
+                    <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-700">
+                      Anulada
+                    </span>
+                  ) : null}
+                </div>
+                <div className="text-sm text-gray-500">
+                  {sale.qty} {sale.product.unit}
+                </div>
+                {sale.discountAmount > 0 && (
+                  <div className="text-xs text-blue-700">
+                    {sale.discountReason}: -{Number(sale.discountAmount).toFixed(2)} EUR
                   </div>
                 )}
-              <div className="text-xs text-gray-500">
-                {new Date(sale.createdAt).toLocaleString()}
+                {cancelled && sale.cancelReason ? (
+                  <div className="mt-1 text-xs text-red-700">
+                    Motivo: {sale.cancelReason}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="text-right">
+                <div
+                  className={`font-semibold ${
+                    cancelled ? "text-gray-500 line-through" : ""
+                  }`}
+                >
+                  {Number(sale.totalAmount).toFixed(2)} EUR
+                </div>
+                {sale.originalAmount !== null &&
+                  Number(sale.originalAmount) !== Number(sale.totalAmount) && (
+                    <div className="text-xs text-gray-500 line-through">
+                      {Number(sale.originalAmount).toFixed(2)} EUR
+                    </div>
+                  )}
+                <div className="text-xs text-gray-500">
+                  {new Date(sale.createdAt).toLocaleString()}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </main>
   );

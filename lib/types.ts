@@ -179,7 +179,7 @@ export type CashMove = {
   type: "income" | "expense";
   amount: number;
   note: string | null;
-  source: "SALE" | "EXPENSE" | "EXPENSE_CANCELLED" | "PURCHASE_PAYMENT" | "MANUAL" | "ADJUSTMENT" | "OTHER" | string;
+  source: "SALE" | "SALE_CANCELLED" | "EXPENSE" | "EXPENSE_CANCELLED" | "PURCHASE_PAYMENT" | "MANUAL" | "ADJUSTMENT" | "OTHER" | string;
   sourceId: string | null;
   paymentMethod: "CASH" | "CARD" | "TRANSFER" | "OTHER" | string;
   createdByUserId: number | null;
@@ -477,6 +477,8 @@ export type MemberHistorySale = {
   finalAmount: number | null;
   discountReason: string | null;
   discountSource: string;
+  cancelledAt: string | null;
+  cancelReason: string | null;
   createdAt: string;
   product: {
     name: string;

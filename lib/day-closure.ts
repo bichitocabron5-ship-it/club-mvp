@@ -44,6 +44,7 @@ export async function buildTodayDayClosureSummary(): Promise<DayClosureSummary> 
   const [sales, expenses, cashMoves, inventoryCounts] = await Promise.all([
     prisma.sale.findMany({
       where: {
+        cancelledAt: null,
         createdAt: {
           gte: start,
           lt: end,

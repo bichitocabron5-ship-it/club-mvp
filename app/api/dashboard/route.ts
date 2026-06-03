@@ -1,5 +1,5 @@
 import { requireAuth } from "@/lib/auth-server";
-import { formatLocalDay } from "@/lib/cash-move";
+import { formatLocalDay, normalizeCashMoveSource } from "@/lib/cash-move";
 import { buildTodayDayClosureSummary } from "@/lib/day-closure";
 import { prisma } from "@/lib/prisma";
 import { getTodayRange, roundCurrency } from "@/lib/sales";
@@ -177,6 +177,7 @@ export async function GET() {
       }),
       prisma.sale.findMany({
         where: {
+          cancelledAt: null,
           createdAt: {
             gte: start,
             lt: end,
@@ -292,6 +293,7 @@ export async function GET() {
       isAdmin
         ? prisma.sale.findMany({
             where: {
+              cancelledAt: null,
               createdAt: {
                 gte: sevenDayStart,
                 lt: end,
@@ -299,6 +301,8 @@ export async function GET() {
             },
             select: {
               createdAt: true,
+              totalAmount: true,
+              finalAmount: true,
               profit: true,
               unitCost: true,
             },
@@ -327,6 +331,8 @@ export async function GET() {
               createdAt: true,
               type: true,
               amount: true,
+              source: true,
+              note: true,
             },
           })
         : Promise.resolve([]),
@@ -557,14 +563,34 @@ export async function GET() {
           const dayMoves = sevenDayCashMoves.filter(
             (move) => (move.day || formatLocalDay(move.createdAt)) === date
           );
-          const income = roundCurrency(
+          const daySalesRevenue = roundCurrency(
+            daySales.reduce((acc, sale) => acc + getSaleRevenue(sale), 0)
+          );
+          const nonSaleIncome = roundCurrency(
             dayMoves
               .filter((move) => move.type === "income")
+              .filter(
+                (move) =>
+                  normalizeCashMoveSource(move.source, {
+                    type: move.type,
+                    note: move.note,
+                  }) !== "SALE"
+              )
               .reduce((acc, move) => acc + Number(move.amount), 0)
+          );
+          const income = roundCurrency(
+            daySalesRevenue + nonSaleIncome
           );
           const expense = roundCurrency(
             dayMoves
               .filter((move) => move.type === "expense")
+              .filter(
+                (move) =>
+                  normalizeCashMoveSource(move.source, {
+                    type: move.type,
+                    note: move.note,
+                  }) !== "SALE_CANCELLED"
+              )
               .reduce((acc, move) => acc + Number(move.amount), 0)
           );
           const grossProfit = roundCurrency(
