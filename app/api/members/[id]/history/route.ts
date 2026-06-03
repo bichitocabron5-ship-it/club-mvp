@@ -40,8 +40,10 @@ export async function GET(
     orderBy: { createdAt: "desc" },
   });
 
-  const totalSpent = sales.reduce(
-    (acc: number, s) => acc + Number(s.totalAmount),
+  const activeSales = sales.filter((sale) => !sale.cancelledAt);
+  const totalSpent = activeSales.reduce(
+    (acc: number, sale) =>
+      acc + Number(sale.finalAmount ?? sale.totalAmount ?? 0),
     0
   );
 
@@ -54,6 +56,6 @@ export async function GET(
     },
     sales,
     totalSpent,
-    count: sales.length,
+    count: activeSales.length,
   });
 }

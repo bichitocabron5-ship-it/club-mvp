@@ -26,6 +26,8 @@ function formatSourceLabel(source: CashMove["source"]) {
   switch (normalizeCashMoveSource(source)) {
     case "SALE":
       return "Ventas";
+    case "SALE_CANCELLED":
+      return "Ventas anuladas";
     case "EXPENSE":
       return "Gastos";
     case "EXPENSE_CANCELLED":

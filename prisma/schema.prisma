@@ -57,6 +57,7 @@ model AppUser {
 
   member                    Member?           @relation(fields: [memberId], references: [id])
   appliedSales              Sale[]            @relation("SaleAppliedByUser")
+  cancelledSales            Sale[]            @relation("SaleCancelledByUser")
   auditLogs                 AuditLog[]
   createdInventoryCounts    InventoryCount[]  @relation("InventoryCountCreatedByUser")
   confirmedInventoryCounts  InventoryCount[]  @relation("InventoryCountConfirmedByUser")
@@ -177,10 +178,15 @@ model Sale {
   discountReason  String?
   discountSource  String   @default("NONE") // NONE | MEMBER_PROFILE | MANUAL
   appliedByUserId Int?
+  cancelledAt     DateTime?
+  cancelledByUserId Int?
+  cancelReason    String?
+  updatedAt       DateTime @updatedAt
 
-  member        Member   @relation(fields: [memberId], references: [id])
-  product       Product  @relation(fields: [productId], references: [id])
-  appliedByUser AppUser? @relation("SaleAppliedByUser", fields: [appliedByUserId], references: [id])
+  member          Member   @relation(fields: [memberId], references: [id])
+  product         Product  @relation(fields: [productId], references: [id])
+  appliedByUser   AppUser? @relation("SaleAppliedByUser", fields: [appliedByUserId], references: [id])
+  cancelledByUser AppUser? @relation("SaleCancelledByUser", fields: [cancelledByUserId], references: [id])
 
   @@index([memberId, createdAt])
   @@index([productId, createdAt])

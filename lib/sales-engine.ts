@@ -256,6 +256,7 @@ export async function createSaleTransaction({
         tx.sale.findMany({
           where: {
             memberId,
+            cancelledAt: null,
             createdAt: { gte: start },
           },
           include: {
@@ -265,6 +266,7 @@ export async function createSaleTransaction({
         tx.sale.findMany({
           where: {
             memberId,
+            cancelledAt: null,
             createdAt: {
               gte: monthStart,
               lt: monthEnd,

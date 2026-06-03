@@ -4,7 +4,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { fetchJson } from "@/lib/fetch-json";
 import { PRODUCT_HASH_TYPES } from "@/lib/types";
 import type { MemberSummary, ProductHashType, ProductSummary } from "@/lib/types";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type TodayTotals = {
   grams: number;
@@ -24,6 +24,31 @@ type CartItem = {
   inputMode: CartInputMode;
   qtyInput: string;
   amountInput: string;
+};
+
+type RecentSale = {
+  id: number;
+  qty: number;
+  totalAmount: number;
+  finalAmount: number | null;
+  createdAt: string;
+  cancelledAt: string | null;
+  cancelReason: string | null;
+  canCancel: boolean;
+  member: {
+    fullName: string;
+  };
+  product: {
+    name: string;
+    unit: ProductSummary["unit"] | string;
+  };
+};
+
+type RecentSalesResponse = {
+  role: string;
+  day: string;
+  dayClosed: boolean;
+  sales: RecentSale[];
 };
 
 type AddProductOptions = {
@@ -122,6 +147,17 @@ function formatQtyLabel(value: number, unit: ProductSummary["unit"]) {
   return `${roundQty(value, unit).toFixed(QTY_DECIMALS_G)} g`;
 }
 
+function formatCurrencyLabel(value: number) {
+  return `${Number(value || 0).toFixed(2)} EUR`;
+}
+
+function formatTimeLabel(value: string) {
+  return new Date(value).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function parsePositiveNumber(value: string) {
   const normalized = value.replace(",", ".").trim();
   if (!normalized) return null;
@@ -175,6 +211,9 @@ export default function SalesPage() {
   const [members, setMembers] = useState<MemberSummary[]>([]);
   const [products, setProducts] = useState<ProductSummary[]>([]);
   const [today, setToday] = useState<TodayTotals>(emptyToday);
+  const [recentSales, setRecentSales] = useState<RecentSale[]>([]);
+  const [recentSalesDayClosed, setRecentSalesDayClosed] = useState(false);
+  const [recentSalesError, setRecentSalesError] = useState("");
   const [error, setError] = useState("");
   const [memberId, setMemberId] = useState("");
   const [memberStatus, setMemberStatus] = useState<MemberOperationalStatus | null>(null);
@@ -191,11 +230,19 @@ export default function SalesPage() {
   const [focusedCartProductId, setFocusedCartProductId] = useState<number | null>(
     null
   );
+  const [cancelingSaleId, setCancelingSaleId] = useState<number | null>(null);
 
   const rfidRef = useRef<HTMLInputElement | null>(null);
   const productSearchRef = useRef<HTMLInputElement | null>(null);
   const cartInputRefs = useRef<Map<number, HTMLInputElement>>(new Map());
   const submittingRef = useRef(false);
+
+  const loadRecentSales = useCallback(async () => {
+    const data = await fetchJson<RecentSalesResponse>("/api/sales");
+    setRecentSales(data.sales);
+    setRecentSalesDayClosed(data.dayClosed);
+    setRecentSalesError("");
+  }, []);
 
   useEffect(() => {
     const focusTimer = window.setTimeout(() => {
@@ -238,6 +285,30 @@ export default function SalesPage() {
       .catch((err) => {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Error cargando datos");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void fetchJson<RecentSalesResponse>("/api/sales")
+      .then((data) => {
+        if (!cancelled) {
+          setRecentSales(data.sales);
+          setRecentSalesDayClosed(data.dayClosed);
+          setRecentSalesError("");
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setRecentSalesError(
+            err instanceof Error ? err.message : "Error cargando retiradas"
+          );
         }
       });
 
@@ -737,6 +808,7 @@ export default function SalesPage() {
         `/api/members/${selectedMemberId}/today`
       );
       setToday(refreshedToday);
+      await loadRecentSales();
 
       setMemberId("");
       setMemberSearch("");
@@ -752,6 +824,72 @@ export default function SalesPage() {
     } finally {
       submittingRef.current = false;
       setLoading(false);
+    }
+  }
+
+  async function handleCancelRecentSale(sale: RecentSale) {
+    if (!sale.canCancel || recentSalesDayClosed || cancelingSaleId !== null) {
+      return;
+    }
+
+    const reason = window.prompt(
+      `Motivo para anular la retirada #${sale.id}`
+    );
+
+    if (reason === null) {
+      return;
+    }
+
+    const trimmedReason = reason.trim();
+
+    if (!trimmedReason) {
+      alert("El motivo es obligatorio para anular una retirada.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Anular retirada #${sale.id} de ${sale.member.fullName}?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setCancelingSaleId(sale.id);
+
+    try {
+      const res = await fetch(`/api/sales/${sale.id}/cancel`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          reason: trimmedReason,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = (await res.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        throw new Error(err?.error || "No se pudo anular la retirada");
+      }
+
+      const refreshedProducts = await fetchJson<ProductSummary[]>("/api/products");
+      setProducts(refreshedProducts);
+
+      if (memberId) {
+        const refreshedToday = await fetchJson<TodayTotals>(
+          `/api/members/${memberId}/today`
+        );
+        setToday(refreshedToday);
+      }
+
+      await loadRecentSales();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Error anulando retirada");
+    } finally {
+      setCancelingSaleId(null);
     }
   }
 
@@ -798,6 +936,105 @@ export default function SalesPage() {
       </div>
 
       {error && <EmptyState message={error} className="mb-4" />}
+
+      <section className="app-panel mb-4 rounded-3xl p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-black">Ultimas retiradas de hoy</h2>
+            {recentSalesDayClosed ? (
+              <div className="mt-1 text-xs text-amber-700">
+                El dia esta cerrado; no se pueden anular retiradas.
+              </div>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              void loadRecentSales().catch((err) => {
+                setRecentSalesError(
+                  err instanceof Error ? err.message : "Error cargando retiradas"
+                );
+              });
+            }}
+            className="app-button-secondary rounded-full px-4 py-2 text-sm font-semibold"
+          >
+            Actualizar
+          </button>
+        </div>
+
+        {recentSalesError ? (
+          <div className="rounded-2xl bg-red-100 p-3 text-sm text-red-700">
+            {recentSalesError}
+          </div>
+        ) : recentSales.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-black/10 bg-white/70 p-4 text-sm text-gray-600">
+            No hay retiradas registradas hoy.
+          </div>
+        ) : (
+          <div className="grid gap-3 lg:grid-cols-2">
+            {recentSales.map((sale) => {
+              const cancelled = Boolean(sale.cancelledAt);
+              const amount = sale.finalAmount ?? sale.totalAmount;
+
+              return (
+                <div
+                  key={sale.id}
+                  className={`rounded-2xl border border-black/8 bg-white/82 p-3 ${
+                    cancelled ? "opacity-70" : ""
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2 font-semibold">
+                        <span>#{sale.id}</span>
+                        <span>{sale.product.name}</span>
+                        {cancelled ? (
+                          <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-700">
+                            Anulada
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="mt-1 text-sm text-gray-500">
+                        {sale.member.fullName} - {formatQtyLabel(
+                          sale.qty,
+                          sale.product.unit === "UD" ? "UD" : "G"
+                        )} - {formatTimeLabel(sale.createdAt)}
+                      </div>
+                      {cancelled && sale.cancelReason ? (
+                        <div className="mt-1 text-xs text-red-700">
+                          Motivo: {sale.cancelReason}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="text-right">
+                      <div
+                        className={`font-black ${
+                          cancelled ? "text-gray-500 line-through" : ""
+                        }`}
+                      >
+                        {formatCurrencyLabel(amount)}
+                      </div>
+                      {!cancelled ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void handleCancelRecentSale(sale);
+                          }}
+                          disabled={!sale.canCancel || cancelingSaleId !== null}
+                          className="mt-2 rounded-full bg-red-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-40"
+                        >
+                          {cancelingSaleId === sale.id ? "Anulando..." : "Anular"}
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       <form onSubmit={handleRfidSubmit} className="app-panel mb-4 space-y-2 rounded-3xl p-4">
         <label className="block text-sm font-medium">Escanear chapita</label>

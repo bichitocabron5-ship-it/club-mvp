@@ -1,0 +1,9 @@
+ALTER TABLE "Sale"
+ADD COLUMN     "cancelledAt" TIMESTAMP(3),
+ADD COLUMN     "cancelledByUserId" INTEGER,
+ADD COLUMN     "cancelReason" TEXT,
+ADD COLUMN     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
+
+ALTER TABLE "Sale"
+ADD CONSTRAINT "Sale_cancelledByUserId_fkey"
+FOREIGN KEY ("cancelledByUserId") REFERENCES "AppUser"("id") ON DELETE SET NULL ON UPDATE CASCADE;

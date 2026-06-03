@@ -34,6 +34,7 @@ export async function GET(
     prisma.sale.findMany({
       where: {
         memberId,
+        cancelledAt: null,
         createdAt: {
           gte: startToday,
         },
@@ -45,6 +46,7 @@ export async function GET(
     prisma.sale.findMany({
       where: {
         memberId,
+        cancelledAt: null,
         createdAt: {
           gte: monthStart,
           lt: monthEnd,
