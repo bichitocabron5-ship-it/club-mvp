@@ -1,6 +1,7 @@
 // app/api/access/current/route.ts
 import { requireStaffOrAdmin } from "@/lib/auth-server";
 import { getCurrentInsideMembers } from "@/lib/access";
+import { resolveStorageUrlForResponse } from "@/lib/storage";
 import { NextResponse } from "next/server";
 
 export async function GET() {
@@ -10,9 +11,15 @@ export async function GET() {
   }
 
   const inside = await getCurrentInsideMembers();
+  const insideWithPhotos = await Promise.all(
+    inside.map(async (member) => ({
+      ...member,
+      photoUrl: await resolveStorageUrlForResponse(member.photoUrl),
+    }))
+  );
 
   return NextResponse.json({
-    count: inside.length,
-    inside,
+    count: insideWithPhotos.length,
+    inside: insideWithPhotos,
   });
 }

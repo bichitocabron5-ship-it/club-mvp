@@ -566,16 +566,53 @@ export type AccessLogRecord = {
   createdAt: string;
 };
 
-export type AccessInsideMember = {
+export type AccessAction = "IN" | "OUT";
+
+export type AccessLastAccess = {
   id: number;
+  memberId?: number;
+  type: "IN" | "OUT" | string;
+  createdAt: string;
+};
+
+export type AccessMemberSnapshot = {
+  id: number;
+  memberNumber?: string | number | null;
+  displayNumber?: string | number | null;
   fullName: string;
   dni: string;
+  photoUrl: string | null;
+  active: boolean;
+  expiresAt: string | null;
+  rfidCode: string | null;
+  lastAccess?: AccessLastAccess | null;
+};
+
+export type AccessInsideMember = {
+  id: number;
+  memberNumber?: string | number | null;
+  displayNumber?: string | number | null;
+  fullName: string;
+  dni: string;
+  photoUrl?: string | null;
+  active?: boolean;
+  expiresAt?: string | null;
+  rfidCode?: string | null;
+  lastAccessType?: "IN" | "OUT" | string;
   lastAccessAt: string;
 };
 
 export type AccessCurrentResponse = {
   count: number;
   inside: AccessInsideMember[];
+};
+
+export type AccessToggleResponse = {
+  log: AccessLogRecord;
+  action: AccessAction;
+  message: string;
+  member: AccessMemberSnapshot;
+  lastAccess: AccessLastAccess;
 };
 
 export type StockMoveRecord = {
