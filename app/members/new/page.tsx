@@ -293,7 +293,7 @@ export default function NewMemberPage() {
         <div className="space-y-4">
           <section className="rounded-3xl border border-green-200 bg-green-50/95 p-4 md:p-5">
             <h2 className="text-lg font-bold text-green-800">
-              Socio creado correctamente
+              Socio creado
             </h2>
 
             <div className="mt-2 grid gap-3 md:grid-cols-2">
@@ -329,7 +329,7 @@ export default function NewMemberPage() {
 
               {createdMember.rfidCode ? (
                 <span className="rounded bg-blue-100 px-3 py-1 text-blue-700">
-                  RFID asignado
+                  RFID {createdMember.rfidCode}
                 </span>
               ) : (
                 <span className="rounded bg-yellow-100 px-3 py-1 text-yellow-700">
@@ -345,14 +345,23 @@ export default function NewMemberPage() {
               <div>
                 Email: <strong>{createdMember.email || "No indicado"}</strong>
               </div>
+              <div>
+                Contrato:{" "}
+                <strong>
+                  {contractSigned
+                    ? "Firmado"
+                    : signingSession
+                      ? "Pendiente de firma"
+                      : "Sin iniciar"}
+                </strong>
+              </div>
             </div>
           </section>
 
           <section className="app-panel rounded-3xl p-4 md:p-5">
-            <h2 className="mb-3 text-lg font-bold">2. Asignar RFID</h2>
+            <h2 className="mb-3 text-lg font-bold">Asignar chapita</h2>
             <p className="mb-3 text-sm text-gray-600">
-              Escanea la chapita del socio ahora o continúa más tarde desde su
-              ficha.
+              Escanea la chapita ahora o continúa más tarde desde la ficha.
             </p>
 
             {rfidMessage && (
@@ -383,7 +392,7 @@ export default function NewMemberPage() {
                   }}
                   className="app-button-primary rounded-full px-4 py-3 font-bold"
                 >
-                  Asignar RFID escaneando
+                  Asignar chapita
                 </button>
 
                 {assigningRfid && (
@@ -418,10 +427,9 @@ export default function NewMemberPage() {
           </section>
 
           <section className="app-panel rounded-3xl p-4 md:p-5">
-            <h2 className="mb-3 text-lg font-bold">3. Firma de contrato</h2>
+            <h2 className="mb-3 text-lg font-bold">Crear enlace de firma</h2>
             <p className="mb-3 text-sm text-gray-600">
-              La sesión de firma abrirá los datos del socio ya cargados para no
-              volver a escribirlos.
+              El enlace abrirá la firma con los datos del socio ya cargados.
             </p>
 
             {signingError && (
@@ -436,7 +444,7 @@ export default function NewMemberPage() {
                 onClick={createSigningSession}
                 className="app-button-primary rounded-full px-4 py-3 font-bold"
               >
-                Crear sesión de firma
+                Crear enlace de firma
               </button>
             )}
 
@@ -484,45 +492,7 @@ export default function NewMemberPage() {
           </section>
 
           <section className="app-panel rounded-3xl p-4 md:p-5">
-            <h2 className="mb-3 text-lg font-bold">Estado final</h2>
-
-            <div className="mb-4 grid gap-3 md:grid-cols-2">
-              <div className="rounded-2xl border border-black/8 bg-gray-50 p-3">
-                <div className="text-sm text-gray-500">Socio</div>
-                <div className="font-semibold">
-                  Creado con Nº {visibleMemberNumber}
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-black/8 bg-gray-50 p-3">
-                <div className="text-sm text-gray-500">Contrato</div>
-                <div className="font-semibold">
-                  {contractSigned
-                    ? "Firmado"
-                    : signingSession
-                      ? "Pendiente de firma"
-                      : "Sin iniciar"}
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-black/8 bg-gray-50 p-3">
-                <div className="text-sm text-gray-500">RFID</div>
-                <div className="font-semibold">
-                  {createdMember.rfidCode
-                    ? `Asignado: ${createdMember.rfidCode}`
-                    : "Pendiente"}
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-black/8 bg-gray-50 p-3">
-                <div className="text-sm text-gray-500">Contacto</div>
-                <div className="font-semibold">
-                  {createdMember.phone || createdMember.email
-                    ? `${createdMember.phone || "Sin teléfono"} · ${createdMember.email || "Sin email"}`
-                    : "Sin datos de contacto"}
-                </div>
-              </div>
-            </div>
+            <h2 className="mb-3 text-lg font-bold">Acciones principales</h2>
 
             {!isReady && (
               <div className="mb-4 space-y-2">
@@ -563,7 +533,7 @@ export default function NewMemberPage() {
                 href={`/members/${createdMember.id}`}
                 className="rounded-full bg-green-600 px-4 py-3 font-bold text-white"
               >
-                Ver ficha
+                Abrir ficha
               </Link>
 
               <Link
