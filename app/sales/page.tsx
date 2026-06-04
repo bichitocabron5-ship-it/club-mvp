@@ -214,6 +214,7 @@ export default function SalesPage() {
   const [recentSales, setRecentSales] = useState<RecentSale[]>([]);
   const [recentSalesDayClosed, setRecentSalesDayClosed] = useState(false);
   const [recentSalesError, setRecentSalesError] = useState("");
+  const [showRecentSales, setShowRecentSales] = useState(false);
   const [error, setError] = useState("");
   const [memberId, setMemberId] = useState("");
   const [memberStatus, setMemberStatus] = useState<MemberOperationalStatus | null>(null);
@@ -928,113 +929,26 @@ export default function SalesPage() {
           </p>
         </div>
 
-        <div className="app-panel rounded-2xl p-3 text-sm">
-          Hoy: <strong>{visibleToday.grams.toFixed(2)} g</strong> / {visibleToday.limits.dailyLimitG} g
-          {" · "}
-          <strong>{visibleToday.units.toFixed(0)} ud</strong> / {visibleToday.limits.dailyLimitUd} ud
+        <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+          <button
+            type="button"
+            aria-controls="recent-sales-panel"
+            aria-expanded={showRecentSales}
+            onClick={() => setShowRecentSales((current) => !current)}
+            className="app-button-secondary rounded-full px-4 py-2 text-sm font-semibold"
+          >
+            {showRecentSales ? "Ocultar últimas retiradas" : "Ver últimas retiradas"}
+          </button>
+
+          <div className="app-panel rounded-2xl p-3 text-sm">
+            Hoy: <strong>{visibleToday.grams.toFixed(2)} g</strong> / {visibleToday.limits.dailyLimitG} g
+            {" · "}
+            <strong>{visibleToday.units.toFixed(0)} ud</strong> / {visibleToday.limits.dailyLimitUd} ud
+          </div>
         </div>
       </div>
 
       {error && <EmptyState message={error} className="mb-4" />}
-
-      <section className="app-panel mb-4 rounded-3xl p-4">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-black">Ultimas retiradas de hoy</h2>
-            {recentSalesDayClosed ? (
-              <div className="mt-1 text-xs text-amber-700">
-                El dia esta cerrado; no se pueden anular retiradas.
-              </div>
-            ) : null}
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              void loadRecentSales().catch((err) => {
-                setRecentSalesError(
-                  err instanceof Error ? err.message : "Error cargando retiradas"
-                );
-              });
-            }}
-            className="app-button-secondary rounded-full px-4 py-2 text-sm font-semibold"
-          >
-            Actualizar
-          </button>
-        </div>
-
-        {recentSalesError ? (
-          <div className="rounded-2xl bg-red-100 p-3 text-sm text-red-700">
-            {recentSalesError}
-          </div>
-        ) : recentSales.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-black/10 bg-white/70 p-4 text-sm text-gray-600">
-            No hay retiradas registradas hoy.
-          </div>
-        ) : (
-          <div className="grid gap-3 lg:grid-cols-2">
-            {recentSales.map((sale) => {
-              const cancelled = Boolean(sale.cancelledAt);
-              const amount = sale.finalAmount ?? sale.totalAmount;
-
-              return (
-                <div
-                  key={sale.id}
-                  className={`rounded-2xl border border-black/8 bg-white/82 p-3 ${
-                    cancelled ? "opacity-70" : ""
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2 font-semibold">
-                        <span>#{sale.id}</span>
-                        <span>{sale.product.name}</span>
-                        {cancelled ? (
-                          <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-700">
-                            Anulada
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className="mt-1 text-sm text-gray-500">
-                        {sale.member.fullName} - {formatQtyLabel(
-                          sale.qty,
-                          sale.product.unit === "UD" ? "UD" : "G"
-                        )} - {formatTimeLabel(sale.createdAt)}
-                      </div>
-                      {cancelled && sale.cancelReason ? (
-                        <div className="mt-1 text-xs text-red-700">
-                          Motivo: {sale.cancelReason}
-                        </div>
-                      ) : null}
-                    </div>
-
-                    <div className="text-right">
-                      <div
-                        className={`font-black ${
-                          cancelled ? "text-gray-500 line-through" : ""
-                        }`}
-                      >
-                        {formatCurrencyLabel(amount)}
-                      </div>
-                      {!cancelled ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            void handleCancelRecentSale(sale);
-                          }}
-                          disabled={!sale.canCancel || cancelingSaleId !== null}
-                          className="mt-2 rounded-full bg-red-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-40"
-                        >
-                          {cancelingSaleId === sale.id ? "Anulando..." : "Anular"}
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
 
       <form onSubmit={handleRfidSubmit} className="app-panel mb-4 space-y-2 rounded-3xl p-4">
         <label className="block text-sm font-medium">Escanear chapita</label>
@@ -1543,6 +1457,109 @@ export default function SalesPage() {
           </button>
         </aside>
       </div>
+
+      <section
+        id="recent-sales-panel"
+        hidden={!showRecentSales}
+        className="app-panel mt-4 rounded-3xl p-4"
+      >
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-black">Ultimas retiradas de hoy</h2>
+            {recentSalesDayClosed ? (
+              <div className="mt-1 text-xs text-amber-700">
+                El dia esta cerrado; no se pueden anular retiradas.
+              </div>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              void loadRecentSales().catch((err) => {
+                setRecentSalesError(
+                  err instanceof Error ? err.message : "Error cargando retiradas"
+                );
+              });
+            }}
+            className="app-button-secondary rounded-full px-4 py-2 text-sm font-semibold"
+          >
+            Actualizar
+          </button>
+        </div>
+
+        {recentSalesError ? (
+          <div className="rounded-2xl bg-red-100 p-3 text-sm text-red-700">
+            {recentSalesError}
+          </div>
+        ) : recentSales.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-black/10 bg-white/70 p-4 text-sm text-gray-600">
+            No hay retiradas registradas hoy.
+          </div>
+        ) : (
+          <div className="grid gap-3 lg:grid-cols-2">
+            {recentSales.map((sale) => {
+              const cancelled = Boolean(sale.cancelledAt);
+              const amount = sale.finalAmount ?? sale.totalAmount;
+
+              return (
+                <div
+                  key={sale.id}
+                  className={`rounded-2xl border border-black/8 bg-white/82 p-3 ${
+                    cancelled ? "opacity-70" : ""
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2 font-semibold">
+                        <span>#{sale.id}</span>
+                        <span>{sale.product.name}</span>
+                        {cancelled ? (
+                          <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-700">
+                            Anulada
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="mt-1 text-sm text-gray-500">
+                        {sale.member.fullName} - {formatQtyLabel(
+                          sale.qty,
+                          sale.product.unit === "UD" ? "UD" : "G"
+                        )} - {formatTimeLabel(sale.createdAt)}
+                      </div>
+                      {cancelled && sale.cancelReason ? (
+                        <div className="mt-1 text-xs text-red-700">
+                          Motivo: {sale.cancelReason}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="text-right">
+                      <div
+                        className={`font-black ${
+                          cancelled ? "text-gray-500 line-through" : ""
+                        }`}
+                      >
+                        {formatCurrencyLabel(amount)}
+                      </div>
+                      {!cancelled ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void handleCancelRecentSale(sale);
+                          }}
+                          disabled={!sale.canCancel || cancelingSaleId !== null}
+                          className="mt-2 rounded-full bg-red-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-40"
+                        >
+                          {cancelingSaleId === sale.id ? "Anulando..." : "Anular"}
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
     </main>
   );
 }
