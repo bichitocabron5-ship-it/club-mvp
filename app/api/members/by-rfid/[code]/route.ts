@@ -2,10 +2,11 @@
 import { requireStaffOrAdmin } from "@/lib/auth-server";
 import { prisma } from "@/lib/prisma";
 import { normalizeRfidCode } from "@/lib/rfid";
+import { resolveStorageUrlForResponse } from "@/lib/storage";
 import { NextResponse } from "next/server";
 
 export async function GET(
-  req: Request,
+  _req: Request,
   { params }: { params: Promise<{ code: string }> }
 ) {
   const auth = await requireStaffOrAdmin();
@@ -26,10 +27,25 @@ export async function GET(
     },
     select: {
       id: true,
-      fullName: true,
       memberNumber: true,
+      fullName: true,
+      dni: true,
+      photoUrl: true,
       active: true,
       expiresAt: true,
+      rfidCode: true,
+      accessLogs: {
+        orderBy: {
+          createdAt: "desc",
+        },
+        take: 1,
+        select: {
+          id: true,
+          memberId: true,
+          type: true,
+          createdAt: true,
+        },
+      },
     },
   });
 
@@ -37,5 +53,25 @@ export async function GET(
     return NextResponse.json({ error: "Chapita no asignada" }, { status: 404 });
   }
 
-  return NextResponse.json(member);
+  const lastAccess = member.accessLogs[0] ?? null;
+
+  return NextResponse.json({
+    id: member.id,
+    memberNumber: member.memberNumber,
+    displayNumber: member.memberNumber ?? String(member.id),
+    fullName: member.fullName,
+    dni: member.dni,
+    photoUrl: await resolveStorageUrlForResponse(member.photoUrl),
+    active: member.active,
+    expiresAt: member.expiresAt?.toISOString() ?? null,
+    rfidCode: member.rfidCode,
+    lastAccess: lastAccess
+      ? {
+          id: lastAccess.id,
+          memberId: lastAccess.memberId,
+          type: lastAccess.type,
+          createdAt: lastAccess.createdAt.toISOString(),
+        }
+      : null,
+  });
 }
