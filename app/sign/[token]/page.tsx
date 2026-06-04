@@ -27,6 +27,10 @@ const emptyForm: SignForm = {
   consumptionGrams: "",
 };
 
+function toDateInputValue(value: string | null | undefined) {
+  return value ? value.slice(0, 10) : "";
+}
+
 export default function SignPage() {
   const params = useParams<{ token?: string | string[] }>();
   const token = typeof params.token === "string" ? params.token : "";
@@ -78,14 +82,16 @@ export default function SignPage() {
         setSessionState({ token, data: sessionData });
         setForm({
           fullName: sessionData.member?.fullName || "",
-          dni: "",
-          address: "",
-          birthPlace: "",
-          birthDate: "",
-          phone: "",
-          email: "",
+          dni: sessionData.member?.dni || "",
+          address: sessionData.member?.address || "",
+          birthPlace: sessionData.member?.birthPlace || "",
+          birthDate: toDateInputValue(sessionData.member?.birthDate),
+          phone: sessionData.member?.phone || "",
+          email: sessionData.member?.email || "",
           consumptionGrams: String(
-            sessionData.clubSettings?.defaultMonthlyLimitG ?? 30
+            sessionData.member?.consumptionGrams ??
+              sessionData.clubSettings?.defaultMonthlyLimitG ??
+              30
           ),
         });
       })

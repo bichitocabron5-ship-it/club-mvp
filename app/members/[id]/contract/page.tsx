@@ -2,6 +2,7 @@
 
 import type {
   InternalSigningSessionData,
+  MemberHistoryData,
   PublicSigningSessionData,
 } from "@/lib/types";
 import Image from "next/image";
@@ -28,13 +29,16 @@ function isInternalSigningSessionData(
 export default function MemberContractPage() {
   const params = useParams<{ id: string }>();
   const memberId = Number(params.id);
+  const validMemberId = Number.isInteger(memberId) && memberId > 0;
 
   const [session, setSession] =
     useState<InternalSigningSessionData | null>(null);
+  const [member, setMember] = useState<MemberHistoryData["member"] | null>(null);
+  const [loadingMember, setLoadingMember] = useState(validMemberId);
   const [error, setError] = useState("");
 
   async function createSession() {
-    if (!Number.isInteger(memberId) || memberId <= 0) {
+    if (!validMemberId) {
       setError("Socio invalido para crear la sesion de firma");
       return;
     }
@@ -70,6 +74,41 @@ export default function MemberContractPage() {
   }
 
   useEffect(() => {
+    if (!validMemberId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void fetch(`/api/members/${memberId}/history`, { cache: "no-store" })
+      .then(async (res) => {
+        if (!res.ok) {
+          throw new Error("No se pudieron cargar los datos del socio");
+        }
+
+        const data: MemberHistoryData = await res.json();
+
+        if (!cancelled) {
+          setMember(data.member);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setError("No se pudieron cargar los datos del socio");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingMember(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [memberId, validMemberId]);
+
+  useEffect(() => {
     if (!session?.token || session.status === "SIGNED") return;
 
     const interval = setInterval(async () => {
@@ -96,10 +135,45 @@ export default function MemberContractPage() {
   }, [session?.status, session?.token]);
 
   const signUrl = session?.signUrl ?? "";
+  const summaryMember = member
+    ? {
+        fullName: member.fullName,
+        dni: member.dni,
+        phone: member.phone,
+        email: member.email,
+      }
+    : session?.member ?? null;
 
   return (
     <main>
       <h1 className="mb-4 text-2xl font-bold">Contrato y firma</h1>
+
+      <section className="mb-4 rounded border bg-gray-50 p-4">
+        <h2 className="mb-3 font-bold">Datos que se pasarán a firma</h2>
+
+        {loadingMember && <p className="text-sm text-gray-500">Cargando socio...</p>}
+
+        {!loadingMember && summaryMember && (
+          <div className="grid gap-3 text-sm md:grid-cols-2">
+            <div>
+              <div className="text-gray-500">Nombre</div>
+              <strong>{summaryMember.fullName || "-"}</strong>
+            </div>
+            <div>
+              <div className="text-gray-500">DNI</div>
+              <strong>{summaryMember.dni || "-"}</strong>
+            </div>
+            <div>
+              <div className="text-gray-500">Teléfono</div>
+              <strong>{summaryMember.phone || "No indicado"}</strong>
+            </div>
+            <div>
+              <div className="text-gray-500">Email</div>
+              <strong>{summaryMember.email || "No indicado"}</strong>
+            </div>
+          </div>
+        )}
+      </section>
 
       {error && (
         <div className="mb-4 rounded border border-red-200 bg-red-50 p-4 text-red-700">

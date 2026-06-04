@@ -172,6 +172,10 @@ function parseConsumptionGrams(value: string | number | null | undefined) {
   return numericValue;
 }
 
+function hasOwnFormField(form: object, field: string) {
+  return Object.prototype.hasOwnProperty.call(form, field);
+}
+
 async function getPublicSigningSession(token: string) {
   const parsedToken = tokenSchema.safeParse(token);
 
@@ -292,17 +296,40 @@ export async function POST(
   }
 
   const form = parsedBody.data.form || {};
-  const birthDate = parseBirthDate(form.birthDate);
-  const consumptionGrams = parseConsumptionGrams(form.consumptionGrams);
+  const hasAddress = hasOwnFormField(form, "address");
+  const hasBirthPlace = hasOwnFormField(form, "birthPlace");
+  const hasBirthDate = hasOwnFormField(form, "birthDate");
+  const hasConsumptionGrams = hasOwnFormField(form, "consumptionGrams");
+  const birthDate = hasBirthDate ? parseBirthDate(form.birthDate) : null;
+  const consumptionGrams = hasConsumptionGrams
+    ? parseConsumptionGrams(form.consumptionGrams)
+    : null;
 
   if (birthDate === "INVALID" || consumptionGrams === "INVALID") {
     return invalidSigningPayload(400);
   }
 
+  const previousContract = await prisma.memberContract.findFirst({
+    where: { memberId: existingSession.memberId },
+    orderBy: [{ signedAt: "desc" }, { id: "desc" }],
+  });
+
   const mergedFullName = trimToNull(form.fullName) || existingSession.member.fullName;
   const mergedDni = trimToNull(form.dni) || existingSession.member.dni;
   const mergedPhone = trimToNull(form.phone) || existingSession.member.phone || null;
   const mergedEmail = trimToNull(form.email) || existingSession.member.email || null;
+  const mergedAddress = hasAddress
+    ? trimToNull(form.address)
+    : previousContract?.address ?? null;
+  const mergedBirthPlace = hasBirthPlace
+    ? trimToNull(form.birthPlace)
+    : previousContract?.birthPlace ?? null;
+  const mergedBirthDate = hasBirthDate
+    ? birthDate
+    : previousContract?.birthDate ?? null;
+  const mergedConsumptionGrams = hasConsumptionGrams
+    ? consumptionGrams
+    : previousContract?.consumptionGrams ?? null;
 
   const session = await prisma.$transaction(async (tx) => {
     await tx.member.update({
@@ -335,12 +362,12 @@ export async function POST(
 
         fullName: mergedFullName,
         dni: mergedDni,
-        address: trimToNull(form.address),
-        birthPlace: trimToNull(form.birthPlace),
-        birthDate,
+        address: mergedAddress,
+        birthPlace: mergedBirthPlace,
+        birthDate: mergedBirthDate,
         phone: mergedPhone,
         email: mergedEmail,
-        consumptionGrams,
+        consumptionGrams: mergedConsumptionGrams,
 
         signatureImage: parsedBody.data.signatureImage,
       },

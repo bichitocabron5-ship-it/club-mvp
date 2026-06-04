@@ -6,6 +6,7 @@ import {
   findActiveContractTemplate,
   resolveContractTemplateForContract,
 } from "@/lib/contract-templates";
+import { prisma } from "@/lib/prisma";
 import type {
   InternalSigningSessionData,
   PublicSigningSessionData,
@@ -30,6 +31,17 @@ export function isSigningSessionExpired(expiresAt: Date | string) {
   return new Date(expiresAt) <= new Date();
 }
 
+async function getLatestContractData(session: SigningSessionWithPublicRelations) {
+  if (session.contract) {
+    return session.contract;
+  }
+
+  return prisma.memberContract.findFirst({
+    where: { memberId: session.memberId },
+    orderBy: [{ signedAt: "desc" }, { id: "desc" }],
+  });
+}
+
 export async function serializePublicSigningSession(
   session: SigningSessionWithPublicRelations | null
 ): Promise<PublicSigningSessionData | null> {
@@ -44,11 +56,19 @@ export async function serializePublicSigningSession(
     ? await createSignedUrlForAllowedStorageRef(contractTemplate.fileUrl)
     : null;
   const settings = await getClubSettings();
+  const contractData = await getLatestContractData(session);
 
   return {
     status: session.status,
     member: {
       fullName: session.member.fullName,
+      dni: session.member.dni,
+      phone: session.member.phone,
+      email: session.member.email,
+      address: contractData?.address ?? null,
+      birthPlace: contractData?.birthPlace ?? null,
+      birthDate: contractData?.birthDate?.toISOString() ?? null,
+      consumptionGrams: contractData?.consumptionGrams ?? null,
       memberNumber: session.member.memberNumber,
       displayNumber: session.member.memberNumber ?? String(session.member.id),
     },

@@ -176,7 +176,6 @@ export default function MemberDetail() {
 
   const authReady = status !== "loading";
   const visibleMemberNumber = data.member.memberNumber ?? data.member.id;
-  const latestContract = contracts[0] ?? null;
 
   type MemberStatusPayload = {
     active?: boolean;
@@ -309,14 +308,19 @@ export default function MemberDetail() {
             </div>
           </div>
 
-          <div className="mt-4 grid gap-3 rounded-2xl border border-black/8 bg-gray-50 p-4 md:grid-cols-2">
-            <div>
-              <div className="text-sm text-gray-500">Teléfono</div>
-              <div className="font-medium">{data.member.phone || "No indicado"}</div>
+          <div className="mt-4 rounded-2xl border border-black/8 bg-gray-50 p-4">
+            <div className="mb-3 text-sm text-gray-500">
+              Datos personales y contacto
             </div>
-            <div>
-              <div className="text-sm text-gray-500">Email</div>
-              <div className="font-medium">{data.member.email || "No indicado"}</div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <div className="text-sm text-gray-500">Teléfono</div>
+                <div className="font-medium">{data.member.phone || "No indicado"}</div>
+              </div>
+              <div>
+                <div className="text-sm text-gray-500">Email</div>
+                <div className="font-medium">{data.member.email || "No indicado"}</div>
+              </div>
             </div>
           </div>
 
@@ -371,54 +375,50 @@ export default function MemberDetail() {
               : "Sin fecha"}
           </div>
 
-          <div className="mt-4 rounded border bg-gray-50 p-4">
-            <div className="mb-2 text-sm text-gray-500">Perfil comercial</div>
+          {authReady && isAdmin && (
+            <div className="mt-4 rounded border bg-gray-50 p-4">
+              <div className="mb-2 text-sm text-gray-500">Admin / comercial</div>
 
+              <div className="flex flex-wrap gap-2">
+                <span className="rounded-full bg-gray-900 px-3 py-1 text-white">
+                  {data.member.commercialProfile}
+                </span>
+
+                <span className="rounded bg-blue-100 px-3 py-1 text-blue-700">
+                  {Number(data.member.discountPercent || 0).toFixed(2)}% descuento
+                </span>
+              </div>
+
+              <div className="mt-3 text-sm text-gray-600">
+                {data.member.commercialNotes || "Sin notas comerciales"}
+              </div>
+            </div>
+          )}
+
+          <div className="mt-4">
+            <div className="mb-2 text-sm text-gray-500">Acciones rápidas</div>
             <div className="flex flex-wrap gap-2">
-              <span className="rounded-full bg-gray-900 px-3 py-1 text-white">
-                {data.member.commercialProfile}
-              </span>
+            <a
+              href={`/members/${id}/contract`}
+              className="rounded-full bg-blue-600 px-4 py-2 text-white"
+            >
+              Contrato / Firma
+            </a>
 
-              <span className="rounded bg-blue-100 px-3 py-1 text-blue-700">
-                {Number(data.member.discountPercent || 0).toFixed(2)}% descuento
-              </span>
-            </div>
+            <a
+              href="/sales"
+              className="app-button-primary rounded-full px-4 py-2 text-white"
+            >
+              Ir al TPV
+            </a>
 
-            <div className="mt-3 text-sm text-gray-600">
-              {data.member.commercialNotes || "Sin notas comerciales"}
-            </div>
-          </div>
+            <a
+              href="#member-history"
+              className="app-button-secondary rounded-full px-4 py-2"
+            >
+              Historial
+            </a>
 
-          <div className="mt-4 rounded border bg-gray-50 p-4">
-            <div className="mb-2 text-sm text-gray-500">Contrato</div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <div>
-                <div className="text-sm text-gray-500">Contrato firmado</div>
-                <div className="font-semibold">{latestContract ? "Si" : "No"}</div>
-              </div>
-              <div>
-                <div className="text-sm text-gray-500">Fecha firma</div>
-                <div className="font-semibold">
-                  {latestContract
-                    ? new Date(latestContract.signedAt).toLocaleString()
-                    : "Sin firma"}
-                </div>
-              </div>
-            </div>
-
-            {latestContract?.signedPdfUrl && (
-              <a
-                href={latestContract.signedPdfUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-3 inline-block rounded-full bg-green-600 px-4 py-2 text-white"
-              >
-                Ver contrato firmado
-              </a>
-            )}
-          </div>
-
-          <div className="mt-4 flex flex-wrap gap-2">
             {authReady && isAdmin && (
               <>
                 {data.member.active ? (
@@ -459,6 +459,7 @@ export default function MemberDetail() {
             >
               {editing ? "Cancelar" : "Editar socio"}
             </button>
+            </div>
           </div>
 
           {editing && (
@@ -644,13 +645,6 @@ export default function MemberDetail() {
         </div>
       )}
 
-      <a
-        href={`/members/${id}/contract`}
-        className="mb-4 inline-flex rounded-full bg-blue-600 px-4 py-2 text-white"
-      >
-        Contrato / Firma
-      </a>
-
       <MemberDocumentsCard
         memberId={id}
         initialFrontUrl={data.member.dniFrontUrl}
@@ -762,8 +756,9 @@ export default function MemberDetail() {
         </div>
       </div>
 
-      <div className="mt-6">
-        <h2 className="mb-3 text-xl font-bold">Historial de accesos</h2>
+      <div id="member-history" className="mt-6">
+        <h2 className="text-xl font-bold">Operativa</h2>
+        <h3 className="mb-3 mt-4 font-bold">Historial de accesos</h3>
 
         {accessLogs.length === 0 && (
           <p className="text-gray-500">No hay accesos registrados.</p>

@@ -531,6 +531,13 @@ export type PublicSigningSessionData = {
   status: "PENDING" | "SIGNED" | "CANCELLED" | string;
   member: {
     fullName: string;
+    dni: string | null;
+    phone: string | null;
+    email: string | null;
+    address?: string | null;
+    birthPlace?: string | null;
+    birthDate?: string | null;
+    consumptionGrams?: number | null;
     memberNumber?: string | number | null;
     displayNumber: string | number | null;
   };
