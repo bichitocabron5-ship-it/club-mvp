@@ -51,6 +51,18 @@ type RecentSalesResponse = {
   sales: RecentSale[];
 };
 
+type MemberRecentSale = {
+  id: number;
+  cancelledAt: string | null;
+  product: {
+    name: string;
+  };
+};
+
+type MemberRecentSalesResponse = {
+  sales: MemberRecentSale[];
+};
+
 type AddProductOptions = {
   focusInput?: boolean;
 };
@@ -214,6 +226,11 @@ export default function SalesPage() {
   const [recentSales, setRecentSales] = useState<RecentSale[]>([]);
   const [recentSalesDayClosed, setRecentSalesDayClosed] = useState(false);
   const [recentSalesError, setRecentSalesError] = useState("");
+  const [memberRecentSales, setMemberRecentSales] = useState<MemberRecentSale[]>(
+    []
+  );
+  const [memberRecentSalesLoading, setMemberRecentSalesLoading] = useState(false);
+  const [memberRecentSalesError, setMemberRecentSalesError] = useState("");
   const [showRecentSales, setShowRecentSales] = useState(false);
   const [error, setError] = useState("");
   const [memberId, setMemberId] = useState("");
@@ -237,12 +254,50 @@ export default function SalesPage() {
   const productSearchRef = useRef<HTMLInputElement | null>(null);
   const cartInputRefs = useRef<Map<number, HTMLInputElement>>(new Map());
   const submittingRef = useRef(false);
+  const memberRecentSalesRequestIdRef = useRef(0);
 
   const loadRecentSales = useCallback(async () => {
     const data = await fetchJson<RecentSalesResponse>("/api/sales");
     setRecentSales(data.sales);
     setRecentSalesDayClosed(data.dayClosed);
     setRecentSalesError("");
+  }, []);
+
+  const loadMemberRecentSales = useCallback(async (selectedMemberId: string) => {
+    const normalizedMemberId = selectedMemberId.trim();
+    const requestId = memberRecentSalesRequestIdRef.current + 1;
+    memberRecentSalesRequestIdRef.current = requestId;
+
+    if (!normalizedMemberId) {
+      setMemberRecentSales([]);
+      setMemberRecentSalesError("");
+      setMemberRecentSalesLoading(false);
+      return;
+    }
+
+    setMemberRecentSalesLoading(true);
+
+    try {
+      const data = await fetchJson<MemberRecentSalesResponse>(
+        `/api/members/${normalizedMemberId}/recent-sales`
+      );
+
+      if (memberRecentSalesRequestIdRef.current !== requestId) return;
+
+      setMemberRecentSales(data.sales);
+      setMemberRecentSalesError("");
+    } catch (err) {
+      if (memberRecentSalesRequestIdRef.current !== requestId) return;
+
+      setMemberRecentSales([]);
+      setMemberRecentSalesError(
+        err instanceof Error ? err.message : "Error cargando historial"
+      );
+    } finally {
+      if (memberRecentSalesRequestIdRef.current === requestId) {
+        setMemberRecentSalesLoading(false);
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -317,6 +372,14 @@ export default function SalesPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    const selectedMemberId = memberId;
+
+    void Promise.resolve().then(() => {
+      void loadMemberRecentSales(selectedMemberId);
+    });
+  }, [loadMemberRecentSales, memberId]);
 
   useEffect(() => {
     if (!memberId) return;
@@ -415,6 +478,20 @@ export default function SalesPage() {
       );
     });
   }, [members, memberSearch]);
+
+  const memberRecentProductNames = useMemo(() => {
+    return memberRecentSales
+      .filter((sale) => !sale.cancelledAt)
+      .slice(0, 2)
+      .map((sale) => sale.product.name);
+  }, [memberRecentSales]);
+
+  const memberRecentSummary =
+    memberRecentProductNames.length === 0
+      ? "Sin retiradas anteriores"
+      : memberRecentProductNames.length === 1
+        ? `Último retirado: ${memberRecentProductNames[0]}`
+        : `Últimas retiradas: ${memberRecentProductNames.join(" · ")}`;
 
   const cartLines = useMemo(() => {
     return cart.map((item) => {
@@ -809,16 +886,13 @@ export default function SalesPage() {
         `/api/members/${selectedMemberId}/today`
       );
       setToday(refreshedToday);
+      await loadMemberRecentSales(selectedMemberId);
       await loadRecentSales();
 
-      setMemberId("");
-      setMemberSearch("");
       setRfidInput("");
-      setToday(emptyToday);
-      setMemberStatus(null);
 
       setTimeout(() => {
-        rfidRef.current?.focus();
+        productSearchRef.current?.focus();
       }, 0);
     } catch (err) {
       alert(err instanceof Error ? err.message : "Error al registrar retirada");
@@ -884,6 +958,7 @@ export default function SalesPage() {
           `/api/members/${memberId}/today`
         );
         setToday(refreshedToday);
+        await loadMemberRecentSales(memberId);
       }
 
       await loadRecentSales();
@@ -1000,20 +1075,44 @@ export default function SalesPage() {
             </select>
 
             {memberId && (
-              <button
-                type="button"
-                onClick={() => {
-                  setMemberId("");
-                  setMemberSearch("");
-                  setCart([]);
-                  setToday(emptyToday);
-                  setMemberStatus(null);
-                  rfidRef.current?.focus();
-                }}
-                className="app-button-secondary rounded-full px-4 py-2 text-sm font-semibold"
-              >
-                Cambiar socio
-              </button>
+              <div className="flex items-center gap-2">
+                <p
+                  className={`min-w-0 flex-1 truncate text-xs font-medium ${
+                    memberRecentSalesError ? "text-red-600" : "text-gray-500"
+                  }`}
+                  title={
+                    memberRecentSalesError
+                      ? memberRecentSalesError
+                      : memberRecentSalesLoading
+                        ? "Cargando retiradas..."
+                        : memberRecentSummary
+                  }
+                >
+                  {memberRecentSalesError
+                    ? "Error cargando retiradas"
+                    : memberRecentSalesLoading
+                      ? "Cargando retiradas..."
+                      : memberRecentSummary}
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMemberId("");
+                    setMemberSearch("");
+                    setCart([]);
+                    setToday(emptyToday);
+                    setMemberStatus(null);
+                    setMemberRecentSales([]);
+                    setMemberRecentSalesError("");
+                    setMemberRecentSalesLoading(false);
+                    rfidRef.current?.focus();
+                  }}
+                  className="app-button-secondary shrink-0 rounded-full px-4 py-2 text-sm font-semibold"
+                >
+                  Cambiar socio
+                </button>
+              </div>
             )}
           </div>
 
