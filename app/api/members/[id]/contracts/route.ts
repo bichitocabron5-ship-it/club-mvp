@@ -33,10 +33,9 @@ export async function GET(
       contractTemplate: contract.contractTemplate
         ? {
             ...contract.contractTemplate,
-            fileUrl:
-              (await createSignedUrlForAllowedStorageRef(
-                contract.contractTemplate.fileUrl
-              )) ?? contract.contractTemplate.fileUrl,
+            fileUrl: await createSignedUrlForAllowedStorageRef(
+              contract.contractTemplate.fileUrl
+            ),
           }
         : null,
     }))

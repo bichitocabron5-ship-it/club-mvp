@@ -1,5 +1,6 @@
 import { requireStaffOrAdmin } from "@/lib/auth-server";
 import { ensureSignedContractPdf } from "@/lib/contract-pdf";
+import { isStorageUrlsDisabled } from "@/lib/storage";
 import { NextResponse } from "next/server";
 
 export async function GET(
@@ -22,6 +23,13 @@ export async function GET(
 
   if (!contractId || Number.isNaN(contractId)) {
     return NextResponse.json({ error: "Contrato inválido" }, { status: 400 });
+  }
+
+  if (isStorageUrlsDisabled()) {
+    return NextResponse.json(
+      { error: "PDFs de contratos desactivados temporalmente." },
+      { status: 503 }
+    );
   }
 
   try {

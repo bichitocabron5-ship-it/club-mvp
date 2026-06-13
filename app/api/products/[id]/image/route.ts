@@ -5,7 +5,9 @@ import {
   buildProductImagePath,
   createStorageSignedUrl,
   getImageExtension,
+  isStorageUrlsDisabled,
   parseStorageUrl,
+  STORAGE_UPLOAD_DISABLED_MESSAGE,
   uploadImageToStorage,
   validateImageFile,
 } from "@/lib/storage";
@@ -60,6 +62,13 @@ export async function POST(
 
   if (!product) {
     return NextResponse.json({ error: "Producto no encontrado" }, { status: 404 });
+  }
+
+  if (isStorageUrlsDisabled()) {
+    return NextResponse.json(
+      { error: STORAGE_UPLOAD_DISABLED_MESSAGE },
+      { status: 503 }
+    );
   }
 
   const formData = await req.formData();

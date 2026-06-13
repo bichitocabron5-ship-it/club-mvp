@@ -28,9 +28,7 @@ export async function GET() {
   const response = await Promise.all(
     templates.map(async (template) => ({
       ...template,
-      fileUrl:
-        (await createSignedUrlForAllowedStorageRef(template.fileUrl)) ??
-        template.fileUrl,
+      fileUrl: await createSignedUrlForAllowedStorageRef(template.fileUrl),
     }))
   );
 
@@ -70,8 +68,6 @@ export async function POST(req: Request) {
 
   return NextResponse.json({
     ...template,
-    fileUrl:
-      (await createSignedUrlForAllowedStorageRef(template.fileUrl)) ??
-      template.fileUrl,
+    fileUrl: await createSignedUrlForAllowedStorageRef(template.fileUrl),
   });
 }

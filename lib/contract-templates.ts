@@ -1,6 +1,6 @@
 import "server-only";
 
-import { buildStoredStorageRef } from "@/lib/storage";
+import { buildStoredStorageRef, isStorageUrlsDisabled } from "@/lib/storage";
 import { prisma } from "@/lib/prisma";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
@@ -23,6 +23,13 @@ function buildTemplateVersion(updatedAt: string | null | undefined) {
 }
 
 async function bootstrapContractTemplateFromStorage() {
+  if (isStorageUrlsDisabled()) {
+    console.warn(
+      "[storage] Importacion de plantilla desde Storage desactivada temporalmente"
+    );
+    return null;
+  }
+
   const supabaseAdmin = getSupabaseAdmin();
 
   const { data: files, error } = await supabaseAdmin.storage

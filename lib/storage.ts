@@ -11,6 +11,8 @@ const ALLOWED_IMAGE_TYPES = {
 export const STORAGE_BUCKET = process.env.STORAGE_BUCKET || "club-uploads";
 export const STORAGE_MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
 export const STORAGE_SIGNED_URL_TTL_SECONDS = 15 * 60;
+export const STORAGE_UPLOAD_DISABLED_MESSAGE =
+  "Subida de archivos desactivada temporalmente.";
 
 export type StorageObjectRef = {
   bucket: string;
@@ -18,6 +20,17 @@ export type StorageObjectRef = {
 };
 
 type AllowedImageType = keyof typeof ALLOWED_IMAGE_TYPES;
+
+export function isStorageUrlsDisabled() {
+  return process.env.DISABLE_STORAGE_URLS === "true";
+}
+
+function warnStorageUrlFailure(message: string, error?: unknown) {
+  console.warn(
+    `[storage] ${message}`,
+    error instanceof Error ? error.message : error ?? ""
+  );
+}
 
 export function validateImageFile(file: File) {
   if (!(file.type in ALLOWED_IMAGE_TYPES)) {
@@ -75,6 +88,10 @@ export function buildStoragePublicUrl(path: string, bucket = STORAGE_BUCKET) {
 }
 
 export async function uploadImageToStorage(file: File, path: string) {
+  if (isStorageUrlsDisabled()) {
+    throw new Error(STORAGE_UPLOAD_DISABLED_MESSAGE);
+  }
+
   const supabaseAdmin = getSupabaseAdmin();
 
   const upload = await supabaseAdmin.storage
@@ -197,17 +214,27 @@ export async function createStorageSignedUrl(
   ref: StorageObjectRef,
   expiresIn = STORAGE_SIGNED_URL_TTL_SECONDS
 ) {
-  const supabaseAdmin = getSupabaseAdmin();
-
-  const signed = await supabaseAdmin.storage
-    .from(ref.bucket)
-    .createSignedUrl(ref.path, expiresIn);
-
-  if (signed.error || !signed.data?.signedUrl) {
-    throw new Error("No se pudo generar URL temporal de storage");
+  if (isStorageUrlsDisabled()) {
+    return null;
   }
 
-  return signed.data.signedUrl;
+  try {
+    const supabaseAdmin = getSupabaseAdmin();
+
+    const signed = await supabaseAdmin.storage
+      .from(ref.bucket)
+      .createSignedUrl(ref.path, expiresIn);
+
+    if (signed.error || !signed.data?.signedUrl) {
+      warnStorageUrlFailure("No se pudo generar URL temporal de storage", signed.error);
+      return null;
+    }
+
+    return signed.data.signedUrl;
+  } catch (error) {
+    warnStorageUrlFailure("Fallo generando URL temporal de storage", error);
+    return null;
+  }
 }
 
 export async function resolveStorageUrlForResponse(

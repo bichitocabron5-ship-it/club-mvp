@@ -19,9 +19,7 @@ export function CatalogBrowser() {
       setLoading(true);
 
       try {
-        const response = await fetch("/api/catalog/products", {
-          cache: "no-store",
-        });
+        const response = await fetch("/api/catalog/products");
 
         if (!response.ok) {
           const data = (await response.json().catch(() => null)) as

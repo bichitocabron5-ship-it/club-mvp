@@ -439,7 +439,7 @@ export type ContractTemplateRecord = {
   id: number;
   name: string;
   version: string;
-  fileUrl: string;
+  fileUrl: string | null;
   active: boolean;
   createdAt: string;
 };

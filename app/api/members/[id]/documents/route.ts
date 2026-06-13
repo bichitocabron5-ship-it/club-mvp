@@ -12,6 +12,10 @@ import {
 } from "@/lib/member-documents";
 import { prisma } from "@/lib/prisma";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import {
+  isStorageUrlsDisabled,
+  STORAGE_UPLOAD_DISABLED_MESSAGE,
+} from "@/lib/storage";
 import { NextResponse } from "next/server";
 
 function getUploadedFile(formData: FormData, side: MemberDocumentSide) {
@@ -115,6 +119,13 @@ export async function GET(
     );
   }
 
+  if (isStorageUrlsDisabled()) {
+    return NextResponse.json(
+      { error: "Documento no disponible temporalmente." },
+      { status: 503 }
+    );
+  }
+
   const supabaseAdmin = getSupabaseAdmin();
   const download = await supabaseAdmin.storage
     .from(storedRef.bucket)
@@ -165,6 +176,13 @@ export async function POST(
 
   if (!member) {
     return NextResponse.json({ error: "Socio no encontrado" }, { status: 404 });
+  }
+
+  if (isStorageUrlsDisabled()) {
+    return NextResponse.json(
+      { error: STORAGE_UPLOAD_DISABLED_MESSAGE },
+      { status: 503 }
+    );
   }
 
   const formData = await req.formData();

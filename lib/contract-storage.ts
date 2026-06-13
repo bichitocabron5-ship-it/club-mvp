@@ -2,6 +2,7 @@ import {
   buildStoragePublicUrl,
   buildStoredStorageRef,
   createStorageSignedUrl,
+  isStorageUrlsDisabled,
   parseStorageUrl,
   type StorageObjectRef,
 } from "@/lib/storage";
@@ -35,7 +36,7 @@ export function parseAllowedStorageRef(fileUrl: string): AllowedStorageObjectRef
 export async function createSignedUrlForAllowedStorageRef(
   fileUrl: string | null | undefined
 ) {
-  if (!fileUrl) {
+  if (!fileUrl || isStorageUrlsDisabled()) {
     return null;
   }
 
@@ -53,6 +54,10 @@ export function serializeAllowedStorageRef(ref: Pick<StorageObjectRef, "bucket" 
 }
 
 export async function downloadAllowedStorageObject(fileUrl: string) {
+  if (isStorageUrlsDisabled()) {
+    throw new Error("PDFs de contratos desactivados temporalmente.");
+  }
+
   const ref = parseAllowedStorageRef(fileUrl);
 
   if (!ref) {

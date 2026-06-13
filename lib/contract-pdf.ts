@@ -8,6 +8,7 @@ import {
 import { resolveContractTemplateForContract } from "@/lib/contract-templates";
 import { prisma } from "@/lib/prisma";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { isStorageUrlsDisabled } from "@/lib/storage";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
 const SIGNED_CONTRACT_BUCKET = "signed-contracts";
@@ -55,6 +56,10 @@ export async function ensureSignedContractPdf(
 
   if (!contract) {
     throw new Error("Contrato no encontrado");
+  }
+
+  if (isStorageUrlsDisabled()) {
+    throw new Error("PDFs de contratos desactivados temporalmente.");
   }
 
   if (contract.signedPdfUrl && !options?.force) {
