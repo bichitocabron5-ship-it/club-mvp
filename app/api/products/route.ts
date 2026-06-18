@@ -9,7 +9,6 @@ import {
 } from "@/lib/product-sku";
 import { prisma } from "@/lib/prisma";
 import { normalizeUnit } from "@/lib/sales";
-import { resolveStorageUrlForResponse } from "@/lib/storage";
 import { PRODUCT_CATEGORY_VALUES, PRODUCT_HASH_TYPE_VALUES } from "@/lib/types";
 import type { Product } from "@prisma/client";
 import { NextResponse } from "next/server";
@@ -41,12 +40,11 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
   });
 
-  const response = await Promise.all(
-    products.map(async (product) => ({
-      ...product,
-      imageUrl: await resolveStorageUrlForResponse(product.imageUrl),
-    }))
-  );
+  const response = products.map((product) => ({
+    ...product,
+    imageUrl: null,
+    hasImage: Boolean(product.imageUrl),
+  }));
 
   return NextResponse.json(response);
 }

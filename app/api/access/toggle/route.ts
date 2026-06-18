@@ -22,7 +22,9 @@ async function serializeAccessMember(member: AccessMemberRecord) {
     displayNumber: member.memberNumber ?? String(member.id),
     fullName: member.fullName,
     dni: member.dni,
-    photoUrl: await resolveStorageUrlForResponse(member.photoUrl),
+    photoUrl: await resolveStorageUrlForResponse(member.photoUrl, {
+      context: "api/access/toggle",
+    }),
     active: member.active,
     expiresAt: member.expiresAt?.toISOString() ?? null,
     rfidCode: member.rfidCode,

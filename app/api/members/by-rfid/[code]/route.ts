@@ -6,7 +6,7 @@ import { resolveStorageUrlForResponse } from "@/lib/storage";
 import { NextResponse } from "next/server";
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ code: string }> }
 ) {
   const auth = await requireStaffOrAdmin();
@@ -16,6 +16,7 @@ export async function GET(
 
   const { code } = await params;
   const cleanCode = normalizeRfidCode(code);
+  const includePhoto = new URL(req.url).searchParams.get("includePhoto") === "1";
 
   if (!cleanCode) {
     return NextResponse.json({ error: "Codigo RFID invalido" }, { status: 400 });
@@ -61,7 +62,12 @@ export async function GET(
     displayNumber: member.memberNumber ?? String(member.id),
     fullName: member.fullName,
     dni: member.dni,
-    photoUrl: await resolveStorageUrlForResponse(member.photoUrl),
+    photoUrl: includePhoto
+      ? await resolveStorageUrlForResponse(member.photoUrl, {
+          context: "api/members/by-rfid/[code]",
+        })
+      : null,
+    hasPhoto: Boolean(member.photoUrl),
     active: member.active,
     expiresAt: member.expiresAt?.toISOString() ?? null,
     rfidCode: member.rfidCode,

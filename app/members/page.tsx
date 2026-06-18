@@ -200,16 +200,9 @@ export default function MembersPage() {
               <div className="app-panel cursor-pointer rounded-3xl p-4 hover:bg-white/90">
                 <div className="flex items-start gap-3">
                   <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-black/8 bg-gray-100">
-                    {member.photoUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={member.photoUrl}
-                        alt={`Foto de ${member.fullName}`}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <span className="text-xs font-medium text-gray-500">Sin foto</span>
-                    )}
+                    <span className="text-base font-black text-gray-500">
+                      {member.fullName.trim().charAt(0).toUpperCase() || "?"}
+                    </span>
                   </div>
 
                   <div className="min-w-0 flex-1">

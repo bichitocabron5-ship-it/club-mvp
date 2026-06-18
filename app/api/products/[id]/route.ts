@@ -9,7 +9,6 @@ import {
 } from "@/lib/product-sku";
 import { prisma } from "@/lib/prisma";
 import { normalizeUnit } from "@/lib/sales";
-import { resolveStorageUrlForResponse } from "@/lib/storage";
 import { PRODUCT_CATEGORY_VALUES, PRODUCT_HASH_TYPE_VALUES } from "@/lib/types";
 import type { Product } from "@prisma/client";
 import { NextResponse } from "next/server";
@@ -198,6 +197,7 @@ export async function PATCH(
 
   return NextResponse.json({
     ...updated,
-    imageUrl: await resolveStorageUrlForResponse(updated.imageUrl),
+    imageUrl: null,
+    hasImage: Boolean(updated.imageUrl),
   });
 }

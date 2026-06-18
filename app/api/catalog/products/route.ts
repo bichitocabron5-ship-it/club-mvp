@@ -8,7 +8,6 @@ import {
   getClientIp,
   rateLimitResponse,
 } from "@/lib/rate-limit";
-import { resolveStorageUrlForResponse } from "@/lib/storage";
 import {
   CATALOG_EXCLUDED_CATEGORY_VALUES,
   type CatalogProductSummary,
@@ -54,19 +53,22 @@ export async function GET(req: NextRequest) {
     },
   });
 
-  const catalogProducts: CatalogProductSummary[] = await Promise.all(
-    products.map(async (product) => ({
-      id: product.id,
-      name: product.name,
-      sku: product.sku,
-      description: product.description,
-      category: product.category as CatalogProductSummary["category"],
-      hashType: product.hashType as CatalogProductSummary["hashType"],
-      price: product.price,
-      unit: product.unit as CatalogProductSummary["unit"],
-      imageUrl: await resolveStorageUrlForResponse(product.imageUrl),
-    }))
-  );
+  const catalogProducts: CatalogProductSummary[] = products.map((product) => ({
+    id: product.id,
+    name: product.name,
+    sku: product.sku,
+    description: product.description,
+    category: product.category as CatalogProductSummary["category"],
+    hashType: product.hashType as CatalogProductSummary["hashType"],
+    price: product.price,
+    unit: product.unit as CatalogProductSummary["unit"],
+    imageUrl: null,
+    hasImage: Boolean(product.imageUrl),
+  }));
 
-  return NextResponse.json(catalogProducts);
+  return NextResponse.json(catalogProducts, {
+    headers: {
+      "Cache-Control": "private, max-age=60, stale-while-revalidate=300",
+    },
+  });
 }

@@ -15,6 +15,7 @@ import {
   isSigningSessionExpired,
   serializePublicSigningSession,
 } from "@/lib/signing-session";
+import { isStorageUrlsDisabled } from "@/lib/storage";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -237,7 +238,11 @@ export async function GET(
 
   const payload = await serializePublicSigningSession(result.session);
 
-  if (!payload?.contractTemplate && payload?.status !== "SIGNED") {
+  if (
+    !payload?.contractTemplate &&
+    payload?.status !== "SIGNED" &&
+    !isStorageUrlsDisabled()
+  ) {
     return publicSigningError(503);
   }
 
@@ -378,7 +383,18 @@ export async function POST(
     };
   });
 
-  await ensureSignedContractPdf(session.contractId);
+  if (isStorageUrlsDisabled()) {
+    console.warn("[storage] Generacion de PDF firmado omitida por modo emergencia");
+  } else {
+    try {
+      await ensureSignedContractPdf(session.contractId);
+    } catch (error) {
+      console.warn(
+        "[storage] No se pudo generar PDF firmado; la firma queda guardada",
+        error instanceof Error ? error.message : error
+      );
+    }
+  }
 
   const refreshedSession = await prisma.signingSession.findUnique({
     where: { token: existingSession.token },

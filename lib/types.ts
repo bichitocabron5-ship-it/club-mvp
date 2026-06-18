@@ -132,6 +132,7 @@ export type MemberSummary = {
   phone: string | null;
   email?: string | null;
   photoUrl?: string | null;
+  hasPhoto?: boolean;
   dniFrontUrl?: string | null;
   dniBackUrl?: string | null;
   active: boolean;
@@ -155,6 +156,7 @@ export type ProductSummary = {
   stock: number;
   reserveStock: number;
   imageUrl?: string | null;
+  hasImage?: boolean;
   category: ProductCategory;
   hashType: ProductHashType | null;
   minStock: number;
@@ -172,6 +174,7 @@ export type CatalogProductSummary = {
   price: number;
   unit: ProductUnit;
   imageUrl: string | null;
+  hasImage: boolean;
 };
 
 export type CashMove = {
@@ -439,7 +442,7 @@ export type ContractTemplateRecord = {
   id: number;
   name: string;
   version: string;
-  fileUrl: string;
+  fileUrl: string | null;
   active: boolean;
   createdAt: string;
 };
@@ -595,6 +598,7 @@ export type AccessInsideMember = {
   fullName: string;
   dni: string;
   photoUrl?: string | null;
+  hasPhoto?: boolean;
   active?: boolean;
   expiresAt?: string | null;
   rfidCode?: string | null;

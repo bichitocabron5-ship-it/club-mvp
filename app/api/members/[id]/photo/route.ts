@@ -5,7 +5,9 @@ import {
   buildMemberPhotoPath,
   createStorageSignedUrl,
   getImageExtension,
+  isStorageUrlsDisabled,
   parseStorageUrl,
+  STORAGE_UPLOAD_DISABLED_MESSAGE,
   uploadImageToStorage,
   validateImageFile,
 } from "@/lib/storage";
@@ -60,6 +62,13 @@ export async function POST(
 
   if (!member) {
     return NextResponse.json({ error: "Socio no encontrado" }, { status: 404 });
+  }
+
+  if (isStorageUrlsDisabled()) {
+    return NextResponse.json(
+      { error: STORAGE_UPLOAD_DISABLED_MESSAGE },
+      { status: 503 }
+    );
   }
 
   const formData = await req.formData();
@@ -117,10 +126,15 @@ export async function POST(
     });
 
     return NextResponse.json({
-      photoUrl: await createStorageSignedUrl({
-        bucket: uploaded.bucket,
-        path: uploaded.path,
-      }),
+      photoUrl: await createStorageSignedUrl(
+        {
+          bucket: uploaded.bucket,
+          path: uploaded.path,
+        },
+        {
+          context: "api/members/[id]/photo:post",
+        }
+      ),
     });
   } catch (error) {
     return NextResponse.json(

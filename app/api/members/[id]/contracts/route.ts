@@ -28,15 +28,14 @@ export async function GET(
     contracts.map(async (contract) => ({
       ...contract,
       signedPdfUrl:
-        (await createSignedUrlForAllowedStorageRef(contract.signedPdfUrl)) ??
+        (await createSignedUrlForAllowedStorageRef(contract.signedPdfUrl, {
+          context: "api/members/[id]/contracts:signedPdfUrl",
+        })) ??
         null,
       contractTemplate: contract.contractTemplate
         ? {
             ...contract.contractTemplate,
-            fileUrl:
-              (await createSignedUrlForAllowedStorageRef(
-                contract.contractTemplate.fileUrl
-              )) ?? contract.contractTemplate.fileUrl,
+            fileUrl: null,
           }
         : null,
     }))

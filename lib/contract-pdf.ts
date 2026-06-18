@@ -8,6 +8,7 @@ import {
 import { resolveContractTemplateForContract } from "@/lib/contract-templates";
 import { prisma } from "@/lib/prisma";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { isStorageUrlsDisabled } from "@/lib/storage";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
 const SIGNED_CONTRACT_BUCKET = "signed-contracts";
@@ -57,8 +58,17 @@ export async function ensureSignedContractPdf(
     throw new Error("Contrato no encontrado");
   }
 
+  if (isStorageUrlsDisabled()) {
+    throw new Error("PDFs de contratos desactivados temporalmente.");
+  }
+
   if (contract.signedPdfUrl && !options?.force) {
-    const signedUrl = await createSignedUrlForAllowedStorageRef(contract.signedPdfUrl);
+    const signedUrl = await createSignedUrlForAllowedStorageRef(
+      contract.signedPdfUrl,
+      {
+        context: "lib/contract-pdf:existingSignedPdf",
+      }
+    );
 
     if (!signedUrl) {
       throw new Error("No se pudo generar URL temporal del contrato firmado");
@@ -261,7 +271,9 @@ export async function ensureSignedContractPdf(
     bucket: SIGNED_CONTRACT_BUCKET,
     path: filePath,
   });
-  const signedUrl = await createSignedUrlForAllowedStorageRef(storedPdfRef);
+  const signedUrl = await createSignedUrlForAllowedStorageRef(storedPdfRef, {
+    context: "lib/contract-pdf:newSignedPdf",
+  });
 
   if (!signedUrl) {
     throw new Error("No se pudo generar URL temporal del contrato firmado");

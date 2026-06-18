@@ -84,7 +84,7 @@ export function MemberDocumentsCard({
           <div>
             <div className="text-sm text-gray-500">{label}</div>
             <div className="mt-1 font-medium">
-              {currentUrl ? "Adjuntado" : "Pendiente"}
+              {currentUrl ? "Adjuntado" : "Documento no disponible temporalmente"}
             </div>
           </div>
 
