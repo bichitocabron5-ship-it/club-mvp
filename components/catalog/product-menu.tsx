@@ -24,7 +24,14 @@ type ProductMenuProps = {
   emptyMessage?: string;
   logoutLabel?: string;
   loggingOut?: boolean;
+  getProductImageUrl?: ((productId: number) => Promise<string | null>) | null;
   onLogout?: (() => void | Promise<void>) | null;
+};
+
+type ProductImageState = {
+  url: string | null;
+  loading: boolean;
+  error: string;
 };
 
 function formatPrice(product: CatalogProductSummary) {
@@ -45,12 +52,60 @@ export function ProductMenu({
   emptyMessage = "No hay productos que coincidan con los filtros.",
   logoutLabel = "Salir del catálogo",
   loggingOut = false,
+  getProductImageUrl = null,
   onLogout = null,
 }: ProductMenuProps) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<"ALL" | ProductCategory>("ALL");
   const [hashType, setHashType] = useState<"ALL" | ProductHashType>("ALL");
+  const [productImages, setProductImages] = useState<
+    Record<number, ProductImageState>
+  >({});
   const deferredQuery = useDeferredValue(query.trim().toLowerCase());
+
+  async function loadProductImage(productId: number) {
+    if (!getProductImageUrl) {
+      return;
+    }
+
+    const current = productImages[productId];
+
+    if (current?.loading || current?.url) {
+      return;
+    }
+
+    setProductImages((previous) => ({
+      ...previous,
+      [productId]: {
+        url: null,
+        loading: true,
+        error: "",
+      },
+    }));
+
+    try {
+      const url = await getProductImageUrl(productId);
+
+      setProductImages((previous) => ({
+        ...previous,
+        [productId]: {
+          url,
+          loading: false,
+          error: url ? "" : "Imagen no disponible",
+        },
+      }));
+    } catch (error) {
+      setProductImages((previous) => ({
+        ...previous,
+        [productId]: {
+          url: null,
+          loading: false,
+          error:
+            error instanceof Error ? error.message : "Imagen no disponible",
+        },
+      }));
+    }
+  }
 
   const seenCategories = new Set<ProductCategory>();
   const categoryOptions = products
@@ -270,22 +325,40 @@ export function ProductMenu({
                     className="overflow-hidden rounded-[2rem] border border-black/8 bg-white/88 shadow-[0_20px_48px_rgba(37,44,34,0.1)]"
                   >
                     <div className="relative h-64 bg-[linear-gradient(135deg,#dce8cf,#f6f3ea)]">
-                      {product.imageUrl ? (
+                      {productImages[product.id]?.url ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
-                          src={product.imageUrl}
+                          src={productImages[product.id]?.url ?? ""}
                           alt={product.name}
+                          loading="lazy"
                           className="h-full w-full object-cover"
                         />
                       ) : (
                         <div className="flex h-full items-center justify-center px-6 text-center">
                           <div>
                             <div className="text-xs font-black uppercase tracking-[0.24em] text-[#607261]">
-                              Sin foto
+                              {product.hasImage ? "Foto disponible" : "Sin foto"}
                             </div>
                             <div className="mt-2 text-lg font-bold text-[#314337]">
                               {getProductCategoryLabel(product.category)}
                             </div>
+                            {product.hasImage && getProductImageUrl ? (
+                              <button
+                                type="button"
+                                onClick={() => void loadProductImage(product.id)}
+                                disabled={productImages[product.id]?.loading}
+                                className="mt-4 rounded-full bg-[#31584d] px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
+                              >
+                                {productImages[product.id]?.loading
+                                  ? "Cargando..."
+                                  : "Ver foto"}
+                              </button>
+                            ) : null}
+                            {productImages[product.id]?.error ? (
+                              <div className="mt-3 text-xs font-semibold text-red-700">
+                                {productImages[product.id].error}
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                       )}

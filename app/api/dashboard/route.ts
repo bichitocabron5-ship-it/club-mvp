@@ -3,7 +3,6 @@ import { formatLocalDay, normalizeCashMoveSource } from "@/lib/cash-move";
 import { buildTodayDayClosureSummary } from "@/lib/day-closure";
 import { prisma } from "@/lib/prisma";
 import { getTodayRange, roundCurrency } from "@/lib/sales";
-import { resolveStorageUrlForResponse } from "@/lib/storage";
 import { NextResponse } from "next/server";
 
 const requiredDashboardEnvVars = ["AUTH_SECRET", "DATABASE_URL"] as const;
@@ -87,7 +86,7 @@ function getMarginPercent(profit: number, revenue: number) {
   return roundCurrency((profit / revenue) * 100);
 }
 
-async function toProductSummary(product: {
+function toProductSummary(product: {
   id: number;
   name: string;
   unit: string;
@@ -108,7 +107,8 @@ async function toProductSummary(product: {
     price: Number(product.price),
     stock: Number(product.stock),
     reserveStock: Number(product.reserveStock),
-    imageUrl: await resolveStorageUrlForResponse(product.imageUrl),
+    imageUrl: null,
+    hasImage: Boolean(product.imageUrl),
     category: product.category,
     hashType: product.hashType,
     minStock: Number(product.minStock),
@@ -355,12 +355,10 @@ export async function GET() {
       product: sale.product,
     }));
 
-    const lowStockProducts = await Promise.all(
-      products
-        .filter((product) => Number(product.stock) <= Number(product.minStock))
-        .slice(0, 10)
-        .map(toProductSummary)
-    );
+    const lowStockProducts = products
+      .filter((product) => Number(product.stock) <= Number(product.minStock))
+      .slice(0, 10)
+      .map(toProductSummary);
     const currentInsideCount = members.filter(
       (member) => member.accessLogs[0]?.type === "IN"
     ).length;

@@ -126,10 +126,15 @@ export async function POST(
     });
 
     return NextResponse.json({
-      photoUrl: await createStorageSignedUrl({
-        bucket: uploaded.bucket,
-        path: uploaded.path,
-      }),
+      photoUrl: await createStorageSignedUrl(
+        {
+          bucket: uploaded.bucket,
+          path: uploaded.path,
+        },
+        {
+          context: "api/members/[id]/photo:post",
+        }
+      ),
     });
   } catch (error) {
     return NextResponse.json(

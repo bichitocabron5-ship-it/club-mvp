@@ -34,9 +34,10 @@ export function parseAllowedStorageRef(fileUrl: string): AllowedStorageObjectRef
 }
 
 export async function createSignedUrlForAllowedStorageRef(
-  fileUrl: string | null | undefined
+  fileUrl: string | null | undefined,
+  options?: { context?: string; expiresIn?: number; cache?: boolean }
 ) {
-  if (!fileUrl || isStorageUrlsDisabled()) {
+  if (!fileUrl) {
     return null;
   }
 
@@ -46,7 +47,7 @@ export async function createSignedUrlForAllowedStorageRef(
     return null;
   }
 
-  return createStorageSignedUrl(ref);
+  return createStorageSignedUrl(ref, options);
 }
 
 export function serializeAllowedStorageRef(ref: Pick<StorageObjectRef, "bucket" | "path">) {

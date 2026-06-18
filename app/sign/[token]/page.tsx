@@ -202,12 +202,6 @@ export default function SignPage() {
               Abrir PDF real
             </a>
           </div>
-
-          <iframe
-            title="Contrato real"
-            src={session.contractTemplate.fileUrl}
-            className="mt-4 h-[420px] w-full rounded border"
-          />
         </div>
       )}
 

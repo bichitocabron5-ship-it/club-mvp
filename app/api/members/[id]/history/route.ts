@@ -50,9 +50,15 @@ export async function GET(
   return NextResponse.json({
     member: {
       ...member,
-      photoUrl: await resolveStorageUrlForResponse(member.photoUrl),
-      dniFrontUrl: await resolveStorageUrlForResponse(member.dniFrontUrl),
-      dniBackUrl: await resolveStorageUrlForResponse(member.dniBackUrl),
+      photoUrl: await resolveStorageUrlForResponse(member.photoUrl, {
+        context: "api/members/[id]/history:photoUrl",
+      }),
+      dniFrontUrl: await resolveStorageUrlForResponse(member.dniFrontUrl, {
+        context: "api/members/[id]/history:dniFrontUrl",
+      }),
+      dniBackUrl: await resolveStorageUrlForResponse(member.dniBackUrl, {
+        context: "api/members/[id]/history:dniBackUrl",
+      }),
     },
     sales,
     totalSpent,

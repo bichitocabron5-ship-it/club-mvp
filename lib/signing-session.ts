@@ -53,7 +53,9 @@ export async function serializePublicSigningSession(
     ? await resolveContractTemplateForContract(session.contract.contractTemplateId)
     : await findActiveContractTemplate();
   const contractTemplateFileUrl = contractTemplate
-    ? await createSignedUrlForAllowedStorageRef(contractTemplate.fileUrl)
+    ? await createSignedUrlForAllowedStorageRef(contractTemplate.fileUrl, {
+        context: "lib/signing-session:contractTemplate",
+      })
     : null;
   const settings = await getClubSettings();
   const contractData = await getLatestContractData(session);

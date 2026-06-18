@@ -63,7 +63,12 @@ export async function ensureSignedContractPdf(
   }
 
   if (contract.signedPdfUrl && !options?.force) {
-    const signedUrl = await createSignedUrlForAllowedStorageRef(contract.signedPdfUrl);
+    const signedUrl = await createSignedUrlForAllowedStorageRef(
+      contract.signedPdfUrl,
+      {
+        context: "lib/contract-pdf:existingSignedPdf",
+      }
+    );
 
     if (!signedUrl) {
       throw new Error("No se pudo generar URL temporal del contrato firmado");
@@ -266,7 +271,9 @@ export async function ensureSignedContractPdf(
     bucket: SIGNED_CONTRACT_BUCKET,
     path: filePath,
   });
-  const signedUrl = await createSignedUrlForAllowedStorageRef(storedPdfRef);
+  const signedUrl = await createSignedUrlForAllowedStorageRef(storedPdfRef, {
+    context: "lib/contract-pdf:newSignedPdf",
+  });
 
   if (!signedUrl) {
     throw new Error("No se pudo generar URL temporal del contrato firmado");

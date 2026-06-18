@@ -140,16 +140,26 @@ export async function POST(
     return NextResponse.json(
       sideValue === "front"
         ? {
-            dniFrontUrl: await createStorageSignedUrl({
-              bucket: uploaded.bucket,
-              path: uploaded.path,
-            }),
+            dniFrontUrl: await createStorageSignedUrl(
+              {
+                bucket: uploaded.bucket,
+                path: uploaded.path,
+              },
+              {
+                context: "api/members/[id]/dni:front",
+              }
+            ),
           }
         : {
-            dniBackUrl: await createStorageSignedUrl({
-              bucket: uploaded.bucket,
-              path: uploaded.path,
-            }),
+            dniBackUrl: await createStorageSignedUrl(
+              {
+                bucket: uploaded.bucket,
+                path: uploaded.path,
+              },
+              {
+                context: "api/members/[id]/dni:back",
+              }
+            ),
           }
     );
   } catch (error) {

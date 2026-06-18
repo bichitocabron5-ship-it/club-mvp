@@ -75,6 +75,27 @@ export function CatalogBrowser() {
     }
   }
 
+  async function getProductImageUrl(productId: number) {
+    const response = await fetch(`/api/catalog/products/${productId}/image`);
+
+    if (!response.ok) {
+      const data = (await response.json().catch(() => null)) as
+        | { error?: string }
+        | null;
+
+      if (response.status === 401) {
+        startTransition(() => {
+          router.refresh();
+        });
+      }
+
+      throw new Error(data?.error || "No se pudo cargar la imagen");
+    }
+
+    const data = (await response.json()) as { imageUrl?: string | null };
+    return data.imageUrl ?? null;
+  }
+
   return (
     <ProductMenu
       badge="Modo catálogo"
@@ -86,6 +107,7 @@ export function CatalogBrowser() {
       note="Solo lectura. Consulta protegida por clave de catálogo y sin datos internos."
       logoutLabel="Salir del catálogo"
       loggingOut={loggingOut}
+      getProductImageUrl={getProductImageUrl}
       onLogout={handleLogout}
     />
   );

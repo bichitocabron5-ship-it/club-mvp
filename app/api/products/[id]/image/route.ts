@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/auth-server";
+import { requireAdmin, requireAuth } from "@/lib/auth-server";
 import { createAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import {
@@ -7,6 +7,7 @@ import {
   getImageExtension,
   isStorageUrlsDisabled,
   parseStorageUrl,
+  resolveStorageUrlForResponse,
   STORAGE_UPLOAD_DISABLED_MESSAGE,
   uploadImageToStorage,
   validateImageFile,
@@ -30,6 +31,54 @@ function getUploadedImage(formData: FormData) {
   }
 
   return value;
+}
+
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const auth = await requireAuth();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
+  const { id } = await params;
+  const productId = Number(id);
+
+  if (!Number.isInteger(productId) || productId <= 0) {
+    return NextResponse.json({ error: "ID invalido" }, { status: 400 });
+  }
+
+  const product = await prisma.product.findUnique({
+    where: { id: productId },
+    select: {
+      imageUrl: true,
+    },
+  });
+
+  if (!product?.imageUrl) {
+    return NextResponse.json({ error: "Imagen no disponible" }, { status: 404 });
+  }
+
+  const imageUrl = await resolveStorageUrlForResponse(product.imageUrl, {
+    context: "api/products/[id]/image:get",
+  });
+
+  if (!imageUrl) {
+    return NextResponse.json(
+      { error: "Imagen no disponible temporalmente" },
+      { status: 503 }
+    );
+  }
+
+  return NextResponse.json(
+    { imageUrl },
+    {
+      headers: {
+        "Cache-Control": "private, max-age=300, stale-while-revalidate=600",
+      },
+    }
+  );
 }
 
 export async function POST(
@@ -126,10 +175,16 @@ export async function POST(
 
     return NextResponse.json({
       id: updated.id,
-      imageUrl: await createStorageSignedUrl({
-        bucket: uploaded.bucket,
-        path: uploaded.path,
-      }),
+      hasImage: Boolean(updated.imageUrl),
+      imageUrl: await createStorageSignedUrl(
+        {
+          bucket: uploaded.bucket,
+          path: uploaded.path,
+        },
+        {
+          context: "api/products/[id]/image:post",
+        }
+      ),
     });
   } catch (error) {
     return NextResponse.json(

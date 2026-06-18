@@ -64,6 +64,7 @@ function toCatalogProduct(product: ProductSummary): CatalogProductSummary {
     price: Number(product.price),
     unit: product.unit,
     imageUrl: product.imageUrl ?? null,
+    hasImage: Boolean(product.hasImage || product.imageUrl),
   };
 }
 
@@ -79,6 +80,13 @@ export default function ProductsPage() {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [uploadingImageFor, setUploadingImageFor] = useState<number | null>(null);
+  const [productImageUrls, setProductImageUrls] = useState<Record<number, string>>(
+    {}
+  );
+  const [loadingImageFor, setLoadingImageFor] = useState<number | null>(null);
+  const [productImageErrors, setProductImageErrors] = useState<
+    Record<number, string>
+  >({});
 
   const staffCatalogProducts = products
     .filter((product) => product.active && isCatalogVisibleCategory(product.category))
@@ -88,9 +96,7 @@ export default function ProductsPage() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/products", {
-        cache: "no-store",
-      });
+      const res = await fetch("/api/products");
 
       if (!res.ok) {
         const data = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -239,10 +245,20 @@ export default function ProductsPage() {
         method: "POST",
         body: formData,
       });
+      const payload = (await res.json().catch(() => null)) as {
+        error?: string;
+        imageUrl?: string | null;
+      } | null;
 
       if (!res.ok) {
-        const data = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(data?.error || "Error subiendo imagen");
+        throw new Error(payload?.error || "Error subiendo imagen");
+      }
+
+      if (payload?.imageUrl) {
+        setProductImageUrls((current) => ({
+          ...current,
+          [productId]: payload.imageUrl!,
+        }));
       }
 
       await loadProducts();
@@ -250,6 +266,47 @@ export default function ProductsPage() {
       setError(err instanceof Error ? err.message : "Error subiendo imagen");
     } finally {
       setUploadingImageFor(null);
+    }
+  }
+
+  async function loadProductImage(productId: number) {
+    if (productImageUrls[productId] || loadingImageFor === productId) {
+      return;
+    }
+
+    setLoadingImageFor(productId);
+    setProductImageErrors((current) => ({
+      ...current,
+      [productId]: "",
+    }));
+
+    try {
+      const res = await fetch(`/api/products/${productId}/image`);
+      const payload = (await res.json().catch(() => null)) as {
+        error?: string;
+        imageUrl?: string | null;
+      } | null;
+
+      if (!res.ok) {
+        throw new Error(payload?.error || "No se pudo cargar la imagen");
+      }
+
+      if (!payload?.imageUrl) {
+        throw new Error("Imagen no disponible");
+      }
+
+      setProductImageUrls((current) => ({
+        ...current,
+        [productId]: payload.imageUrl!,
+      }));
+    } catch (err) {
+      setProductImageErrors((current) => ({
+        ...current,
+        [productId]:
+          err instanceof Error ? err.message : "No se pudo cargar la imagen",
+      }));
+    } finally {
+      setLoadingImageFor(null);
     }
   }
 
@@ -423,16 +480,33 @@ export default function ProductsPage() {
             return (
               <div key={product.id} className="app-panel rounded-3xl p-4 md:p-5">
                 <div className="flex flex-wrap items-start gap-4">
-                  {product.imageUrl ? (
+                  {productImageUrls[product.id] ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={product.imageUrl}
+                      src={productImageUrls[product.id]!}
                       alt={product.name}
+                      loading="lazy"
                       className="h-28 w-28 rounded-2xl object-cover"
                     />
                   ) : (
-                    <div className="flex h-28 w-28 items-center justify-center rounded-2xl bg-[#eef1e8] text-center text-xs font-bold uppercase tracking-[0.18em] text-[#617063]">
-                      Sin foto
+                    <div className="flex h-28 w-28 shrink-0 flex-col items-center justify-center rounded-2xl bg-[#eef1e8] px-2 text-center text-xs font-bold uppercase tracking-[0.14em] text-[#617063]">
+                      {product.hasImage ? (
+                        <button
+                          type="button"
+                          onClick={() => void loadProductImage(product.id)}
+                          disabled={loadingImageFor === product.id}
+                          className="rounded-full bg-white px-3 py-2 text-[0.7rem] text-[#25352f] ring-1 ring-black/10 disabled:opacity-60"
+                        >
+                          {loadingImageFor === product.id ? "Cargando" : "Ver foto"}
+                        </button>
+                      ) : (
+                        "Sin foto"
+                      )}
+                      {productImageErrors[product.id] ? (
+                        <span className="mt-2 normal-case tracking-normal text-red-700">
+                          {productImageErrors[product.id]}
+                        </span>
+                      ) : null}
                     </div>
                   )}
 
