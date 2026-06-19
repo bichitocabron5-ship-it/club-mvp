@@ -156,6 +156,7 @@ export type ProductSummary = {
   stock: number;
   reserveStock: number;
   imageUrl?: string | null;
+  thumbnailUrl?: string | null;
   hasImage?: boolean;
   category: ProductCategory;
   hashType: ProductHashType | null;
@@ -174,6 +175,7 @@ export type CatalogProductSummary = {
   price: number;
   unit: ProductUnit;
   imageUrl: string | null;
+  thumbnailUrl: string | null;
   hasImage: boolean;
 };
 

@@ -8,6 +8,7 @@ import {
   getClientIp,
   rateLimitResponse,
 } from "@/lib/rate-limit";
+import { isStorageUrlsDisabled } from "@/lib/storage";
 import {
   CATALOG_EXCLUDED_CATEGORY_VALUES,
   type CatalogProductSummary,
@@ -50,9 +51,11 @@ export async function GET(req: NextRequest) {
       price: true,
       unit: true,
       imageUrl: true,
+      thumbnailUrl: true,
     },
   });
 
+  const storageDisabled = isStorageUrlsDisabled();
   const catalogProducts: CatalogProductSummary[] = products.map((product) => ({
     id: product.id,
     name: product.name,
@@ -63,7 +66,11 @@ export async function GET(req: NextRequest) {
     price: product.price,
     unit: product.unit as CatalogProductSummary["unit"],
     imageUrl: null,
-    hasImage: Boolean(product.imageUrl),
+    thumbnailUrl:
+      !storageDisabled && product.thumbnailUrl
+        ? `/api/catalog/products/${product.id}/thumbnail`
+        : null,
+    hasImage: storageDisabled ? false : Boolean(product.imageUrl),
   }));
 
   return NextResponse.json(catalogProducts, {
