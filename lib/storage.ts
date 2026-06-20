@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import sharp from "sharp";
 
 const STORAGE_PUBLIC_PREFIX = "/storage/v1/object/public/";
 const STORAGE_SIGNED_PREFIX = "/storage/v1/object/sign/";
@@ -11,6 +12,11 @@ const ALLOWED_IMAGE_TYPES = {
 export const STORAGE_BUCKET = process.env.STORAGE_BUCKET || "club-uploads";
 export const STORAGE_MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
 export const STORAGE_SIGNED_URL_TTL_SECONDS = 15 * 60;
+export const STORAGE_CACHEABLE_IMAGE_TTL_SECONDS = 24 * 60 * 60;
+export const STORAGE_CACHEABLE_IMAGE_CACHE_CONTROL =
+  "public, max-age=86400, stale-while-revalidate=604800";
+export const PRODUCT_THUMBNAIL_MAX_WIDTH = 400;
+export const PRODUCT_THUMBNAIL_TARGET_BYTES = 150 * 1024;
 export const STORAGE_UPLOAD_DISABLED_MESSAGE =
   "Subida de archivos desactivada temporalmente.";
 const STORAGE_SIGNED_URL_CACHE_SAFETY_MS = 60_000;
@@ -38,6 +44,18 @@ type StorageResolveUrlOptions = {
   context?: string;
   expiresIn?: number;
   cache?: boolean;
+};
+
+type StorageUploadBufferOptions = {
+  contentType: string;
+  bucket?: string;
+  cacheControl?: string;
+};
+
+export type ProductThumbnailResult = {
+  buffer: Buffer;
+  contentType: "image/webp" | "image/jpeg" | "image/png";
+  extension: "webp" | "jpg" | "png";
 };
 
 const globalStorageState = globalThis as typeof globalThis & {
@@ -137,8 +155,20 @@ export function getImageExtension(type: string) {
   return ALLOWED_IMAGE_TYPES[type as AllowedImageType];
 }
 
-export function buildProductImagePath(productId: number, timestamp: number, extension: string) {
-  return `products/${productId}-${timestamp}.${extension}`;
+export function buildProductImagePath(
+  productId: number,
+  timestamp: number,
+  extension: string
+) {
+  return `products/${productId}/image-${timestamp}.${extension}`;
+}
+
+export function buildProductThumbnailPath(
+  productId: number,
+  timestamp: number,
+  extension = "webp"
+) {
+  return `products/${productId}/thumb-${timestamp}.${extension}`;
 }
 
 export function buildMemberDniPath(
@@ -172,17 +202,23 @@ export function buildStoragePublicUrl(path: string, bucket = STORAGE_BUCKET) {
   return `${baseUrl.replace(/\/+$/, "")}${STORAGE_PUBLIC_PREFIX}${bucket}/${path}`;
 }
 
-export async function uploadImageToStorage(file: File, path: string) {
+export async function uploadBufferToStorage(
+  buffer: Buffer,
+  path: string,
+  options: StorageUploadBufferOptions
+) {
   if (isStorageUrlsDisabled()) {
     throw new Error(STORAGE_UPLOAD_DISABLED_MESSAGE);
   }
 
+  const bucket = options.bucket ?? STORAGE_BUCKET;
   const supabaseAdmin = getSupabaseAdmin();
 
   const upload = await supabaseAdmin.storage
-    .from(STORAGE_BUCKET)
-    .upload(path, Buffer.from(await file.arrayBuffer()), {
-      contentType: file.type,
+    .from(bucket)
+    .upload(path, buffer, {
+      contentType: options.contentType,
+      cacheControl: options.cacheControl ?? String(STORAGE_CACHEABLE_IMAGE_TTL_SECONDS),
       upsert: true,
     });
 
@@ -191,10 +227,116 @@ export async function uploadImageToStorage(file: File, path: string) {
   }
 
   return {
-    bucket: STORAGE_BUCKET,
+    bucket,
     path,
-    storageRef: buildStoredStorageRef(STORAGE_BUCKET, path),
-    publicUrl: buildStoragePublicUrl(path),
+    storageRef: buildStoredStorageRef(bucket, path),
+    publicUrl: buildStoragePublicUrl(path, bucket),
+  };
+}
+
+export async function uploadImageToStorage(file: File, path: string) {
+  return uploadBufferToStorage(Buffer.from(await file.arrayBuffer()), path, {
+    contentType: file.type,
+  });
+}
+
+function getProductThumbnailPipeline(input: Buffer) {
+  return sharp(input, { failOn: "none" })
+    .rotate()
+    .resize({
+      width: PRODUCT_THUMBNAIL_MAX_WIDTH,
+      withoutEnlargement: true,
+    });
+}
+
+async function createWebpThumbnail(input: Buffer, quality: number) {
+  return getProductThumbnailPipeline(input)
+    .webp({
+      quality,
+      effort: 4,
+    })
+    .toBuffer();
+}
+
+async function createJpegThumbnail(input: Buffer, quality: number) {
+  return getProductThumbnailPipeline(input)
+    .jpeg({
+      quality,
+      mozjpeg: true,
+    })
+    .toBuffer();
+}
+
+async function createPngThumbnail(input: Buffer) {
+  return getProductThumbnailPipeline(input)
+    .png({
+      compressionLevel: 9,
+      palette: true,
+    })
+    .toBuffer();
+}
+
+function pickSmallestBuffer(buffers: Buffer[]) {
+  return buffers.reduce((smallest, current) =>
+    current.length < smallest.length ? current : smallest
+  );
+}
+
+export async function createProductThumbnail(
+  input: Buffer,
+  originalContentType?: string
+): Promise<ProductThumbnailResult> {
+  const webpBuffers: Buffer[] = [];
+
+  try {
+    for (const quality of [78, 70, 62, 54]) {
+      const buffer = await createWebpThumbnail(input, quality);
+      webpBuffers.push(buffer);
+
+      if (buffer.length <= PRODUCT_THUMBNAIL_TARGET_BYTES) {
+        return {
+          buffer,
+          contentType: "image/webp",
+          extension: "webp",
+        };
+      }
+    }
+
+    return {
+      buffer: pickSmallestBuffer(webpBuffers),
+      contentType: "image/webp",
+      extension: "webp",
+    };
+  } catch (error) {
+    warnStorageUrlFailure("No se pudo generar miniatura webp; usando fallback", error);
+  }
+
+  if (originalContentType === "image/png") {
+    return {
+      buffer: await createPngThumbnail(input),
+      contentType: "image/png",
+      extension: "png",
+    };
+  }
+
+  const jpegBuffers: Buffer[] = [];
+  for (const quality of [76, 68, 60]) {
+    const buffer = await createJpegThumbnail(input, quality);
+    jpegBuffers.push(buffer);
+
+    if (buffer.length <= PRODUCT_THUMBNAIL_TARGET_BYTES) {
+      return {
+        buffer,
+        contentType: "image/jpeg",
+        extension: "jpg",
+      };
+    }
+  }
+
+  return {
+    buffer: pickSmallestBuffer(jpegBuffers),
+    contentType: "image/jpeg",
+    extension: "jpg",
   };
 }
 

@@ -198,6 +198,7 @@ export async function PATCH(
   return NextResponse.json({
     ...updated,
     imageUrl: null,
+    thumbnailUrl: null,
     hasImage: Boolean(updated.imageUrl),
   });
 }

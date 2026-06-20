@@ -319,50 +319,77 @@ export function ProductMenu({
               </div>
 
               <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-                {group.products.map((product) => (
-                  <article
-                    key={product.id}
-                    className="overflow-hidden rounded-[2rem] border border-black/8 bg-white/88 shadow-[0_20px_48px_rgba(37,44,34,0.1)]"
-                  >
-                    <div className="relative h-64 bg-[linear-gradient(135deg,#dce8cf,#f6f3ea)]">
-                      {productImages[product.id]?.url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={productImages[product.id]?.url ?? ""}
-                          alt={product.name}
-                          loading="lazy"
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-full items-center justify-center px-6 text-center">
-                          <div>
-                            <div className="text-xs font-black uppercase tracking-[0.24em] text-[#607261]">
-                              {product.hasImage ? "Foto disponible" : "Sin foto"}
-                            </div>
-                            <div className="mt-2 text-lg font-bold text-[#314337]">
-                              {getProductCategoryLabel(product.category)}
-                            </div>
-                            {product.hasImage && getProductImageUrl ? (
+                {group.products.map((product) => {
+                  const imageState = productImages[product.id];
+                  const visibleImageUrl = imageState?.url ?? product.thumbnailUrl;
+                  const canLoadFullImage =
+                    product.hasImage && Boolean(getProductImageUrl);
+                  const showLoadImageButton = canLoadFullImage && !imageState?.url;
+
+                  return (
+                    <article
+                      key={product.id}
+                      className="overflow-hidden rounded-[2rem] border border-black/8 bg-white/88 shadow-[0_20px_48px_rgba(37,44,34,0.1)]"
+                    >
+                      <div className="relative h-64 overflow-hidden bg-[linear-gradient(135deg,#dce8cf,#f6f3ea)]">
+                        {visibleImageUrl ? (
+                          <>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={visibleImageUrl}
+                              alt={product.name}
+                              loading="lazy"
+                              decoding="async"
+                              width={400}
+                              height={256}
+                              className="h-full w-full object-cover"
+                            />
+                            {showLoadImageButton ? (
                               <button
                                 type="button"
                                 onClick={() => void loadProductImage(product.id)}
-                                disabled={productImages[product.id]?.loading}
-                                className="mt-4 rounded-full bg-[#31584d] px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
+                                disabled={imageState?.loading}
+                                className="absolute bottom-4 right-4 rounded-full bg-[#31584d] px-4 py-2 text-sm font-bold text-white shadow-lg disabled:opacity-60"
                               >
-                                {productImages[product.id]?.loading
-                                  ? "Cargando..."
-                                  : "Ver foto"}
+                                {imageState?.loading ? "Cargando..." : "Ver foto"}
                               </button>
                             ) : null}
-                            {productImages[product.id]?.error ? (
-                              <div className="mt-3 text-xs font-semibold text-red-700">
-                                {productImages[product.id].error}
+                            {imageState?.error ? (
+                              <div className="absolute bottom-4 left-4 max-w-[calc(100%-2rem)] rounded-full bg-white/92 px-3 py-2 text-xs font-semibold text-red-700 shadow">
+                                {imageState.error}
                               </div>
                             ) : null}
+                          </>
+                        ) : (
+                          <div className="flex h-full items-center justify-center px-6 text-center">
+                            <div>
+                              <div className="text-xs font-black uppercase tracking-[0.24em] text-[#607261]">
+                                {product.hasImage ? "Foto disponible" : "Sin foto"}
+                              </div>
+                              <div className="mt-2 text-lg font-bold text-[#314337]">
+                                {getProductCategoryLabel(product.category)}
+                              </div>
+                              {canLoadFullImage ? (
+                                <button
+                                  type="button"
+                                  onClick={() => void loadProductImage(product.id)}
+                                  disabled={imageState?.loading}
+                                  className="mt-4 rounded-full bg-[#31584d] px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
+                                >
+                                  {imageState?.loading
+                                    ? "Cargando..."
+                                    : "Ver foto"}
+                                </button>
+                              ) : null}
+                              {imageState?.error ? (
+                                <div className="mt-3 text-xs font-semibold text-red-700">
+                                  {imageState.error}
+                                </div>
+                              ) : null}
+                            </div>
                           </div>
-                        </div>
-                      )}
-                    </div>
+                        )}
+                      </div>
 
                     <div className="grid gap-4 p-5 md:p-6">
                       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -410,7 +437,8 @@ export function ProductMenu({
                       </div>
                     </div>
                   </article>
-                ))}
+                  );
+                })}
               </div>
             </section>
           ))}

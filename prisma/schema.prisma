@@ -96,6 +96,7 @@ model Product {
   reserveStock Float   @default(0)
   averageCost  Float   @default(0)
   imageUrl     String?
+  thumbnailUrl String?
 
   category String  @default("CANNABIS")
   hashType String?

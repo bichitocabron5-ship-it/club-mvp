@@ -43,6 +43,7 @@ export async function GET() {
   const response = products.map((product) => ({
     ...product,
     imageUrl: null,
+    thumbnailUrl: null,
     hasImage: Boolean(product.imageUrl),
   }));
 

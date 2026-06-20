@@ -64,6 +64,7 @@ function toCatalogProduct(product: ProductSummary): CatalogProductSummary {
     price: Number(product.price),
     unit: product.unit,
     imageUrl: product.imageUrl ?? null,
+    thumbnailUrl: product.thumbnailUrl ?? null,
     hasImage: Boolean(product.hasImage || product.imageUrl),
   };
 }

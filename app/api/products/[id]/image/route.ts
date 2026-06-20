@@ -3,13 +3,17 @@ import { createAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import {
   buildProductImagePath,
+  buildProductThumbnailPath,
+  createProductThumbnail,
   createStorageSignedUrl,
   getImageExtension,
   isStorageUrlsDisabled,
   parseStorageUrl,
   resolveStorageUrlForResponse,
+  STORAGE_CACHEABLE_IMAGE_CACHE_CONTROL,
+  STORAGE_CACHEABLE_IMAGE_TTL_SECONDS,
   STORAGE_UPLOAD_DISABLED_MESSAGE,
-  uploadImageToStorage,
+  uploadBufferToStorage,
   validateImageFile,
 } from "@/lib/storage";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
@@ -62,6 +66,7 @@ export async function GET(
 
   const imageUrl = await resolveStorageUrlForResponse(product.imageUrl, {
     context: "api/products/[id]/image:get",
+    expiresIn: STORAGE_CACHEABLE_IMAGE_TTL_SECONDS,
   });
 
   if (!imageUrl) {
@@ -75,7 +80,7 @@ export async function GET(
     { imageUrl },
     {
       headers: {
-        "Cache-Control": "private, max-age=300, stale-while-revalidate=600",
+        "Cache-Control": STORAGE_CACHEABLE_IMAGE_CACHE_CONTROL,
       },
     }
   );
@@ -106,6 +111,7 @@ export async function POST(
       id: true,
       name: true,
       imageUrl: true,
+      thumbnailUrl: true,
     },
   });
 
@@ -144,20 +150,54 @@ export async function POST(
 
   try {
     const timestamp = Date.now();
+    const imageBuffer = Buffer.from(await image.arrayBuffer());
+    const thumbnail = await createProductThumbnail(imageBuffer, image.type);
     const path = buildProductImagePath(productId, timestamp, extension);
-    const uploaded = await uploadImageToStorage(image, path);
+    const thumbnailPath = buildProductThumbnailPath(
+      productId,
+      timestamp,
+      thumbnail.extension
+    );
+    const uploaded = await uploadBufferToStorage(imageBuffer, path, {
+      contentType: image.type,
+    });
+    const uploadedThumbnail = await uploadBufferToStorage(
+      thumbnail.buffer,
+      thumbnailPath,
+      {
+        contentType: thumbnail.contentType,
+      }
+    );
 
     const updated = await prisma.product.update({
       where: { id: productId },
       data: {
         imageUrl: uploaded.storageRef,
+        thumbnailUrl: uploadedThumbnail.storageRef,
       },
     });
 
-    const previousRef = parseStorageUrl(product.imageUrl);
-    if (previousRef) {
+    const previousRefs = [
+      parseStorageUrl(product.imageUrl),
+      parseStorageUrl(product.thumbnailUrl),
+    ].filter((ref): ref is NonNullable<typeof ref> => Boolean(ref));
+
+    if (previousRefs.length) {
       const supabaseAdmin = getSupabaseAdmin();
-      await supabaseAdmin.storage.from(previousRef.bucket).remove([previousRef.path]);
+      const pathsByBucket = new Map<string, string[]>();
+
+      for (const ref of previousRefs) {
+        pathsByBucket.set(ref.bucket, [
+          ...(pathsByBucket.get(ref.bucket) ?? []),
+          ref.path,
+        ]);
+      }
+
+      await Promise.all(
+        Array.from(pathsByBucket.entries()).map(([bucket, paths]) =>
+          supabaseAdmin.storage.from(bucket).remove(paths)
+        )
+      );
     }
 
     await createAuditLog({
@@ -170,6 +210,8 @@ export async function POST(
       metadata: {
         hasImage: Boolean(updated.imageUrl),
         storagePath: uploaded.path,
+        thumbnailStoragePath: uploadedThumbnail.path,
+        thumbnailBytes: thumbnail.buffer.length,
       },
     });
 
@@ -183,6 +225,16 @@ export async function POST(
         },
         {
           context: "api/products/[id]/image:post",
+        }
+      ),
+      thumbnailUrl: await createStorageSignedUrl(
+        {
+          bucket: uploadedThumbnail.bucket,
+          path: uploadedThumbnail.path,
+        },
+        {
+          context: "api/products/[id]/image:post:thumbnail",
+          expiresIn: STORAGE_CACHEABLE_IMAGE_TTL_SECONDS,
         }
       ),
     });

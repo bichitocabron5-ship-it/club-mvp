@@ -9,7 +9,9 @@ import {
   rateLimitResponse,
 } from "@/lib/rate-limit";
 import {
-  resolveStorageUrlForResponse,
+  createStorageSignedUrl,
+  isStorageUrlsDisabled,
+  parseStorageUrl,
   STORAGE_CACHEABLE_IMAGE_CACHE_CONTROL,
   STORAGE_CACHEABLE_IMAGE_TTL_SECONDS,
 } from "@/lib/storage";
@@ -21,9 +23,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const limit = checkRateLimit({
-    namespace: "catalog-product-image:get:ip",
+    namespace: "catalog-product-thumbnail:get:ip",
     key: getClientIp(req),
-    limit: 60,
+    limit: 180,
     windowMs: 60_000,
   });
 
@@ -35,6 +37,13 @@ export async function GET(
 
   if (!isCatalogSessionValid(sessionCookie)) {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  }
+
+  if (isStorageUrlsDisabled()) {
+    return NextResponse.json(
+      { error: "Imagen no disponible temporalmente" },
+      { status: 503 }
+    );
   }
 
   const { id } = await params;
@@ -53,32 +62,37 @@ export async function GET(
       },
     },
     select: {
-      imageUrl: true,
+      thumbnailUrl: true,
     },
   });
 
-  if (!product?.imageUrl) {
-    return NextResponse.json({ error: "Imagen no disponible" }, { status: 404 });
+  if (!product?.thumbnailUrl) {
+    return NextResponse.json({ error: "Miniatura no disponible" }, { status: 404 });
   }
 
-  const imageUrl = await resolveStorageUrlForResponse(product.imageUrl, {
-    context: "api/catalog/products/[id]/image",
+  const thumbnailRef = parseStorageUrl(product.thumbnailUrl);
+
+  if (!thumbnailRef) {
+    return NextResponse.json({ error: "Miniatura no disponible" }, { status: 404 });
+  }
+
+  const thumbnailUrl = await createStorageSignedUrl(thumbnailRef, {
+    context: "api/catalog/products/[id]/thumbnail",
     expiresIn: STORAGE_CACHEABLE_IMAGE_TTL_SECONDS,
   });
 
-  if (!imageUrl) {
+  if (!thumbnailUrl) {
     return NextResponse.json(
-      { error: "Imagen no disponible temporalmente" },
+      { error: "Miniatura no disponible temporalmente" },
       { status: 503 }
     );
   }
 
-  return NextResponse.json(
-    { imageUrl },
-    {
-      headers: {
-        "Cache-Control": STORAGE_CACHEABLE_IMAGE_CACHE_CONTROL,
-      },
-    }
-  );
+  return new NextResponse(null, {
+    status: 307,
+    headers: {
+      Location: thumbnailUrl,
+      "Cache-Control": STORAGE_CACHEABLE_IMAGE_CACHE_CONTROL,
+    },
+  });
 }
