@@ -18,7 +18,7 @@ Aplicación de gestión operativa para un club: socios, accesos, retiradas, caja
 - **Socios**: altas, edición, estado, RFID, documentos, foto, contratos y trazabilidad.
 - **Acceso**: entrada/salida por chapita RFID y salida automática de socios dentro.
 - **Retiradas / TPV**: carrito, límites diarios/mensuales, descuentos, stock y movimientos de caja.
-- **Caja**: movimientos, gastos, cierre/reapertura diaria y diferencias.
+- **Caja**: apertura de turno, movimientos, gastos, cierre/reapertura diaria, diferencias y reporte CSV.
 - **Inventario**: conteos parciales/completos, confirmación, cancelación y ajustes.
 - **Productos**: SKU, categoría, unidad, precios, stock, coste medio, imágenes y catálogo.
 - **Compras y proveedores**: entradas de stock y pagos.
@@ -99,7 +99,7 @@ El repo incluye scripts para crear usuarios internos. Define las variables corre
 4. Registrar retiradas desde TPV.
 5. Registrar gastos, compras o ajustes si corresponde.
 6. Ejecutar conteo de inventario si toca.
-7. Cerrar caja y revisar diferencias.
+7. Abrir o cerrar caja y revisar diferencias.
 8. Revisar auditoría ante incidencias.
 
 ## Calidad y CI
@@ -204,3 +204,56 @@ Required Vercel/Supabase environment configuration remains:
 - `NEXTAUTH_URL`
 
 No new environment variables are required for Sprint 2B.
+
+## Sprint 3 Daily Operations And Closing Workflow
+
+Sprint 3 improves daily club operations around cash opening, guided closing,
+daily reporting, and basic inventory-count context.
+
+### Apertura de turno/dia
+
+- `/cash` now shows the day state clearly: pending opening, open, closed, or reopened.
+- Admin users can open the day once and record `openingCash` as the initial cash.
+- The existing unique `DayClosure.day` key prevents duplicate opening/closing rows for the same date.
+- Legacy closure rows are treated as `CLOSED` by the migration.
+
+### Cierre diario guiado
+
+- The close flow recalculates sales, cash expenses, cash income, manual cash
+  movements, discounts, expected cash, counted cash, and difference on the server.
+- A closing note is required when the cash difference is at least `1 EUR` or
+  when closing a previously reopened day.
+- The close record stores the closing user and timestamp when available.
+
+### Reporte diario CSV
+
+- JSON report: `GET /api/day-closure/report`
+- CSV export: `GET /api/day-closure/report?format=csv`
+- Historical day: `GET /api/day-closure/report?day=YYYY-MM-DD&format=csv`
+
+The report includes date, sales, expenses, opening cash, expected cash, counted
+cash, difference, ticket count, discounts, cash income/expense, top withdrawn
+products, closing responsible user, linked inventory count, and closure state.
+
+### Inventario guiado basico
+
+If inventory counts exist for the current day, `/cash` lists open and confirmed
+counts as closure options with counted/total line context. Confirmed or open
+counts can be linked to the closure using the existing `inventoryCountId` field.
+No lots, advanced waste handling, or purchase traceability changes are included.
+
+### Migracion
+
+Sprint 3 adds:
+
+```bash
+prisma/migrations/20260719090000_add_day_closure_opening_workflow/migration.sql
+```
+
+Apply migrations in deployment/production with:
+
+```bash
+npx prisma migrate deploy
+```
+
+No new environment variables are required for Sprint 3.

@@ -62,6 +62,7 @@ model AppUser {
   createdInventoryCounts    InventoryCount[]  @relation("InventoryCountCreatedByUser")
   confirmedInventoryCounts  InventoryCount[]  @relation("InventoryCountConfirmedByUser")
   closedDayClosures         DayClosure[]      @relation("DayClosureClosedByUser")
+  openedDayClosures         DayClosure[]      @relation("DayClosureOpenedByUser")
   reopenedDayClosures       DayClosure[]      @relation("DayClosureReopenedByUser")
   createdCashMoves          CashMove[]        @relation("CashMoveCreatedByUser")
   cancelledExpenses         Expense[]         @relation("ExpenseCancelledByUser")
@@ -163,26 +164,26 @@ model StockMove {
 }
 
 model Sale {
-  id              Int      @id @default(autoincrement())
-  memberId        Int
-  productId       Int
-  qty             Float
-  totalAmount     Float
-  unitCost        Float    @default(0)
-  profit          Float    @default(0)
-  note            String?
-  createdAt       DateTime @default(now())
-  originalAmount  Float?
-  discountPercent Float    @default(0)
-  discountAmount  Float    @default(0)
-  finalAmount     Float?
-  discountReason  String?
-  discountSource  String   @default("NONE") // NONE | MEMBER_PROFILE | MANUAL
-  appliedByUserId Int?
-  cancelledAt     DateTime?
+  id                Int       @id @default(autoincrement())
+  memberId          Int
+  productId         Int
+  qty               Float
+  totalAmount       Float
+  unitCost          Float     @default(0)
+  profit            Float     @default(0)
+  note              String?
+  createdAt         DateTime  @default(now())
+  originalAmount    Float?
+  discountPercent   Float     @default(0)
+  discountAmount    Float     @default(0)
+  finalAmount       Float?
+  discountReason    String?
+  discountSource    String    @default("NONE") // NONE | MEMBER_PROFILE | MANUAL
+  appliedByUserId   Int?
+  cancelledAt       DateTime?
   cancelledByUserId Int?
-  cancelReason    String?
-  updatedAt       DateTime @updatedAt
+  cancelReason      String?
+  updatedAt         DateTime  @updatedAt
 
   member          Member   @relation(fields: [memberId], references: [id])
   product         Product  @relation(fields: [productId], references: [id])
@@ -215,10 +216,12 @@ model CashMove {
 model DayClosure {
   id           Int    @id @default(autoincrement())
   day          String @unique
+  status       String @default("CLOSED") // OPEN | CLOSED | REOPENED
   totalIncome  Float  @default(0)
   totalExpense Float  @default(0)
   balance      Float  @default(0)
 
+  openingCash      Float     @default(0)
   expectedCash     Float     @default(0)
   countedCash      Float     @default(0)
   difference       Float     @default(0)
@@ -226,6 +229,9 @@ model DayClosure {
   expensesTotal    Float     @default(0)
   manualCashTotal  Float     @default(0)
   discountsTotal   Float     @default(0)
+  openedAt         DateTime?
+  openedByUserId   Int?
+  closedAt         DateTime?
   closedByUserId   Int?
   inventoryCountId Int?
   reopenedAt       DateTime?
@@ -235,9 +241,12 @@ model DayClosure {
   note      String?
   createdAt DateTime @default(now())
 
+  openedByUser   AppUser?        @relation("DayClosureOpenedByUser", fields: [openedByUserId], references: [id])
   closedByUser   AppUser?        @relation("DayClosureClosedByUser", fields: [closedByUserId], references: [id])
   inventoryCount InventoryCount? @relation(fields: [inventoryCountId], references: [id])
   reopenedByUser AppUser?        @relation("DayClosureReopenedByUser", fields: [reopenedByUserId], references: [id])
+
+  @@index([status, createdAt])
 }
 
 model Expense {

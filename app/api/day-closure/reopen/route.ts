@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { createAuditLog } from "@/lib/audit";
 import { requireAdmin } from "@/lib/auth-server";
+import { getDayClosureStatus } from "@/lib/day-closure";
 import { prisma } from "@/lib/prisma";
 import { getTodayRange } from "@/lib/sales";
 import { NextResponse } from "next/server";
@@ -40,9 +41,18 @@ export async function POST(req: Request) {
     );
   }
 
-  if (closure.reopenedAt) {
+  const status = getDayClosureStatus(closure);
+
+  if (status === "REOPENED") {
     return NextResponse.json(
       { error: "El cierre de hoy ya esta reabierto" },
+      { status: 400 }
+    );
+  }
+
+  if (status !== "CLOSED") {
+    return NextResponse.json(
+      { error: "Solo se puede reabrir un dia cerrado" },
       { status: 400 }
     );
   }
@@ -55,6 +65,7 @@ export async function POST(req: Request) {
       id: closure.id,
     },
     data: {
+      status: "REOPENED",
       reopenedAt,
       reopenedByUserId: Number.isInteger(actorUserId) ? actorUserId : null,
       reopenReason: parsed.data.reason,
@@ -70,6 +81,7 @@ export async function POST(req: Request) {
     summary: `Cierre de caja reabierto para ${reopenedClosure.day}`,
     metadata: {
       day: reopenedClosure.day,
+      status: reopenedClosure.status,
       reopenedAt: reopenedAt.toISOString(),
       reopenReason: reopenedClosure.reopenReason,
     },

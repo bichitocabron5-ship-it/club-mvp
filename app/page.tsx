@@ -43,6 +43,7 @@ function formatAccessType(value: string) {
 }
 
 function formatClosureStatus(value: string | undefined) {
+  if (value === "PENDING") return "Apertura pendiente";
   if (value === "OPEN") return "Abierto";
   if (value === "CLOSED") return "Cerrado";
   if (value === "REOPENED") return "Reabierto";
@@ -423,7 +424,8 @@ export default function PanelPage() {
               className={`rounded-full px-3 py-1 text-xs font-bold ${
                 data.cash?.dayClosureStatus === "CLOSED"
                   ? "bg-emerald-100 text-emerald-800"
-                  : data.cash?.dayClosureStatus === "REOPENED"
+                  : data.cash?.dayClosureStatus === "REOPENED" ||
+                      data.cash?.dayClosureStatus === "PENDING"
                     ? "bg-amber-100 text-amber-800"
                     : "bg-sky-100 text-sky-800"
               }`}
