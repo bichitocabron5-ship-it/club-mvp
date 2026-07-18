@@ -122,6 +122,7 @@ function normalizeDayClosureStatus(status: string | null | undefined) {
   const normalized = status?.trim().toUpperCase();
 
   if (
+    normalized === "PENDING" ||
     normalized === "OPEN" ||
     normalized === "CLOSED" ||
     normalized === "REOPENED"

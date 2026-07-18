@@ -5,7 +5,6 @@ import { requireAdmin, requireAuth } from "@/lib/auth-server";
 import {
   buildDayClosureSummary,
   getDayClosureStatus,
-  isClosureClosed,
   SIGNIFICANT_CASH_DIFFERENCE,
 } from "@/lib/day-closure";
 import { prisma } from "@/lib/prisma";
@@ -89,12 +88,27 @@ export async function POST(req: Request) {
   const existing = await prisma.dayClosure.findUnique({
     where: { day },
   });
+
+  if (!existing) {
+    return NextResponse.json(
+      { error: "Abre el dia antes de registrar el cierre" },
+      { status: 409 }
+    );
+  }
+
   const existingStatus = getDayClosureStatus(existing);
 
-  if (isClosureClosed(existing)) {
+  if (existingStatus === "CLOSED") {
     return NextResponse.json(
       { error: "El dia ya esta cerrado" },
-      { status: 400 }
+      { status: 409 }
+    );
+  }
+
+  if (existingStatus !== "OPEN" && existingStatus !== "REOPENED") {
+    return NextResponse.json(
+      { error: "El dia debe estar abierto antes de registrar el cierre" },
+      { status: 409 }
     );
   }
 
@@ -161,21 +175,13 @@ export async function POST(req: Request) {
     note,
   };
 
-  const closure = existing
-    ? await prisma.dayClosure.update({
-        where: {
-          id: existing.id,
-        },
-        data,
-        include: closureInclude,
-      })
-    : await prisma.dayClosure.create({
-        data: {
-          day,
-          ...data,
-        },
-        include: closureInclude,
-      });
+  const closure = await prisma.dayClosure.update({
+    where: {
+      id: existing.id,
+    },
+    data,
+    include: closureInclude,
+  });
 
   await createAuditLog({
     actorUserId,

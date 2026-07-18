@@ -229,11 +229,13 @@ export default function CashPage() {
   const isClosed = dayStatus === "CLOSED";
   const isReopened = dayStatus === "REOPENED";
   const canPrepareClosure = dayStatus === "OPEN" || isReopened;
-  const closureValues = closure ?? summary;
-  const expectedCash = Number(closureValues?.expectedCash || 0);
+  const liveExpectedCash = Number(summary?.expectedCash || 0);
+  const expectedCash = isClosed
+    ? Number(closure?.expectedCash ?? liveExpectedCash)
+    : liveExpectedCash;
   const countedNumber = Number(countedCash);
   const countedValue = Number.isFinite(countedNumber) ? countedNumber : 0;
-  const draftDifference = Number((countedValue - expectedCash).toFixed(2));
+  const draftDifference = Number((countedValue - liveExpectedCash).toFixed(2));
   const inventoryOptions = summary?.inventoryCounts ?? [];
   const hasOpenInventoryCounts = (summary?.inventoryCountsOpenCount || 0) > 0;
   const noteRequired =
@@ -612,7 +614,7 @@ export default function CashPage() {
         <div className="app-panel rounded-3xl p-4">
           <div className="text-sm text-gray-500">Caja esperada</div>
           <div className="mt-1 text-2xl font-black">
-            {formatCurrency(Number(closureValues?.expectedCash || 0))}
+            {formatCurrency(expectedCash)}
           </div>
         </div>
 
