@@ -32,6 +32,7 @@ export async function GET() {
     prisma.dayClosure.findUnique({
       where: { day },
       select: {
+        status: true,
         reopenedAt: true,
       },
     }),

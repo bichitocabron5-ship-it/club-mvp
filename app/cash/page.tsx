@@ -1,25 +1,74 @@
 "use client";
 
-import { normalizeCashMoveSource } from "@/lib/cash-move";
-import { CASH_MOVE_SOURCES } from "@/lib/cash-move";
+import {
+  CASH_MOVE_SOURCES,
+  normalizeCashMoveSource,
+} from "@/lib/cash-move";
 import type {
   AccessCurrentResponse,
   CashMove,
+  DashboardClosureStatus,
   DayClosure,
   DayClosureInventoryOption,
   DayClosureSummary,
 } from "@/lib/types";
 import { useSession } from "next-auth/react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 type ClosureResponse = {
   closed: boolean;
+  status: DashboardClosureStatus;
   closure: DayClosure | null;
   summary: DayClosureSummary;
 };
 
+const SIGNIFICANT_CASH_DIFFERENCE_EUR = 1;
+
 function formatCurrency(value: number) {
   return `${Number(value || 0).toFixed(2)} EUR`;
+}
+
+function formatQty(value: number, unit: string) {
+  return `${Number(value || 0).toFixed(2)} ${unit}`;
+}
+
+function formatClosureStatus(status: DashboardClosureStatus) {
+  switch (status) {
+    case "OPEN":
+      return "Dia abierto";
+    case "CLOSED":
+      return "Cierre realizado";
+    case "REOPENED":
+      return "Dia reabierto";
+    default:
+      return "Apertura pendiente";
+  }
+}
+
+function closureStatusClassName(status: DashboardClosureStatus) {
+  switch (status) {
+    case "CLOSED":
+      return "border-emerald-200 bg-emerald-50 text-emerald-900";
+    case "REOPENED":
+      return "border-amber-200 bg-amber-50 text-amber-900";
+    case "OPEN":
+      return "border-blue-200 bg-blue-50 text-blue-900";
+    default:
+      return "border-gray-200 bg-gray-50 text-gray-800";
+  }
+}
+
+function closureStatusMessage(status: DashboardClosureStatus) {
+  switch (status) {
+    case "OPEN":
+      return "El turno esta abierto. El cierre queda pendiente para el final del dia.";
+    case "CLOSED":
+      return "El cierre diario ya esta guardado y bloquea nuevas retiradas del dia.";
+    case "REOPENED":
+      return "El cierre fue reabierto. Revisa la diferencia y deja nota al volver a cerrar.";
+    default:
+      return "Registra la apertura con caja inicial antes de cerrar el dia.";
+  }
 }
 
 function formatSourceLabel(source: CashMove["source"]) {
@@ -63,8 +112,16 @@ function formatInventoryLabel(count: DayClosureInventoryOption) {
     hour: "2-digit",
     minute: "2-digit",
   });
+  const status =
+    count.status === "OPEN"
+      ? "Abierto"
+      : count.status === "CONFIRMED"
+        ? "Confirmado"
+        : count.status === "CANCELLED"
+          ? "Cancelado"
+          : count.status;
 
-  return `#${count.id} ${count.type} · ${count.status === "OPEN" ? "Abierto" : count.status === "CONFIRMED" ? "Confirmado" : count.status === "CANCELLED" ? "Cancelado" : count.status} · ${timestamp}`;
+  return `#${count.id} ${count.type} - ${status} - ${timestamp} - ${count.countedItems}/${count.totalItems} lineas`;
 }
 
 export default function CashPage() {
@@ -74,7 +131,9 @@ export default function CashPage() {
   const [moves, setMoves] = useState<CashMove[]>([]);
   const [closure, setClosure] = useState<DayClosure | null>(null);
   const [summary, setSummary] = useState<DayClosureSummary | null>(null);
-  const [closed, setClosed] = useState(false);
+  const [dayStatus, setDayStatus] =
+    useState<DashboardClosureStatus>("PENDING");
+  const [openingCash, setOpeningCash] = useState("0");
   const [countedCash, setCountedCash] = useState("");
   const [note, setNote] = useState("");
   const [inventoryCountId, setInventoryCountId] = useState("");
@@ -87,7 +146,7 @@ export default function CashPage() {
   });
   const [autoCheckoutMessage, setAutoCheckoutMessage] = useState("");
 
-  async function loadCash() {
+  const loadCash = useCallback(async () => {
     setError("");
 
     const [movesRes, closureRes, accessRes] = await Promise.all([
@@ -108,7 +167,7 @@ export default function CashPage() {
     const accessData: AccessCurrentResponse = await accessRes.json();
 
     setMoves(movesData);
-    setClosed(closureData.closed);
+    setDayStatus(closureData.status);
     setClosure(closureData.closure);
     setSummary(closureData.summary);
     setAccessStatus(accessData);
@@ -117,17 +176,24 @@ export default function CashPage() {
         ? String(closureData.closure.inventoryCountId)
         : ""
     );
-  }
+    setOpeningCash(
+      closureData.closure
+        ? String(Number(closureData.closure.openingCash || 0))
+        : "0"
+    );
+  }, []);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
       void loadCash().catch((loadError) => {
-        setError(loadError instanceof Error ? loadError.message : "Error cargando caja");
+        setError(
+          loadError instanceof Error ? loadError.message : "Error cargando caja"
+        );
       });
     }, 0);
 
     return () => clearTimeout(timeout);
-  }, []);
+  }, [loadCash]);
 
   const todayMoves = moves.filter((move) => {
     const date = new Date(move.createdAt);
@@ -139,33 +205,105 @@ export default function CashPage() {
       date.getDate() === now.getDate()
     );
   });
-  const groupedMoves = todayMoves.reduce<Record<string, CashMove[]>>((acc, move) => {
-    const key = normalizeCashMoveSource(move.source, {
-      type: move.type,
-      note: move.note,
-    });
-    acc[key] = acc[key] ? [...acc[key], move] : [move];
-    return acc;
-  }, {});
+  const groupedMoves = todayMoves.reduce<Record<string, CashMove[]>>(
+    (acc, move) => {
+      const key = normalizeCashMoveSource(move.source, {
+        type: move.type,
+        note: move.note,
+      });
+      acc[key] = acc[key] ? [...acc[key], move] : [move];
+      return acc;
+    },
+    {}
+  );
   const orderedGroups = [
     ...CASH_MOVE_SOURCES.filter((source) => groupedMoves[source]?.length),
-    ...Object.keys(groupedMoves).filter((source) => !CASH_MOVE_SOURCES.includes(source as (typeof CASH_MOVE_SOURCES)[number])),
+    ...Object.keys(groupedMoves).filter(
+      (source) =>
+        !CASH_MOVE_SOURCES.includes(
+          source as (typeof CASH_MOVE_SOURCES)[number]
+        )
+    ),
   ];
 
-  const closureValues = closure ?? summary;
-  const expectedCash = Number(closureValues?.expectedCash || 0);
-  const countedValue = Number(countedCash || 0);
-  const draftDifference = countedValue - expectedCash;
+  const isClosed = dayStatus === "CLOSED";
+  const isReopened = dayStatus === "REOPENED";
+  const canPrepareClosure = dayStatus === "OPEN" || isReopened;
+  const liveExpectedCash = Number(summary?.expectedCash || 0);
+  const expectedCash = isClosed
+    ? Number(closure?.expectedCash ?? liveExpectedCash)
+    : liveExpectedCash;
+  const countedNumber = Number(countedCash);
+  const countedValue = Number.isFinite(countedNumber) ? countedNumber : 0;
+  const draftDifference = Number((countedValue - liveExpectedCash).toFixed(2));
   const inventoryOptions = summary?.inventoryCounts ?? [];
   const hasOpenInventoryCounts = (summary?.inventoryCountsOpenCount || 0) > 0;
+  const noteRequired =
+    canPrepareClosure &&
+    (Math.abs(draftDifference) >= SIGNIFICANT_CASH_DIFFERENCE_EUR ||
+      isReopened);
+  const reportDay = summary?.day ?? closure?.day;
+  const csvHref = reportDay
+    ? `/api/day-closure/report?day=${encodeURIComponent(reportDay)}&format=csv`
+    : "/api/day-closure/report?format=csv";
+
+  async function openDay() {
+    const openingValue = openingCash.trim() ? Number(openingCash) : 0;
+
+    if (!Number.isFinite(openingValue) || openingValue < 0) {
+      setError("La caja inicial debe ser un numero valido mayor o igual a cero");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+
+    try {
+      setAutoCheckoutMessage("");
+      const res = await fetch("/api/day-closure/open", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          openingCash: openingValue,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = (await res.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        throw new Error(err?.error || "Error al abrir el dia");
+      }
+
+      await loadCash();
+    } catch (openError) {
+      setError(openError instanceof Error ? openError.message : "Error al abrir");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function closeDay() {
-    if (!summary) {
+    if (!summary || !canPrepareClosure) {
       return;
     }
 
     if (!countedCash.trim()) {
       setError("La caja contada es obligatoria");
+      return;
+    }
+
+    if (!Number.isFinite(Number(countedCash))) {
+      setError("La caja contada debe ser un numero valido");
+      return;
+    }
+
+    if (noteRequired && !note.trim()) {
+      setError(
+        "La nota de cierre es obligatoria por diferencia de caja o reapertura"
+      );
       return;
     }
 
@@ -187,8 +325,10 @@ export default function CashPage() {
       });
 
       if (!res.ok) {
-        const err = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(err?.error || "Error al cerrar el día");
+        const err = (await res.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        throw new Error(err?.error || "Error al cerrar el dia");
       }
 
       setCountedCash("");
@@ -224,8 +364,10 @@ export default function CashPage() {
       });
 
       if (!res.ok) {
-        const err = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(err?.error || "Error al reabrir el día");
+        const err = (await res.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        throw new Error(err?.error || "Error al reabrir el dia");
       }
 
       setReopenReason("");
@@ -288,9 +430,35 @@ export default function CashPage() {
       <div className="mb-6">
         <h1 className="text-3xl font-black tracking-tight">Caja</h1>
         <p className="mt-2 text-sm app-muted">
-          Cierre diario profesional con trazabilidad de ventas, gastos y soporte
-          para conteos de inventario.
+          Apertura de turno, cierre diario guiado y reporte operativo.
         </p>
+      </div>
+
+      <div
+        className={`mb-4 rounded-2xl border p-4 text-sm ${closureStatusClassName(
+          dayStatus
+        )}`}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="font-black">{formatClosureStatus(dayStatus)}</div>
+            <div className="mt-1">{closureStatusMessage(dayStatus)}</div>
+            {closure?.openedAt ? (
+              <div className="mt-1 text-xs">
+                Apertura: {new Date(closure.openedAt).toLocaleString()}
+                {closure.openedByUser?.name
+                  ? ` - ${closure.openedByUser.name}`
+                  : ""}
+              </div>
+            ) : null}
+          </div>
+          <a
+            className="rounded-full border border-current/15 px-4 py-2 text-xs font-bold"
+            href={csvHref}
+          >
+            Exportar CSV
+          </a>
+        </div>
       </div>
 
       {error ? (
@@ -307,8 +475,9 @@ export default function CashPage() {
 
       {hasOpenInventoryCounts ? (
         <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          Hay {summary?.inventoryCountsOpenCount} conteo(s) abiertos hoy. Puedes
-          vincular uno al cierre, pero conviene revisarlos antes de cerrar caja.
+          Hay {summary?.inventoryCountsOpenCount} conteo(s) abiertos hoy.
+          Revisa los conteos abiertos antes de cerrar o vincula el conteo
+          confirmado correspondiente.
         </div>
       ) : null}
 
@@ -331,42 +500,102 @@ export default function CashPage() {
         </div>
       ) : null}
 
-      {closure?.reopenedAt && !closed ? (
-        <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+      {isReopened && closure?.reopenedAt ? (
+        <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           El cierre de hoy fue reabierto el{" "}
           {new Date(closure.reopenedAt).toLocaleString()}.
           {closure.reopenReason ? ` Motivo: ${closure.reopenReason}` : ""}
         </div>
       ) : null}
 
-      <div className="mb-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      {dayStatus === "PENDING" ? (
+        <div className="app-panel mb-6 rounded-3xl p-4 md:p-5">
+          <h2 className="text-xl font-black">Abrir turno/dia</h2>
+          <p className="mt-1 text-sm text-gray-500">
+            Registra la caja inicial para dejar el dia abierto y preparar el
+            cierre con una base clara.
+          </p>
+
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+            <label className="flex-1 text-sm font-semibold text-gray-700">
+              Caja inicial
+              <input
+                className="mt-2 w-full rounded-2xl border border-black/10 bg-white/80 p-3"
+                type="number"
+                step="0.01"
+                min="0"
+                value={openingCash}
+                onChange={(e) => setOpeningCash(e.target.value)}
+                disabled={!isAdmin || saving}
+              />
+            </label>
+
+            {isAdmin ? (
+              <button
+                type="button"
+                onClick={() => void openDay()}
+                className="app-button-primary rounded-2xl px-5 py-3 font-bold text-white disabled:opacity-60"
+                disabled={saving}
+              >
+                Abrir dia
+              </button>
+            ) : (
+              <div className="text-sm text-gray-500">
+                Solo el administrador puede abrir el dia.
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="mb-6 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+        <div className="app-panel rounded-3xl p-4">
+          <div className="text-sm text-gray-500">Caja inicial</div>
+          <div className="mt-1 text-2xl font-black">
+            {formatCurrency(Number(summary?.openingCash || 0))}
+          </div>
+          <div className="mt-1 text-xs text-gray-500">
+            Base registrada en apertura
+          </div>
+        </div>
+
         <div className="app-panel rounded-3xl p-4">
           <div className="text-sm text-gray-500">Ventas</div>
           <div className="mt-1 text-2xl font-black">
             {formatCurrency(Number(summary?.salesTotal || 0))}
           </div>
           <div className="mt-1 text-xs text-gray-500">
-            {summary?.salesCount || 0} ventas hoy
+            {summary?.salesCount || 0} tickets hoy
           </div>
         </div>
 
         <div className="app-panel rounded-3xl p-4">
-          <div className="text-sm text-gray-500">Gastos</div>
+          <div className="text-sm text-gray-500">Gastos efectivo</div>
           <div className="mt-1 text-2xl font-black">
             {formatCurrency(Number(summary?.expensesTotal || 0))}
           </div>
           <div className="mt-1 text-xs text-gray-500">
-            {summary?.cashMovesCount || 0} movimientos de caja
+            Gastos pagados en caja
           </div>
         </div>
 
         <div className="app-panel rounded-3xl p-4">
-          <div className="text-sm text-gray-500">Movimientos manuales</div>
+          <div className="text-sm text-gray-500">Ingresos caja</div>
+          <div className="mt-1 text-2xl font-black">
+            {formatCurrency(Number(summary?.totalIncome || 0))}
+          </div>
+          <div className="mt-1 text-xs text-gray-500">
+            {summary?.cashMovesCount || 0} movimientos
+          </div>
+        </div>
+
+        <div className="app-panel rounded-3xl p-4">
+          <div className="text-sm text-gray-500">Mov. manuales</div>
           <div className="mt-1 text-2xl font-black">
             {formatCurrency(Number(summary?.manualCashTotal || 0))}
           </div>
           <div className="mt-1 text-xs text-gray-500">
-            Ajuste neto fuera de ventas y gastos registrados
+            Ajuste neto no automatico
           </div>
         </div>
 
@@ -376,7 +605,7 @@ export default function CashPage() {
             {formatCurrency(Number(summary?.discountsTotal || 0))}
           </div>
           <div className="mt-1 text-xs text-gray-500">
-            Impacto aplicado en ventas del día
+            Impacto aplicado en ventas
           </div>
         </div>
       </div>
@@ -385,14 +614,14 @@ export default function CashPage() {
         <div className="app-panel rounded-3xl p-4">
           <div className="text-sm text-gray-500">Caja esperada</div>
           <div className="mt-1 text-2xl font-black">
-            {formatCurrency(Number(closureValues?.expectedCash || 0))}
+            {formatCurrency(expectedCash)}
           </div>
         </div>
 
         <div className="app-panel rounded-3xl p-4">
           <div className="text-sm text-gray-500">Caja contada</div>
           <div className="mt-1 text-2xl font-black">
-            {closed
+            {isClosed
               ? formatCurrency(Number(closure?.countedCash || 0))
               : formatCurrency(countedValue)}
           </div>
@@ -402,28 +631,30 @@ export default function CashPage() {
           <div className="text-sm text-gray-500">Diferencia</div>
           <div
             className={`mt-1 text-2xl font-black ${
-              Number(closed ? closure?.difference : draftDifference) === 0
+              Number(isClosed ? closure?.difference : draftDifference) === 0
                 ? "text-green-700"
                 : "text-red-700"
             }`}
           >
-            {closed
+            {isClosed
               ? formatCurrency(Number(closure?.difference || 0))
               : formatCurrency(draftDifference)}
           </div>
         </div>
       </div>
 
-      {closed ? (
+      {isClosed ? (
         <div className="app-panel mb-6 rounded-3xl p-4 md:p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h2 className="text-xl font-black">Cierre del dia completado</h2>
+              <h2 className="text-xl font-black">Cierre diario completado</h2>
               <p className="mt-1 text-sm text-gray-500">
-                Dia {closure?.day} ? creado el{" "}
-                {closure?.createdAt
-                  ? new Date(closure.createdAt).toLocaleString()
-                  : "-"}
+                Dia {closure?.day} - cerrado el{" "}
+                {closure?.closedAt
+                  ? new Date(closure.closedAt).toLocaleString()
+                  : closure?.createdAt
+                    ? new Date(closure.createdAt).toLocaleString()
+                    : "-"}
               </p>
             </div>
             <div className="rounded-full bg-green-100 px-4 py-2 text-sm font-bold text-green-800">
@@ -434,6 +665,12 @@ export default function CashPage() {
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-2xl bg-gray-50 p-3">
               <div className="text-xs uppercase tracking-[0.18em] text-gray-500">
+                Caja inicial
+              </div>
+              <strong>{formatCurrency(Number(closure?.openingCash || 0))}</strong>
+            </div>
+            <div className="rounded-2xl bg-gray-50 p-3">
+              <div className="text-xs uppercase tracking-[0.18em] text-gray-500">
                 Ventas
               </div>
               <strong>{formatCurrency(Number(closure?.salesTotal || 0))}</strong>
@@ -442,23 +679,29 @@ export default function CashPage() {
               <div className="text-xs uppercase tracking-[0.18em] text-gray-500">
                 Gastos
               </div>
-              <strong>{formatCurrency(Number(closure?.expensesTotal || 0))}</strong>
-            </div>
-            <div className="rounded-2xl bg-gray-50 p-3">
-              <div className="text-xs uppercase tracking-[0.18em] text-gray-500">
-                Mov. manuales
-              </div>
-              <strong>{formatCurrency(Number(closure?.manualCashTotal || 0))}</strong>
+              <strong>
+                {formatCurrency(Number(closure?.expensesTotal || 0))}
+              </strong>
             </div>
             <div className="rounded-2xl bg-gray-50 p-3">
               <div className="text-xs uppercase tracking-[0.18em] text-gray-500">
                 Descuentos
               </div>
-              <strong>{formatCurrency(Number(closure?.discountsTotal || 0))}</strong>
+              <strong>
+                {formatCurrency(Number(closure?.discountsTotal || 0))}
+              </strong>
             </div>
           </div>
 
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <div className="rounded-2xl border border-black/8 bg-white/70 p-4">
+              <div className="text-sm text-gray-500">Responsable cierre</div>
+              <div className="mt-1">
+                {closure?.closedByUser?.name ||
+                  closure?.closedByUser?.email ||
+                  "Sin responsable"}
+              </div>
+            </div>
             <div className="rounded-2xl border border-black/8 bg-white/70 p-4">
               <div className="text-sm text-gray-500">Nota</div>
               <div className="mt-1">{closure?.note || "Sin nota"}</div>
@@ -475,7 +718,7 @@ export default function CashPage() {
 
           {isAdmin ? (
             <div className="mt-4 rounded-2xl border border-black/8 bg-white/70 p-4">
-              <div className="mb-2 font-semibold">Reabrir día</div>
+              <div className="mb-2 font-semibold">Reabrir dia</div>
               <textarea
                 className="mb-3 min-h-24 w-full rounded-2xl border border-black/10 bg-white/80 p-3"
                 placeholder="Motivo obligatorio de reapertura"
@@ -489,17 +732,17 @@ export default function CashPage() {
                 className="rounded-2xl bg-amber-500 px-4 py-3 font-bold text-white disabled:opacity-60"
                 disabled={saving}
               >
-                Reabrir día
+                Reabrir dia
               </button>
             </div>
           ) : null}
         </div>
-      ) : (
+      ) : canPrepareClosure ? (
         <div className="app-panel mb-6 rounded-3xl p-4 md:p-5">
-          <h2 className="text-xl font-black">Preparar cierre del día</h2>
+          <h2 className="text-xl font-black">Preparar cierre del dia</h2>
           <p className="mt-1 text-sm text-gray-500">
-            El servidor recalculará ventas, gastos, movimientos manuales,
-            descuentos y caja esperada antes de guardar el cierre.
+            El servidor recalculara ventas, gastos, ingresos, descuentos y caja
+            esperada antes de guardar el cierre.
           </p>
 
           <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -531,13 +774,30 @@ export default function CashPage() {
 
           <textarea
             className="mt-3 min-h-24 w-full rounded-2xl border border-black/10 bg-white/80 p-3"
-            placeholder="Nota de cierre"
+            placeholder={
+              noteRequired
+                ? "Nota obligatoria por diferencia o reapertura"
+                : "Nota de cierre"
+            }
             value={note}
             onChange={(e) => setNote(e.target.value)}
             disabled={!isAdmin || saving}
           />
 
+          {noteRequired ? (
+            <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              Diferencia detectada o dia reabierto: deja una nota antes de
+              cerrar.
+            </div>
+          ) : null}
+
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-gray-50 p-4">
+            <div>
+              <div className="text-sm text-gray-500">Responsable</div>
+              <div className="font-black">
+                {session?.user?.name || session?.user?.email || "Sesion actual"}
+              </div>
+            </div>
             <div>
               <div className="text-sm text-gray-500">Caja esperada</div>
               <div className="text-xl font-black">
@@ -561,16 +821,56 @@ export default function CashPage() {
                 className="app-button-danger rounded-2xl px-5 py-3 font-bold text-white disabled:opacity-60"
                 disabled={saving}
               >
-                Cerrar día
+                Cerrar dia
               </button>
             ) : (
               <div className="text-sm text-gray-500">
-                Solo el administrador puede cerrar el día.
+                Solo el administrador puede cerrar el dia.
               </div>
             )}
           </div>
         </div>
-      )}
+      ) : null}
+
+      <section className="app-panel mb-6 rounded-3xl p-4 md:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-black">Productos mas retirados</h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Resumen diario por cantidad retirada.
+            </p>
+          </div>
+          <div className="rounded-full bg-gray-100 px-3 py-1 text-xs font-bold text-gray-700">
+            {summary?.productsMostWithdrawn.length || 0} productos
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {summary?.productsMostWithdrawn.length ? (
+            summary.productsMostWithdrawn.map((product) => (
+              <div
+                key={product.productId}
+                className="rounded-2xl border border-black/8 bg-white/70 p-4"
+              >
+                <div className="font-semibold">{product.name}</div>
+                <div className="mt-1 text-sm text-gray-500">
+                  {product.salesCount} ticket(s)
+                </div>
+                <div className="mt-3 text-xl font-black">
+                  {formatQty(product.qty, product.unit)}
+                </div>
+                <div className="mt-1 text-sm text-gray-500">
+                  {formatCurrency(product.revenue)}
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-2xl bg-gray-50 p-4 text-sm text-gray-500">
+              No hay retiradas registradas hoy.
+            </div>
+          )}
+        </div>
+      </section>
 
       <h2 className="mb-2 font-semibold">Movimientos de hoy</h2>
 
@@ -583,38 +883,40 @@ export default function CashPage() {
           }
 
           return (
-          <section key={source} className="space-y-3">
-            <div className="text-sm font-semibold text-gray-700">
-              {formatSourceLabel(source)}
-            </div>
-
-            {sourceMoves.map((move) => (
-              <div
-                key={move.id}
-                className="app-panel flex flex-col gap-3 rounded-3xl p-4 md:flex-row md:items-center md:justify-between"
-              >
-                <div>
-                  <div className="text-sm text-gray-600">
-                    {new Date(move.createdAt).toLocaleString()}
-                  </div>
-                  <div>{move.note || "Sin nota"}</div>
-                  <div className="mt-1 text-xs text-gray-500">
-                    {formatPaymentMethodLabel(move.paymentMethod)}
-                    {move.createdByUser?.name ? ` ? ${move.createdByUser.name}` : ""}
-                  </div>
-                </div>
-
-                <div
-                  className={
-                    move.type === "income" ? "text-green-600" : "text-red-600"
-                  }
-                >
-                  {move.type === "income" ? "+" : "-"}
-                  {formatCurrency(Number(move.amount))}
-                </div>
+            <section key={source} className="space-y-3">
+              <div className="text-sm font-semibold text-gray-700">
+                {formatSourceLabel(source)}
               </div>
-            ))}
-          </section>
+
+              {sourceMoves.map((move) => (
+                <div
+                  key={move.id}
+                  className="app-panel flex flex-col gap-3 rounded-3xl p-4 md:flex-row md:items-center md:justify-between"
+                >
+                  <div>
+                    <div className="text-sm text-gray-600">
+                      {new Date(move.createdAt).toLocaleString()}
+                    </div>
+                    <div>{move.note || "Sin nota"}</div>
+                    <div className="mt-1 text-xs text-gray-500">
+                      {formatPaymentMethodLabel(move.paymentMethod)}
+                      {move.createdByUser?.name
+                        ? ` - ${move.createdByUser.name}`
+                        : ""}
+                    </div>
+                  </div>
+
+                  <div
+                    className={
+                      move.type === "income" ? "text-green-600" : "text-red-600"
+                    }
+                  >
+                    {move.type === "income" ? "+" : "-"}
+                    {formatCurrency(Number(move.amount))}
+                  </div>
+                </div>
+              ))}
+            </section>
           );
         })}
 

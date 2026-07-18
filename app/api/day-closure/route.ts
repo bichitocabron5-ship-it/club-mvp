@@ -2,7 +2,11 @@ import { z } from "zod";
 
 import { createAuditLog } from "@/lib/audit";
 import { requireAdmin, requireAuth } from "@/lib/auth-server";
-import { buildTodayDayClosureSummary, isClosureOpen } from "@/lib/day-closure";
+import {
+  buildDayClosureSummary,
+  getDayClosureStatus,
+  SIGNIFICANT_CASH_DIFFERENCE,
+} from "@/lib/day-closure";
 import { prisma } from "@/lib/prisma";
 import { getTodayRange, roundCurrency } from "@/lib/sales";
 import { NextResponse } from "next/server";
@@ -12,6 +16,30 @@ const closeDaySchema = z.object({
   note: z.string().trim().max(2000).optional().nullable(),
   inventoryCountId: z.coerce.number().int().positive().optional().nullable(),
 });
+
+const closureInclude = {
+  openedByUser: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+    },
+  },
+  closedByUser: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+    },
+  },
+  reopenedByUser: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+    },
+  },
+} as const;
 
 export async function GET() {
   const auth = await requireAuth();
@@ -25,12 +53,15 @@ export async function GET() {
       where: {
         day,
       },
+      include: closureInclude,
     }),
-    buildTodayDayClosureSummary(),
+    buildDayClosureSummary(day),
   ]);
+  const status = getDayClosureStatus(closure);
 
   return NextResponse.json({
-    closed: isClosureOpen(closure),
+    closed: status === "CLOSED",
+    status,
     closure,
     summary,
   });
@@ -58,10 +89,26 @@ export async function POST(req: Request) {
     where: { day },
   });
 
-  if (existing && !existing.reopenedAt) {
+  if (!existing) {
+    return NextResponse.json(
+      { error: "Abre el dia antes de registrar el cierre" },
+      { status: 409 }
+    );
+  }
+
+  const existingStatus = getDayClosureStatus(existing);
+
+  if (existingStatus === "CLOSED") {
     return NextResponse.json(
       { error: "El dia ya esta cerrado" },
-      { status: 400 }
+      { status: 409 }
+    );
+  }
+
+  if (existingStatus !== "OPEN" && existingStatus !== "REOPENED") {
+    return NextResponse.json(
+      { error: "El dia debe estar abierto antes de registrar el cierre" },
+      { status: 409 }
     );
   }
 
@@ -90,14 +137,31 @@ export async function POST(req: Request) {
     }
   }
 
-  const summary = await buildTodayDayClosureSummary();
+  const summary = await buildDayClosureSummary(day);
   const difference = roundCurrency(countedCash - summary.expectedCash);
+  const requiresNote =
+    Math.abs(difference) >= SIGNIFICANT_CASH_DIFFERENCE ||
+    existingStatus === "REOPENED";
+
+  if (requiresNote && !note) {
+    return NextResponse.json(
+      {
+        error:
+          "La nota es obligatoria por diferencia de caja o por cierre reabierto",
+      },
+      { status: 400 }
+    );
+  }
+
   const actorUserId = Number(auth.session.user.id);
+  const closedAt = new Date();
 
   const data = {
+    status: "CLOSED",
     totalIncome: summary.totalIncome,
     totalExpense: summary.totalExpense,
     balance: summary.balance,
+    openingCash: summary.openingCash,
     expectedCash: summary.expectedCash,
     countedCash,
     difference,
@@ -105,27 +169,19 @@ export async function POST(req: Request) {
     expensesTotal: summary.expensesTotal,
     manualCashTotal: summary.manualCashTotal,
     discountsTotal: summary.discountsTotal,
+    closedAt,
     closedByUserId: Number.isInteger(actorUserId) ? actorUserId : null,
     inventoryCountId,
     note,
-    reopenedAt: null,
-    reopenedByUserId: null,
-    reopenReason: null,
   };
 
-  const closure = existing?.reopenedAt
-    ? await prisma.dayClosure.update({
-        where: {
-          id: existing.id,
-        },
-        data,
-      })
-    : await prisma.dayClosure.create({
-        data: {
-          day,
-          ...data,
-        },
-      });
+  const closure = await prisma.dayClosure.update({
+    where: {
+      id: existing.id,
+    },
+    data,
+    include: closureInclude,
+  });
 
   await createAuditLog({
     actorUserId,
@@ -136,6 +192,8 @@ export async function POST(req: Request) {
     summary: `Cierre de caja creado para ${closure.day}`,
     metadata: {
       day: closure.day,
+      status: closure.status,
+      openingCash: Number(closure.openingCash),
       totalIncome: Number(closure.totalIncome),
       totalExpense: Number(closure.totalExpense),
       balance: Number(closure.balance),
@@ -146,8 +204,9 @@ export async function POST(req: Request) {
       expectedCash: Number(closure.expectedCash),
       countedCash: Number(closure.countedCash),
       difference: Number(closure.difference),
+      closedAt: closedAt.toISOString(),
       inventoryCountId: closure.inventoryCountId,
-      reopenedClosureId: existing?.reopenedAt ? existing.id : null,
+      previousStatus: existing ? existingStatus : null,
     },
   });
 

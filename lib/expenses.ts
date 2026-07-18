@@ -54,6 +54,7 @@ export async function assertExpenseDayIsOpen(
   const closure = await db.dayClosure.findUnique({
     where: { day },
     select: {
+      status: true,
       reopenedAt: true,
     },
   });

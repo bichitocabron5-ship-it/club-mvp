@@ -200,9 +200,11 @@ export type CashMove = {
 export type DayClosure = {
   id: number;
   day: string;
+  status: "OPEN" | "CLOSED" | "REOPENED" | string;
   totalIncome: number;
   totalExpense: number;
   balance: number;
+  openingCash: number;
   expectedCash: number;
   countedCash: number;
   difference: number;
@@ -210,6 +212,9 @@ export type DayClosure = {
   expensesTotal: number;
   manualCashTotal: number;
   discountsTotal: number;
+  openedAt: string | null;
+  openedByUserId: number | null;
+  closedAt: string | null;
   closedByUserId: number | null;
   inventoryCountId: number | null;
   reopenedAt: string | null;
@@ -217,6 +222,21 @@ export type DayClosure = {
   reopenReason: string | null;
   note: string | null;
   createdAt: string;
+  openedByUser?: {
+    id: number;
+    name: string;
+    email: string;
+  } | null;
+  closedByUser?: {
+    id: number;
+    name: string;
+    email: string;
+  } | null;
+  reopenedByUser?: {
+    id: number;
+    name: string;
+    email: string;
+  } | null;
 };
 
 export type DayClosureInventoryOption = {
@@ -226,10 +246,24 @@ export type DayClosureInventoryOption = {
   notes: string | null;
   createdAt: string;
   confirmedAt: string | null;
+  totalItems: number;
+  countedItems: number;
+  differenceItems: number;
+};
+
+export type DayClosureProductWithdrawal = {
+  productId: number;
+  name: string;
+  unit: ProductUnit | string;
+  qty: number;
+  revenue: number;
+  salesCount: number;
 };
 
 export type DayClosureSummary = {
   day: string;
+  closureStatus: DashboardClosureStatus;
+  openingCash: number;
   salesTotal: number;
   expensesTotal: number;
   manualCashTotal: number;
@@ -240,6 +274,7 @@ export type DayClosureSummary = {
   balance: number;
   salesCount: number;
   cashMovesCount: number;
+  productsMostWithdrawn: DayClosureProductWithdrawal[];
   inventoryCounts: DayClosureInventoryOption[];
   inventoryCountsOpenCount: number;
   inventoryCountsConfirmedCount: number;
@@ -359,11 +394,13 @@ export type DashboardAlerts = {
 
 export type DashboardRole = "ADMIN" | "STAFF" | string;
 
-export type DashboardClosureStatus = "OPEN" | "CLOSED" | "REOPENED";
+export type DashboardClosureStatus = "PENDING" | "OPEN" | "CLOSED" | "REOPENED";
 
 export type DashboardAlert = {
   id: string;
   type:
+    | "DAY_OPENING_PENDING"
+    | "DAY_CLOSURE_PENDING"
     | "DAY_CLOSED"
     | "DAY_REOPENED"
     | "OPEN_INVENTORY_COUNTS"

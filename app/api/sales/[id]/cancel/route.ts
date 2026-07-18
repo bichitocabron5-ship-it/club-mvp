@@ -56,6 +56,7 @@ async function assertSaleDayIsOpen(
   const closure = await tx.dayClosure.findUnique({
     where: { day },
     select: {
+      status: true,
       reopenedAt: true,
     },
   });

@@ -1,6 +1,9 @@
 import { requireAuth } from "@/lib/auth-server";
 import { formatLocalDay, normalizeCashMoveSource } from "@/lib/cash-move";
-import { buildTodayDayClosureSummary } from "@/lib/day-closure";
+import {
+  buildTodayDayClosureSummary,
+  getDayClosureStatus,
+} from "@/lib/day-closure";
 import { prisma } from "@/lib/prisma";
 import { getTodayRange, roundCurrency } from "@/lib/sales";
 import { NextResponse } from "next/server";
@@ -56,18 +59,6 @@ type MemberAggregate = {
 
 function getMissingEnvVars(envVars: readonly string[]) {
   return envVars.filter((name) => !process.env[name]?.trim());
-}
-
-function getDayClosureStatus(closure: { reopenedAt: Date | null } | null) {
-  if (!closure) {
-    return "OPEN" as const;
-  }
-
-  if (closure.reopenedAt) {
-    return "REOPENED" as const;
-  }
-
-  return "CLOSED" as const;
 }
 
 function getSaleRevenue(sale: { finalAmount: number | null; totalAmount: number }) {
@@ -386,6 +377,28 @@ export async function GET() {
     const dayClosureStatus = getDayClosureStatus(dayClosure);
     const pendingAlerts = [];
 
+    if (dayClosureStatus === "PENDING") {
+      pendingAlerts.push({
+        id: "day-opening-pending",
+        type: "DAY_OPENING_PENDING",
+        severity: "warning",
+        title: "Apertura de caja pendiente",
+        description: `Registra la caja inicial de ${day} antes del cierre diario.`,
+        href: "/cash",
+      });
+    }
+
+    if (dayClosureStatus === "OPEN") {
+      pendingAlerts.push({
+        id: "day-closure-pending",
+        type: "DAY_CLOSURE_PENDING",
+        severity: "info",
+        title: "Cierre de caja pendiente",
+        description: `El dia ${day} esta abierto y pendiente de cierre.`,
+        href: "/cash",
+      });
+    }
+
     if (dayClosureStatus === "CLOSED") {
       pendingAlerts.push({
         id: "day-closure-closed",
@@ -668,7 +681,8 @@ export async function GET() {
             cashExpectedToday: dayClosureSummary.expectedCash,
             cashBalanceToday: dayClosureSummary.balance,
             dayClosureStatus,
-            dayClosureDifference: dayClosure
+            dayClosureDifference:
+              dayClosure && dayClosureStatus !== "OPEN" && dayClosureStatus !== "PENDING"
               ? roundCurrency(Number(dayClosure.difference))
               : null,
           }
