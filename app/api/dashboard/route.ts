@@ -2,9 +2,27 @@ import { NextResponse } from "next/server";
 
 import { requireAuth } from "@/lib/auth-server";
 import { getDashboardData } from "@/lib/services/dashboard-service";
-import { DashboardConfigurationError } from "@/lib/validations/dashboard";
+import {
+  assertDashboardConfiguration,
+  DashboardConfigurationError,
+} from "@/lib/validations/dashboard";
 
 export async function GET() {
+  try {
+    assertDashboardConfiguration();
+  } catch (error) {
+    if (error instanceof DashboardConfigurationError) {
+      console.error(
+        "[api/dashboard] Missing required env vars",
+        error.missingEnvVars
+      );
+
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    throw error;
+  }
+
   const auth = await requireAuth();
   if (!auth.ok) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
@@ -17,15 +35,6 @@ export async function GET() {
 
     return NextResponse.json(dashboard);
   } catch (error) {
-    if (error instanceof DashboardConfigurationError) {
-      console.error(
-        "[api/dashboard] Missing required env vars",
-        error.missingEnvVars
-      );
-
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
     console.error("[api/dashboard] Failed to build dashboard response", error);
 
     return NextResponse.json(

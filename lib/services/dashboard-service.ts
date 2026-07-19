@@ -19,13 +19,10 @@ import {
 import { getTodayRange, roundCurrency } from "@/lib/sales";
 import type { DashboardData } from "@/lib/types";
 import { buildDashboardDayKeys } from "@/lib/helpers/dashboard-metrics";
-import { assertDashboardConfiguration } from "@/lib/validations/dashboard";
 
 export async function getDashboardData({
   role,
 }: DashboardServiceInputDto): Promise<DashboardData> {
-  assertDashboardConfiguration();
-
   const isAdmin = role === "ADMIN";
   const { start, end, day } = getTodayRange();
   const sevenDayKeys = buildDashboardDayKeys(day, 7);
