@@ -16,6 +16,7 @@ import {
   serializePublicSigningSession,
 } from "@/lib/signing-session";
 import { isStorageUrlsDisabled } from "@/lib/storage";
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -25,6 +26,7 @@ const SIGNATURE_PAYLOAD_MAX_BYTES = 768 * 1024;
 const SIGNATURE_BASE64_MAX_CHARS = Math.ceil(SIGNATURE_IMAGE_MAX_BYTES / 3) * 4;
 const PUBLIC_SIGNING_ERROR = "La sesion de firma no esta disponible";
 const INVALID_SIGNING_PAYLOAD_ERROR = "No se pudo procesar la firma";
+const SIGNING_SESSION_NOT_PENDING_ERROR = "SIGNING_SESSION_NOT_PENDING";
 
 const tokenSchema = z
   .string()
@@ -100,6 +102,40 @@ function publicSigningError(status: number) {
 
 function invalidSigningPayload(status = 400) {
   return NextResponse.json({ error: INVALID_SIGNING_PAYLOAD_ERROR }, { status });
+}
+
+function isSigningSessionContractUniqueError(error: unknown) {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+    return false;
+  }
+
+  if (error.code !== "P2002") {
+    return false;
+  }
+
+  const target = error.meta?.target;
+
+  if (Array.isArray(target)) {
+    return target.includes("signingSessionId");
+  }
+
+  return typeof target === "string" && target.includes("signingSessionId");
+}
+
+async function ensureSignedPdfForContract(contractId: number) {
+  if (isStorageUrlsDisabled()) {
+    console.warn("[storage] Generacion de PDF firmado omitida por modo emergencia");
+    return;
+  }
+
+  try {
+    await ensureSignedContractPdf(contractId);
+  } catch (error) {
+    console.warn(
+      "[storage] No se pudo generar PDF firmado; la firma queda guardada",
+      error instanceof Error ? error.message : error
+    );
+  }
 }
 
 function enforceSigningRateLimit(req: Request, token: string, action: "get" | "post") {
@@ -215,6 +251,22 @@ async function getPublicSigningSession(token: string) {
   };
 }
 
+async function getSigningSessionSuccessResponse(token: string) {
+  const session = await prisma.signingSession.findUnique({
+    where: { token },
+    include: {
+      member: true,
+      contract: true,
+    },
+  });
+
+  if (!session) {
+    return publicSigningError(404);
+  }
+
+  return NextResponse.json(await serializePublicSigningSession(session));
+}
+
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ token: string }> }
@@ -268,7 +320,15 @@ export async function POST(
 
   const existingSession = sessionResult.session;
 
-  if (existingSession.status !== "PENDING" || existingSession.contract) {
+  if (existingSession.contract) {
+    await ensureSignedPdfForContract(existingSession.contract.id);
+
+    return NextResponse.json(
+      await serializePublicSigningSession(existingSession)
+    );
+  }
+
+  if (existingSession.status !== "PENDING") {
     return publicSigningError(409);
   }
 
@@ -336,73 +396,98 @@ export async function POST(
     ? consumptionGrams
     : previousContract?.consumptionGrams ?? null;
 
-  const session = await prisma.$transaction(async (tx) => {
-    await tx.member.update({
-      where: { id: existingSession.memberId },
-      data: {
-        fullName: mergedFullName,
-        dni: mergedDni,
-        phone: mergedPhone,
-        email: mergedEmail,
-      },
+  let session: { contractId: number };
+
+  try {
+    session = await prisma.$transaction(async (tx) => {
+      const signedAt = new Date();
+      const updatedSession = await tx.signingSession.updateMany({
+        where: {
+          id: existingSession.id,
+          status: "PENDING",
+        },
+        data: {
+          status: "SIGNED",
+          signatureImage: parsedBody.data.signatureImage,
+          signedAt,
+        },
+      });
+
+      if (updatedSession.count === 0) {
+        const existingContract = await tx.memberContract.findUnique({
+          where: { signingSessionId: existingSession.id },
+          select: { id: true },
+        });
+
+        if (existingContract) {
+          return {
+            contractId: existingContract.id,
+          };
+        }
+
+        throw new Error(SIGNING_SESSION_NOT_PENDING_ERROR);
+      }
+
+      await tx.member.update({
+        where: { id: existingSession.memberId },
+        data: {
+          fullName: mergedFullName,
+          dni: mergedDni,
+          phone: mergedPhone,
+          email: mergedEmail,
+        },
+      });
+
+      const createdContract = await tx.memberContract.create({
+        data: {
+          memberId: existingSession.memberId,
+          signingSessionId: existingSession.id,
+          contractTemplateId: contractTemplate.id,
+
+          fullName: mergedFullName,
+          dni: mergedDni,
+          address: mergedAddress,
+          birthPlace: mergedBirthPlace,
+          birthDate: mergedBirthDate,
+          phone: mergedPhone,
+          email: mergedEmail,
+          consumptionGrams: mergedConsumptionGrams,
+
+          signatureImage: parsedBody.data.signatureImage,
+        },
+      });
+
+      return {
+        contractId: createdContract.id,
+      };
     });
-
-    const updatedSession = await tx.signingSession.update({
-      where: { token: existingSession.token },
-      data: {
-        status: "SIGNED",
-        signatureImage: parsedBody.data.signatureImage,
-        signedAt: new Date(),
-      },
-      include: {
-        member: true,
-      },
-    });
-
-    const createdContract = await tx.memberContract.create({
-      data: {
-        memberId: updatedSession.memberId,
-        signingSessionId: updatedSession.id,
-        contractTemplateId: contractTemplate.id,
-
-        fullName: mergedFullName,
-        dni: mergedDni,
-        address: mergedAddress,
-        birthPlace: mergedBirthPlace,
-        birthDate: mergedBirthDate,
-        phone: mergedPhone,
-        email: mergedEmail,
-        consumptionGrams: mergedConsumptionGrams,
-
-        signatureImage: parsedBody.data.signatureImage,
-      },
-    });
-
-    return {
-      contractId: createdContract.id,
-    };
-  });
-
-  if (isStorageUrlsDisabled()) {
-    console.warn("[storage] Generacion de PDF firmado omitida por modo emergencia");
-  } else {
-    try {
-      await ensureSignedContractPdf(session.contractId);
-    } catch (error) {
-      console.warn(
-        "[storage] No se pudo generar PDF firmado; la firma queda guardada",
-        error instanceof Error ? error.message : error
-      );
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === SIGNING_SESSION_NOT_PENDING_ERROR
+    ) {
+      return publicSigningError(409);
     }
+
+    if (!isSigningSessionContractUniqueError(error)) {
+      throw error;
+    }
+
+    const existingContract = await prisma.memberContract.findUnique({
+      where: { signingSessionId: existingSession.id },
+      select: { id: true },
+    });
+
+    if (!existingContract) {
+      throw error;
+    }
+
+    session = {
+      contractId: existingContract.id,
+    };
   }
 
-  const refreshedSession = await prisma.signingSession.findUnique({
-    where: { token: existingSession.token },
-    include: {
-      member: true,
-      contract: true,
-    },
-  });
+  await ensureSignedPdfForContract(session.contractId);
 
-  return NextResponse.json(await serializePublicSigningSession(refreshedSession));
+  return getSigningSessionSuccessResponse(existingSession.token);
 }

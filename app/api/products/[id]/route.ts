@@ -140,7 +140,7 @@ export async function PATCH(
     if (isProductSkuUniqueConstraintError(error)) {
       return NextResponse.json(
         { error: PRODUCT_SKU_DUPLICATE_MESSAGE },
-        { status: 400 }
+        { status: 409 }
       );
     }
 

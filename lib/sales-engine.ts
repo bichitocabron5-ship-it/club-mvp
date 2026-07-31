@@ -77,24 +77,22 @@ async function getSaleMemberStatusTx(
   tx: Prisma.TransactionClient,
   memberId: number
 ) {
-  const [member, contract] = await Promise.all([
-    tx.member.findUnique({
-      where: { id: memberId },
-      select: {
-        id: true,
-        fullName: true,
-        active: true,
-        expiresAt: true,
-        commercialProfile: true,
-        discountPercent: true,
-      },
-    }),
-    tx.memberContract.findFirst({
-      where: { memberId },
-      select: { id: true, consumptionGrams: true },
-      orderBy: { signedAt: "desc" },
-    }),
-  ]);
+  const member = await tx.member.findUnique({
+    where: { id: memberId },
+    select: {
+      id: true,
+      fullName: true,
+      active: true,
+      expiresAt: true,
+      commercialProfile: true,
+      discountPercent: true,
+    },
+  });
+  const contract = await tx.memberContract.findFirst({
+    where: { memberId },
+    select: { id: true, consumptionGrams: true },
+    orderBy: { signedAt: "desc" },
+  });
 
   if (!member) {
     throw new Error("Socio no encontrado");
@@ -251,32 +249,30 @@ export async function createSaleTransaction({
         ])
       );
 
-      const [settings, salesToday, salesThisMonth] = await Promise.all([
-        getClubSettings(),
-        tx.sale.findMany({
-          where: {
-            memberId,
-            cancelledAt: null,
-            createdAt: { gte: start },
+      const settings = await getClubSettings();
+      const salesToday = await tx.sale.findMany({
+        where: {
+          memberId,
+          cancelledAt: null,
+          createdAt: { gte: start },
+        },
+        include: {
+          product: true,
+        },
+      });
+      const salesThisMonth = await tx.sale.findMany({
+        where: {
+          memberId,
+          cancelledAt: null,
+          createdAt: {
+            gte: monthStart,
+            lt: monthEnd,
           },
-          include: {
-            product: true,
-          },
-        }),
-        tx.sale.findMany({
-          where: {
-            memberId,
-            cancelledAt: null,
-            createdAt: {
-              gte: monthStart,
-              lt: monthEnd,
-            },
-          },
-          include: {
-            product: true,
-          },
-        }),
-      ]);
+        },
+        include: {
+          product: true,
+        },
+      });
 
       const { grams: todayG, units: todayUD } = getDailyTotals(salesToday);
       const monthG = getMonthlyGramTotal(salesThisMonth);
