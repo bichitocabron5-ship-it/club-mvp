@@ -36,11 +36,13 @@ export default function SignPage() {
   const token = typeof params.token === "string" ? params.token : "";
 
   const sigRef = useRef<SignatureCanvas | null>(null);
+  const savingRef = useRef(false);
   const [sessionState, setSessionState] = useState<{
     token: string;
     data: PublicSigningSessionData;
   } | null>(null);
   const [savedToken, setSavedToken] = useState("");
+  const [saving, setSaving] = useState(false);
   const [errorState, setErrorState] = useState<{
     token: string;
     message: string;
@@ -110,7 +112,7 @@ export default function SignPage() {
   }, [token]);
 
   async function saveSignature() {
-    if (!token) {
+    if (!token || savingRef.current || saved) {
       return;
     }
 
@@ -123,21 +125,34 @@ export default function SignPage() {
       .getTrimmedCanvas()
       .toDataURL("image/png");
 
-    const res = await fetch(`/api/signing-sessions/${token}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ signatureImage, form }),
-    });
+    savingRef.current = true;
+    setSaving(true);
 
-    if (!res.ok) {
-      const err = await res.json();
-      alert(err.error || "Error al guardar firma");
-      return;
+    try {
+      const res = await fetch(`/api/signing-sessions/${token}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ signatureImage, form }),
+      });
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        const err = data as { error?: string } | null;
+        alert(err?.error || "Error al guardar firma");
+        return;
+      }
+
+      if (data) {
+        setSessionState({ token, data: data as PublicSigningSessionData });
+      }
+
+      setSavedToken(token);
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
-
-    setSavedToken(token);
   }
 
   if (error) {
@@ -292,6 +307,7 @@ export default function SignPage() {
       <div className="mt-4 grid grid-cols-2 gap-3">
         <button
           onClick={() => sigRef.current?.clear()}
+          disabled={saving}
           className="rounded border p-4 text-lg"
         >
           Borrar
@@ -299,9 +315,10 @@ export default function SignPage() {
 
         <button
           onClick={saveSignature}
+          disabled={saving}
           className="rounded bg-blue-600 p-4 text-lg font-bold text-white"
         >
-          Guardar firma
+          {saving ? "Guardando..." : "Guardar firma"}
         </button>
       </div>
     </main>

@@ -112,19 +112,33 @@ export async function POST(req: Request) {
 
   const userId = Number(auth.session.user.id);
 
-  const count = await prisma.inventoryCount.create({
-    data: {
-      type,
-      notes: notes?.trim() || null,
-      createdByUserId: Number.isInteger(userId) ? userId : null,
-      items: {
-        create: products.map((product) => ({
-          productId: product.id,
-          expectedQty: Number(product.stock),
-        })),
+  const count = await prisma.$transaction(async (tx) => {
+    const createdCount = await tx.inventoryCount.create({
+      data: {
+        type,
+        notes: notes?.trim() || null,
+        createdByUserId: Number.isInteger(userId) ? userId : null,
       },
-    },
-    include: inventoryCountInclude,
+    });
+
+    await tx.inventoryCountItem.createMany({
+      data: products.map((product) => ({
+        inventoryCountId: createdCount.id,
+        productId: product.id,
+        expectedQty: Number(product.stock),
+      })),
+    });
+
+    const createdWithItems = await tx.inventoryCount.findUnique({
+      where: { id: createdCount.id },
+      include: inventoryCountInclude,
+    });
+
+    if (!createdWithItems) {
+      throw new Error("Conteo no encontrado");
+    }
+
+    return createdWithItems;
   });
 
   await createAuditLog({

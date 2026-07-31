@@ -48,15 +48,13 @@ export async function GET() {
   }
 
   const { day } = getTodayRange();
-  const [closure, summary] = await Promise.all([
-    prisma.dayClosure.findUnique({
-      where: {
-        day,
-      },
-      include: closureInclude,
-    }),
-    buildDayClosureSummary(day),
-  ]);
+  const closure = await prisma.dayClosure.findUnique({
+    where: {
+      day,
+    },
+    include: closureInclude,
+  });
+  const summary = await buildDayClosureSummary(day);
   const status = getDayClosureStatus(closure);
 
   return NextResponse.json({

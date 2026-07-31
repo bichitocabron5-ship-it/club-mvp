@@ -256,105 +256,102 @@ export async function buildDayClosureSummary(
 ): Promise<DayClosureSummary> {
   const { start, end, day } = getDayRange(dayKey);
 
-  const [closure, sales, expenses, cashMoves, inventoryCounts] =
-    await Promise.all([
-      prisma.dayClosure.findUnique({
-        where: {
-          day,
-        },
-        select: {
-          status: true,
-          openingCash: true,
-          reopenedAt: true,
-        },
-      }),
-      prisma.sale.findMany({
-        where: {
-          cancelledAt: null,
-          createdAt: {
-            gte: start,
-            lt: end,
-          },
-        },
-        select: {
-          qty: true,
-          totalAmount: true,
-          finalAmount: true,
-          discountAmount: true,
-          product: {
-            select: {
-              id: true,
-              name: true,
-              unit: true,
-            },
-          },
-        },
-      }),
-      prisma.expense.findMany({
-        where: {
-          cancelledAt: null,
-          createdAt: {
-            gte: start,
-            lt: end,
-          },
-        },
-        select: {
-          amount: true,
-          paidMethod: true,
-        },
-      }),
-      prisma.cashMove.findMany({
-        where: {
-          OR: [
-            {
-              day,
-            },
-            {
-              day: null,
-              createdAt: {
-                gte: start,
-                lt: end,
-              },
-            },
-          ],
-        },
-        select: {
-          type: true,
-          amount: true,
-          note: true,
-          source: true,
-          paymentMethod: true,
-        },
-      }),
-      prisma.inventoryCount.findMany({
-        where: {
-          createdAt: {
-            gte: start,
-            lt: end,
-          },
-          status: {
-            in: ["OPEN", "CONFIRMED"],
-          },
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
+  const closure = await prisma.dayClosure.findUnique({
+    where: {
+      day,
+    },
+    select: {
+      status: true,
+      openingCash: true,
+      reopenedAt: true,
+    },
+  });
+  const sales = await prisma.sale.findMany({
+    where: {
+      cancelledAt: null,
+      createdAt: {
+        gte: start,
+        lt: end,
+      },
+    },
+    select: {
+      qty: true,
+      totalAmount: true,
+      finalAmount: true,
+      discountAmount: true,
+      product: {
         select: {
           id: true,
-          status: true,
-          type: true,
-          notes: true,
-          createdAt: true,
-          confirmedAt: true,
-          items: {
-            select: {
-              countedQty: true,
-              differenceQty: true,
-            },
+          name: true,
+          unit: true,
+        },
+      },
+    },
+  });
+  const expenses = await prisma.expense.findMany({
+    where: {
+      cancelledAt: null,
+      createdAt: {
+        gte: start,
+        lt: end,
+      },
+    },
+    select: {
+      amount: true,
+      paidMethod: true,
+    },
+  });
+  const cashMoves = await prisma.cashMove.findMany({
+    where: {
+      OR: [
+        {
+          day,
+        },
+        {
+          day: null,
+          createdAt: {
+            gte: start,
+            lt: end,
           },
         },
-      }),
-    ]);
+      ],
+    },
+    select: {
+      type: true,
+      amount: true,
+      note: true,
+      source: true,
+      paymentMethod: true,
+    },
+  });
+  const inventoryCounts = await prisma.inventoryCount.findMany({
+    where: {
+      createdAt: {
+        gte: start,
+        lt: end,
+      },
+      status: {
+        in: ["OPEN", "CONFIRMED"],
+      },
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+    select: {
+      id: true,
+      status: true,
+      type: true,
+      notes: true,
+      createdAt: true,
+      confirmedAt: true,
+      items: {
+        select: {
+          countedQty: true,
+          differenceQty: true,
+        },
+      },
+    },
+  });
 
   const typedSales: SummarySale[] = sales.map((sale) => ({
     qty: Number(sale.qty),
@@ -443,46 +440,44 @@ export async function buildDailyClosureReport(
   dayKey = formatLocalDay()
 ): Promise<DailyClosureReport> {
   const { day } = getDayRange(dayKey);
-  const [summary, closure] = await Promise.all([
-    buildDayClosureSummary(day),
-    prisma.dayClosure.findUnique({
-      where: {
-        day,
-      },
-      include: {
-        openedByUser: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-        closedByUser: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-        reopenedByUser: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-        inventoryCount: {
-          select: {
-            id: true,
-            status: true,
-            type: true,
-            notes: true,
-            confirmedAt: true,
-          },
+  const summary = await buildDayClosureSummary(day);
+  const closure = await prisma.dayClosure.findUnique({
+    where: {
+      day,
+    },
+    include: {
+      openedByUser: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
         },
       },
-    }),
-  ]);
+      closedByUser: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+      reopenedByUser: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+      inventoryCount: {
+        select: {
+          id: true,
+          status: true,
+          type: true,
+          notes: true,
+          confirmedAt: true,
+        },
+      },
+    },
+  });
 
   const status = getDayClosureStatus(closure);
 

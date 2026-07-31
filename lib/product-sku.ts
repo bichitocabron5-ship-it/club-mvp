@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 
 export const PRODUCT_SKU_MAX_LENGTH = 32;
 export const PRODUCT_SKU_DUPLICATE_MESSAGE =
-  "Ya existe un producto con ese código.";
+  "Ya existe un producto con ese SKU";
 
 export function normalizeProductSku(value: string | null | undefined) {
   if (value === undefined) return undefined;
