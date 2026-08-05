@@ -31,14 +31,15 @@ export const DASHBOARD_WIDGET_DEFINITIONS = [
   },
   { id: "sales", tabId: "operations", defaultOrder: 30, adminOnly: true },
   { id: "finance", tabId: "operations", defaultOrder: 40, adminOnly: true },
-  { id: "access", tabId: "operations", defaultOrder: 50 },
-  { id: "low-stock", tabId: "operations", defaultOrder: 60 },
+  { id: "access", tabId: "operations", defaultOrder: 50, staffDefaultOrder: 20 },
+  { id: "low-stock", tabId: "operations", defaultOrder: 60, staffDefaultOrder: 10 },
   { id: "alerts", tabId: "audit", defaultOrder: 10, adminOnly: true },
   { id: "audit", tabId: "audit", defaultOrder: 20, adminOnly: true },
 ] as const satisfies ReadonlyArray<{
   id: string;
   tabId: DashboardTabId;
   defaultOrder: number;
+  staffDefaultOrder?: number;
   adminOnly?: true;
 }>;
 
@@ -104,6 +105,15 @@ function isAdminOnlyWidget(widget: DashboardWidgetDefinition) {
   return "adminOnly" in widget && widget.adminOnly === true;
 }
 
+function getDashboardWidgetDefaultOrder(
+  widget: DashboardWidgetDefinition,
+  isAdmin: boolean
+) {
+  return isAdmin || !("staffDefaultOrder" in widget)
+    ? widget.defaultOrder
+    : widget.staffDefaultOrder;
+}
+
 function normalizeUserId(userId: number | string) {
   const value = typeof userId === "string" ? Number(userId) : userId;
 
@@ -120,7 +130,11 @@ function getDashboardPreferenceScope(role: DashboardRole): DashboardPreferenceSc
   const tabSet = new Set<DashboardTabId>(tabs);
   const widgets = DASHBOARD_WIDGET_DEFINITIONS.filter(
     (widget) => tabSet.has(widget.tabId) && (isAdmin || !isAdminOnlyWidget(widget))
-  ).sort((first, second) => first.defaultOrder - second.defaultOrder);
+  ).sort(
+    (first, second) =>
+      getDashboardWidgetDefaultOrder(first, isAdmin) -
+      getDashboardWidgetDefaultOrder(second, isAdmin)
+  );
 
   return {
     tabs,
