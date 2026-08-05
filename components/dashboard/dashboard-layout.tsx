@@ -3,6 +3,7 @@
 import type { KeyboardEvent, ReactNode } from "react";
 import { useMemo, useState } from "react";
 
+import { DashboardCustomizePanel } from "@/components/dashboard/dashboard-customize-panel";
 import { PageHeader } from "@/components/ui/page-header";
 
 export type DashboardSectionConfig = {
@@ -21,39 +22,150 @@ export type DashboardWidgetConfig = {
   content: ReactNode;
 };
 
+export type DashboardPreferencesConfig = {
+  defaultTab?: string;
+  widgetOrder?: Record<string, string[]>;
+  hiddenWidgets?: string[];
+};
+
+export type DashboardPreferencesSaveHandler = (
+  preferences: DashboardPreferencesConfig
+) => Promise<DashboardPreferencesConfig | null>;
+
+function compareDashboardWidgets(
+  first: DashboardWidgetConfig,
+  second: DashboardWidgetConfig,
+  preferredWidgetOrder: ReadonlyMap<string, number>
+) {
+  const firstPreferredOrder = preferredWidgetOrder.get(first.id);
+  const secondPreferredOrder = preferredWidgetOrder.get(second.id);
+
+  if (
+    firstPreferredOrder !== undefined ||
+    secondPreferredOrder !== undefined
+  ) {
+    return (
+      (firstPreferredOrder ?? Number.MAX_SAFE_INTEGER) -
+      (secondPreferredOrder ?? Number.MAX_SAFE_INTEGER)
+    );
+  }
+
+  return first.order - second.order;
+}
+
+function getDefaultSectionId(
+  visibleSections: DashboardSectionConfig[],
+  preferences: DashboardPreferencesConfig | null | undefined
+) {
+  const preferredSectionId = preferences?.defaultTab;
+
+  if (
+    preferredSectionId &&
+    visibleSections.some((section) => section.id === preferredSectionId)
+  ) {
+    return preferredSectionId;
+  }
+
+  return visibleSections[0]?.id ?? "";
+}
+
 export function DashboardLayout({
   title,
   description,
   statusBar,
   sections,
   widgets,
+  preferences,
+  onPreferencesSave,
 }: {
   title: string;
   description: string;
   statusBar: ReactNode;
   sections: DashboardSectionConfig[];
   widgets: DashboardWidgetConfig[];
+  preferences?: DashboardPreferencesConfig | null;
+  onPreferencesSave: DashboardPreferencesSaveHandler;
 }) {
+  const customizePanelId = "dashboard-customize-panel";
+  const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
+  const hiddenWidgetIds = useMemo(() => {
+    const allowedWidgetIds = new Set(widgets.map((widget) => widget.id));
+    const configuredHiddenWidgets = preferences?.hiddenWidgets ?? [];
+
+    return new Set(
+      configuredHiddenWidgets.filter((widgetId) =>
+        allowedWidgetIds.has(widgetId)
+      )
+    );
+  }, [preferences, widgets]);
+
+  const preferredWidgetOrder = useMemo(() => {
+    const widgetById = new Map(widgets.map((widget) => [widget.id, widget]));
+    const order = new Map<string, number>();
+    let nextOrder = 0;
+
+    for (const section of sections) {
+      const preferredWidgetIds = preferences?.widgetOrder?.[section.id] ?? [];
+
+      for (const widgetId of preferredWidgetIds) {
+        const widget = widgetById.get(widgetId);
+
+        if (
+          !widget ||
+          widget.hidden ||
+          widget.sectionId !== section.id ||
+          hiddenWidgetIds.has(widget.id) ||
+          order.has(widget.id)
+        ) {
+          continue;
+        }
+
+        order.set(widget.id, nextOrder);
+        nextOrder += 1;
+      }
+    }
+
+    return order;
+  }, [hiddenWidgetIds, preferences, sections, widgets]);
+
   const visibleSections = useMemo(
     () =>
       sections.filter((section) =>
-        widgets.some((widget) => widget.sectionId === section.id && !widget.hidden)
+        widgets.some(
+          (widget) =>
+            widget.sectionId === section.id &&
+            !widget.hidden &&
+            !hiddenWidgetIds.has(widget.id)
+        )
       ),
-    [sections, widgets]
+    [hiddenWidgetIds, sections, widgets]
   );
-  const [activeSectionId, setActiveSectionId] = useState(visibleSections[0]?.id ?? "");
+  const defaultSectionId = useMemo(
+    () => getDefaultSectionId(visibleSections, preferences),
+    [preferences, visibleSections]
+  );
+  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
 
   const activeSection =
-    visibleSections.find((section) => section.id === activeSectionId) ?? visibleSections[0];
+    visibleSections.find((section) => section.id === selectedSectionId) ??
+    visibleSections.find((section) => section.id === defaultSectionId) ??
+    visibleSections[0];
 
   const widgetsBySection = useMemo(() => {
     return visibleSections.reduce<Record<string, DashboardWidgetConfig[]>>((acc, section) => {
       acc[section.id] = widgets
-        .filter((widget) => widget.sectionId === section.id && !widget.hidden)
-        .sort((first, second) => first.order - second.order);
+        .filter(
+          (widget) =>
+            widget.sectionId === section.id &&
+            !widget.hidden &&
+            !hiddenWidgetIds.has(widget.id)
+        )
+        .sort((first, second) =>
+          compareDashboardWidgets(first, second, preferredWidgetOrder)
+        );
       return acc;
     }, {});
-  }, [visibleSections, widgets]);
+  }, [hiddenWidgetIds, preferredWidgetOrder, visibleSections, widgets]);
 
   function handleTabKeyDown(
     event: KeyboardEvent<HTMLButtonElement>,
@@ -70,17 +182,56 @@ export function DashboardLayout({
       (sectionIndex + direction + visibleSections.length) % visibleSections.length;
     const nextSectionId = visibleSections[nextIndex]?.id ?? "";
 
-    setActiveSectionId(nextSectionId);
+    setSelectedSectionId(nextSectionId);
     window.requestAnimationFrame(() => {
       document.getElementById(`dashboard-tab-${nextSectionId}`)?.focus();
     });
   }
 
+  async function handlePreferencesSave(
+    nextPreferences: DashboardPreferencesConfig
+  ) {
+    const savedPreferences = await onPreferencesSave(nextPreferences);
+    setSelectedSectionId(null);
+    setIsCustomizeOpen(false);
+    return savedPreferences;
+  }
+
+  const customizeControls = (
+    <>
+      <div className="flex justify-end">
+        <button
+          type="button"
+          aria-expanded={isCustomizeOpen}
+          aria-controls={customizePanelId}
+          onClick={() => setIsCustomizeOpen((isOpen) => !isOpen)}
+          className="app-button-secondary rounded-full px-4 py-2 text-sm font-bold"
+        >
+          Personalizar dashboard
+        </button>
+      </div>
+
+      {isCustomizeOpen ? (
+        <DashboardCustomizePanel
+          id={customizePanelId}
+          sections={sections}
+          widgets={widgets}
+          preferences={preferences}
+          onClose={() => setIsCustomizeOpen(false)}
+          onSave={handlePreferencesSave}
+        />
+      ) : null}
+    </>
+  );
+
   if (!activeSection) {
     return (
       <main className="mx-auto max-w-7xl p-4 md:p-6">
         <PageHeader title={title} description={description} />
-        {statusBar}
+        <div className="space-y-5">
+          {statusBar}
+          {customizeControls}
+        </div>
       </main>
     );
   }
@@ -91,6 +242,7 @@ export function DashboardLayout({
 
       <div className="space-y-5">
         {statusBar}
+        {customizeControls}
 
         <section
           aria-label="Secciones del dashboard"
@@ -113,7 +265,7 @@ export function DashboardLayout({
                   aria-selected={isActive}
                   aria-controls={`dashboard-panel-${section.id}`}
                   tabIndex={isActive ? 0 : -1}
-                  onClick={() => setActiveSectionId(section.id)}
+                  onClick={() => setSelectedSectionId(section.id)}
                   onKeyDown={(event) => handleTabKeyDown(event, index)}
                   className={`min-w-36 rounded-[1.1rem] px-4 py-3 text-left text-sm font-black ${
                     isActive
