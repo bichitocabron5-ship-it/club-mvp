@@ -55,19 +55,20 @@ model AppUser {
   createdAt    DateTime @default(now())
   memberId     Int?     @unique
 
-  member                    Member?           @relation(fields: [memberId], references: [id])
-  appliedSales              Sale[]            @relation("SaleAppliedByUser")
-  cancelledSales            Sale[]            @relation("SaleCancelledByUser")
+  member                    Member?              @relation(fields: [memberId], references: [id])
+  appliedSales              Sale[]               @relation("SaleAppliedByUser")
+  cancelledSales            Sale[]               @relation("SaleCancelledByUser")
   auditLogs                 AuditLog[]
-  createdInventoryCounts    InventoryCount[]  @relation("InventoryCountCreatedByUser")
-  confirmedInventoryCounts  InventoryCount[]  @relation("InventoryCountConfirmedByUser")
-  closedDayClosures         DayClosure[]      @relation("DayClosureClosedByUser")
-  openedDayClosures         DayClosure[]      @relation("DayClosureOpenedByUser")
-  reopenedDayClosures       DayClosure[]      @relation("DayClosureReopenedByUser")
-  createdCashMoves          CashMove[]        @relation("CashMoveCreatedByUser")
-  cancelledExpenses         Expense[]         @relation("ExpenseCancelledByUser")
-  createdOperationalTasks   OperationalTask[] @relation("OperationalTaskCreatedByUser")
-  completedOperationalTasks OperationalTask[] @relation("OperationalTaskCompletedByUser")
+  createdInventoryCounts    InventoryCount[]     @relation("InventoryCountCreatedByUser")
+  confirmedInventoryCounts  InventoryCount[]     @relation("InventoryCountConfirmedByUser")
+  closedDayClosures         DayClosure[]         @relation("DayClosureClosedByUser")
+  openedDayClosures         DayClosure[]         @relation("DayClosureOpenedByUser")
+  reopenedDayClosures       DayClosure[]         @relation("DayClosureReopenedByUser")
+  createdCashMoves          CashMove[]           @relation("CashMoveCreatedByUser")
+  cancelledExpenses         Expense[]            @relation("ExpenseCancelledByUser")
+  createdOperationalTasks   OperationalTask[]    @relation("OperationalTaskCreatedByUser")
+  completedOperationalTasks OperationalTask[]    @relation("OperationalTaskCompletedByUser")
+  dashboardPreference       DashboardPreference?
 }
 
 model AuditLog {
@@ -84,6 +85,18 @@ model AuditLog {
   actorUser AppUser? @relation(fields: [actorUserId], references: [id])
 
   @@index([createdAt])
+}
+
+model DashboardPreference {
+  id            Int      @id @default(autoincrement())
+  userId        Int      @unique
+  defaultTab    String   @default("summary")
+  widgetOrder   Json
+  hiddenWidgets Json
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Product {

@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { DashboardAdminView } from "@/components/dashboard/dashboard-admin-view";
+import type {
+  DashboardPreferencesConfig,
+  DashboardPreferencesSaveHandler,
+} from "@/components/dashboard/dashboard-layout";
 import {
   adminDashboardQuickLinks,
   staffDashboardQuickLinks,
@@ -17,8 +21,63 @@ import type { DashboardData } from "@/lib/types";
 
 type LoadMode = "initial" | "refresh";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function readStringList(value: unknown) {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function parseDashboardWidgetOrder(value: unknown) {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const widgetOrder: NonNullable<DashboardPreferencesConfig["widgetOrder"]> = {};
+
+  for (const [sectionId, widgetIds] of Object.entries(value)) {
+    const parsedWidgetIds = readStringList(widgetIds);
+
+    if (parsedWidgetIds?.length) {
+      widgetOrder[sectionId] = parsedWidgetIds;
+    }
+  }
+
+  return Object.keys(widgetOrder).length > 0 ? widgetOrder : undefined;
+}
+
+function parseDashboardPreferences(
+  value: unknown
+): DashboardPreferencesConfig | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    defaultTab:
+      typeof value.defaultTab === "string" ? value.defaultTab.trim() : undefined,
+    widgetOrder: parseDashboardWidgetOrder(value.widgetOrder),
+    hiddenWidgets: readStringList(value.hiddenWidgets),
+  };
+}
+
+async function fetchDashboardPreferences() {
+  const json = await fetchJson<unknown>("/api/dashboard/preferences");
+  return parseDashboardPreferences(json);
+}
+
 export default function PanelPage() {
   const [data, setData] = useState<DashboardData | null>(null);
+  const [preferences, setPreferences] =
+    useState<DashboardPreferencesConfig | null>(null);
   const [initialError, setInitialError] = useState("");
   const [refreshError, setRefreshError] = useState("");
   const [isInitialLoading, setIsInitialLoading] = useState(true);
@@ -36,8 +95,32 @@ export default function PanelPage() {
     }
 
     try {
-      const json = await fetchJson<DashboardData>("/api/dashboard");
-      setData(json);
+      if (isRefresh) {
+        const json = await fetchJson<DashboardData>("/api/dashboard");
+        setData(json);
+      } else {
+        const [dashboardResult, preferencesResult] = await Promise.allSettled([
+          fetchJson<DashboardData>("/api/dashboard"),
+          fetchDashboardPreferences(),
+        ]);
+
+        if (preferencesResult.status === "fulfilled") {
+          setPreferences(preferencesResult.value);
+        } else {
+          console.warn(
+            "[dashboard] Error loading /api/dashboard/preferences",
+            preferencesResult.reason
+          );
+          setPreferences(null);
+        }
+
+        if (dashboardResult.status === "rejected") {
+          throw dashboardResult.reason;
+        }
+
+        setData(dashboardResult.value);
+      }
+
       setInitialError("");
       setRefreshError("");
     } catch (err) {
@@ -67,6 +150,27 @@ export default function PanelPage() {
   const handleRefresh = useCallback(() => {
     void loadPanel("refresh");
   }, [loadPanel]);
+
+  const handlePreferencesSave = useCallback<DashboardPreferencesSaveHandler>(
+    async (nextPreferences) => {
+      const json = await fetchJson<unknown>("/api/dashboard/preferences", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(nextPreferences),
+      });
+      const savedPreferences = parseDashboardPreferences(json);
+
+      if (!savedPreferences) {
+        throw new Error("Respuesta invalida guardando preferencias");
+      }
+
+      setPreferences(savedPreferences);
+      return savedPreferences;
+    },
+    []
+  );
 
   if (isInitialLoading && !data) {
     return <PanelLoadingSkeleton />;
@@ -106,6 +210,8 @@ export default function PanelPage() {
       <DashboardStaffView
         data={data}
         quickLinks={quickLinks}
+        preferences={preferences}
+        onPreferencesSave={handlePreferencesSave}
         isRefreshing={isRefreshing}
         refreshError={refreshError}
         onRefresh={handleRefresh}
@@ -117,6 +223,8 @@ export default function PanelPage() {
     <DashboardAdminView
       data={data}
       quickLinks={quickLinks}
+      preferences={preferences}
+      onPreferencesSave={handlePreferencesSave}
       isRefreshing={isRefreshing}
       refreshError={refreshError}
       onRefresh={handleRefresh}
