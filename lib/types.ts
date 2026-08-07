@@ -362,6 +362,21 @@ export type DashboardStockSummary = {
   stockCostValueEstimated: boolean;
 };
 
+export type DashboardComparisonMetric = {
+  current: number;
+  previous: number;
+  delta: number;
+  deltaPercent: number | null;
+};
+
+export type DashboardComparisons = {
+  salesTotal: DashboardComparisonMetric;
+  salesCount: DashboardComparisonMetric;
+  averageTicket: DashboardComparisonMetric;
+  cashTotal: DashboardComparisonMetric;
+  cardTotal: DashboardComparisonMetric;
+};
+
 export type PurchaseSummary = {
   id: number;
   supplierName: string;
@@ -464,6 +479,7 @@ export type DashboardData = {
   role: DashboardRole;
   generatedAt: string;
   summary: DashboardExecutiveSummary;
+  comparisons: DashboardComparisons;
   cash: DashboardCashSummary | null;
   inventory: DashboardInventorySummary;
   topProductsToday: DashboardProductStat[] | null;

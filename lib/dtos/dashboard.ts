@@ -4,6 +4,21 @@ export type DashboardServiceInputDto = {
   role: string;
 };
 
+export type DashboardComparisonMetricDto = {
+  current: number;
+  previous: number;
+  delta: number;
+  deltaPercent: number | null;
+};
+
+export type DashboardComparisonsDto = {
+  salesTotal: DashboardComparisonMetricDto;
+  salesCount: DashboardComparisonMetricDto;
+  averageTicket: DashboardComparisonMetricDto;
+  cashTotal: DashboardComparisonMetricDto;
+  cardTotal: DashboardComparisonMetricDto;
+};
+
 export type DashboardSaleRecord = {
   id: number;
   memberId: number;
@@ -150,12 +165,25 @@ export type DashboardSevenDayCashMoveRecord = Prisma.CashMoveGetPayload<{
   };
 }>;
 
+export type DashboardComparisonCashMoveRecord = Prisma.CashMoveGetPayload<{
+  select: {
+    day: true;
+    createdAt: true;
+    type: true;
+    amount: true;
+    source: true;
+    note: true;
+    paymentMethod: true;
+  };
+}>;
+
 export type DashboardQueryResultDto = {
   dayClosureSummary: Awaited<
     ReturnType<typeof import("@/lib/day-closure").buildTodayDayClosureSummary>
   >;
   dayClosure: DayClosure | null;
   sales: DashboardRawSaleRecord[];
+  previousDaySales: DashboardRawSaleRecord[];
   products: DashboardProductRecord[];
   members: DashboardMemberAccessStateRecord[];
   recentAuditLogs: DashboardAuditLogRecord[];
@@ -163,4 +191,5 @@ export type DashboardQueryResultDto = {
   accessInToday: DashboardAccessInRecord[];
   sevenDaySales: DashboardSevenDaySaleRecord[];
   sevenDayCashMoves: DashboardSevenDayCashMoveRecord[];
+  comparisonCashMoves: DashboardComparisonCashMoveRecord[];
 };
