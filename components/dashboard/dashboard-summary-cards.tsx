@@ -14,7 +14,7 @@ export function DashboardSummaryCards({
 }) {
   if (variant === "staff") {
     return (
-      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Socios con acceso hoy" value={data.summary.activeMembersToday} />
         <StatCard label="Dentro ahora" value={data.summary.currentInsideCount} />
         <StatCard
@@ -33,13 +33,13 @@ export function DashboardSummaryCards({
 
   return (
     <>
-      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <StatCard
           label="Ventas hoy"
           value={formatCurrency(data.summary.salesTodayTotal)}
           comparison={data.comparisons.salesTotal}
           className="bg-emerald-50"
-          valueClassName="text-3xl font-black text-emerald-800"
+          valueClassName="text-2xl font-black text-emerald-800 md:text-3xl"
         />
         <StatCard
           label="Tickets hoy"
@@ -52,8 +52,8 @@ export function DashboardSummaryCards({
           className={data.summary.profitToday >= 0 ? "bg-sky-50" : "bg-red-50"}
           valueClassName={
             data.summary.profitToday >= 0
-              ? "text-3xl font-black text-sky-800"
-              : "text-3xl font-black text-red-800"
+              ? "text-2xl font-black text-sky-800 md:text-3xl"
+              : "text-2xl font-black text-red-800 md:text-3xl"
           }
         />
         <StatCard label="Margen medio" value={formatPercent(data.summary.marginPercent)} />
