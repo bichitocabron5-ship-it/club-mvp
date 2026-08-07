@@ -184,12 +184,16 @@ export default function PanelPage() {
           description="Resumen diario del club para abrir el día con criterio operativo."
         />
         <section className="app-panel-strong rounded-[2rem] p-5">
-          <EmptyState message={initialError} className="bg-white/70" />
+          <EmptyState
+            title="No se pudo cargar el panel"
+            message={initialError}
+            className="bg-white/70"
+          />
           <button
             type="button"
             onClick={() => void loadPanel("initial")}
             disabled={isInitialLoading}
-            className="app-button-primary mt-4 rounded-full px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-60"
+            className="app-button-primary mt-4 w-full rounded-full px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
           >
             {isInitialLoading ? "Reintentando..." : "Reintentar"}
           </button>

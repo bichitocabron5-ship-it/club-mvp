@@ -14,13 +14,13 @@ function AccessLogItem({
 }) {
   return (
     <div
-      className={`flex items-center justify-between rounded-[1.25rem] border border-black/8 ${backgroundClassName} p-3`}
+      className={`flex flex-col gap-3 rounded-[1.25rem] border border-black/8 ${backgroundClassName} p-3 sm:flex-row sm:items-center sm:justify-between`}
     >
-      <div>
-        <div className="font-semibold">{log.member.fullName}</div>
-        <div className="text-sm app-muted">{log.member.dni}</div>
+      <div className="min-w-0">
+        <div className="break-words font-semibold">{log.member.fullName}</div>
+        <div className="break-words text-sm app-muted">{log.member.dni}</div>
       </div>
-      <div className="text-right">
+      <div className="shrink-0 text-left sm:text-right">
         <div
           className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${
             log.type === "IN"
@@ -50,7 +50,11 @@ export function DashboardStaffAccessSection({
 
       <div className="mt-4 space-y-2">
         {accessLogs.length === 0 ? (
-          <EmptyState message="Sin accesos registrados." className="rounded-[1.5rem]" />
+          <EmptyState
+            title="Sin accesos registrados"
+            message="Cuando haya movimientos de entrada o salida apareceran aqui."
+            className="rounded-[1.5rem] bg-white/70"
+          />
         ) : (
           accessLogs.map((log) => (
             <AccessLogItem key={log.id} log={log} backgroundClassName="bg-white/80" />
@@ -82,7 +86,11 @@ export function DashboardAccessSection({ data }: { data: DashboardData }) {
 
       <div className="mt-4 space-y-2">
         {data.recentAccessLogs.length === 0 ? (
-          <EmptyState message="Sin accesos recientes." className="rounded-[1.5rem]" />
+          <EmptyState
+            title="Sin accesos recientes"
+            message="No hay movimientos de socios en esta lectura del panel."
+            className="rounded-[1.5rem] bg-white/70"
+          />
         ) : (
           data.recentAccessLogs.map((log) => (
             <AccessLogItem key={log.id} log={log} backgroundClassName="bg-white/85" />

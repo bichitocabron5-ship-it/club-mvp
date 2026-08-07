@@ -94,7 +94,7 @@ export function StatCard({
     <div
       className={`app-panel flex h-full min-w-0 flex-col rounded-3xl p-4 md:p-5 ${className}`.trim()}
     >
-      <div className="break-words text-xs font-semibold uppercase leading-4 tracking-[0.14em] app-muted">
+      <div className="break-words text-xs font-semibold uppercase leading-4 app-muted">
         {label}
       </div>
       <div className={`mt-2 break-words leading-tight tabular-nums ${valueClassName}`}>

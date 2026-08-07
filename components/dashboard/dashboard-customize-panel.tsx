@@ -244,14 +244,19 @@ export function DashboardCustomizePanel({
       className="app-panel-strong rounded-[2rem] p-4 md:p-5"
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 id={`${id}-title`} className="text-lg font-black">
-          Personalizar dashboard
-        </h2>
+        <div className="min-w-0">
+          <h2 id={`${id}-title`} className="text-lg font-black">
+            Personalizar dashboard
+          </h2>
+          <p className="mt-1 text-sm app-muted">
+            Preferencias visibles para tu usuario en este panel.
+          </p>
+        </div>
         <button
           type="button"
           onClick={onClose}
           disabled={isSaving}
-          className="app-button-secondary rounded-full px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-60"
+          className="app-button-secondary w-full rounded-full px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
         >
           Cerrar
         </button>
@@ -310,7 +315,7 @@ export function DashboardCustomizePanel({
                     return (
                       <div
                         key={widgetId}
-                        className="flex items-center gap-2 rounded-2xl border border-black/8 bg-white/80 px-3 py-2"
+                        className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 rounded-2xl border border-black/8 bg-white/80 px-3 py-2"
                       >
                         <label
                           htmlFor={checkboxId}
@@ -329,7 +334,7 @@ export function DashboardCustomizePanel({
                             disabled={isSaving}
                             className="h-4 w-4 shrink-0 accent-emerald-700 disabled:cursor-not-allowed"
                           />
-                          <span className="truncate">{label}</span>
+                          <span className="min-w-0 break-words">{label}</span>
                         </label>
 
                         <button
@@ -339,7 +344,7 @@ export function DashboardCustomizePanel({
                           }
                           disabled={isSaving || index === 0}
                           aria-label={`Subir ${label}`}
-                          className="rounded-full border border-black/10 px-2 py-1 text-sm font-black disabled:cursor-not-allowed disabled:opacity-40"
+                          className="min-h-9 min-w-9 rounded-full border border-black/10 px-2 py-1 text-sm font-black disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           ↑
                         </button>
@@ -352,7 +357,7 @@ export function DashboardCustomizePanel({
                             isSaving || index === sectionWidgetIds.length - 1
                           }
                           aria-label={`Bajar ${label}`}
-                          className="rounded-full border border-black/10 px-2 py-1 text-sm font-black disabled:cursor-not-allowed disabled:opacity-40"
+                          className="min-h-9 min-w-9 rounded-full border border-black/10 px-2 py-1 text-sm font-black disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           ↓
                         </button>
@@ -380,7 +385,7 @@ export function DashboardCustomizePanel({
           type="button"
           onClick={() => void savePreferences(defaultPreferences, "reset")}
           disabled={isSaving}
-          className="app-button-secondary rounded-full px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-60"
+          className="app-button-secondary w-full rounded-full px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
         >
           {savingAction === "reset"
             ? "Restaurando..."
@@ -390,7 +395,7 @@ export function DashboardCustomizePanel({
           type="button"
           onClick={onClose}
           disabled={isSaving}
-          className="rounded-full px-4 py-2 text-sm font-bold hover:bg-black/[0.04] disabled:cursor-not-allowed disabled:opacity-60"
+          className="w-full rounded-full px-4 py-2 text-sm font-bold hover:bg-black/[0.04] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
         >
           Cancelar
         </button>
@@ -400,7 +405,7 @@ export function DashboardCustomizePanel({
             void savePreferences(toPreferencesConfig(draft), "save")
           }
           disabled={isSaving}
-          className="app-button-primary rounded-full px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-60"
+          className="app-button-primary w-full rounded-full px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
         >
           {savingAction === "save" ? "Guardando..." : "Guardar cambios"}
         </button>
