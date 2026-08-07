@@ -14,7 +14,7 @@ function MarginBadge({
   estimated: boolean;
 }) {
   return (
-    <div className="flex items-center gap-2 text-xs">
+    <div className="flex flex-wrap items-center gap-2 text-xs">
       <span className="rounded-full bg-sky-100 px-3 py-1 font-bold text-sky-800">
         {formatPercent(marginPercent)}
       </span>
@@ -34,35 +34,46 @@ export function DashboardSalesSection({ data }: { data: DashboardData }) {
 
         <div className="mt-4 space-y-3">
           {!data.topProductsToday || data.topProductsToday.length === 0 ? (
-            <EmptyState message="Sin ventas de productos hoy." className="rounded-[1.5rem]" />
+            <EmptyState
+              title="Sin ventas de productos hoy"
+              message="El ranking se completara cuando se registren ventas del dia."
+              className="rounded-[1.5rem] bg-white/70"
+            />
           ) : (
             data.topProductsToday.slice(0, 8).map((product) => (
               <div
                 key={product.productId}
                 className="rounded-[1.5rem] border border-black/8 bg-white/85 p-4"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="font-semibold">{product.name}</div>
-                    <div className="mt-1 text-sm app-muted">
-                      {product.salesCount} venta(s) · {formatQty(product.qty, product.unit)}
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="break-words font-semibold">{product.name}</div>
+                    <div className="mt-1 break-words text-sm app-muted">
+                      {product.salesCount} venta(s) -{" "}
+                      {formatQty(product.qty, product.unit)}
                     </div>
                   </div>
-                  <MarginBadge
-                    marginPercent={product.marginPercent}
-                    estimated={product.marginIsEstimated}
-                  />
+                  <div className="shrink-0">
+                    <MarginBadge
+                      marginPercent={product.marginPercent}
+                      estimated={product.marginIsEstimated}
+                    />
+                  </div>
                 </div>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  <div className="rounded-2xl bg-black/[0.03] px-3 py-2">
-                    <div className="text-xs uppercase tracking-[0.18em] app-muted">Revenue</div>
-                    <div className="mt-1 font-black">{formatCurrency(product.revenue)}</div>
+                  <div className="min-w-0 rounded-2xl bg-black/[0.03] px-3 py-2">
+                    <div className="text-xs uppercase app-muted">Revenue</div>
+                    <div className="mt-1 break-words font-black">
+                      {formatCurrency(product.revenue)}
+                    </div>
                   </div>
-                  <div className="rounded-2xl bg-black/[0.03] px-3 py-2">
-                    <div className="text-xs uppercase tracking-[0.18em] app-muted">
+                  <div className="min-w-0 rounded-2xl bg-black/[0.03] px-3 py-2">
+                    <div className="text-xs uppercase app-muted">
                       Beneficio
                     </div>
-                    <div className="mt-1 font-black">{formatCurrency(product.profit)}</div>
+                    <div className="mt-1 break-words font-black">
+                      {formatCurrency(product.profit)}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -79,37 +90,46 @@ export function DashboardSalesSection({ data }: { data: DashboardData }) {
 
         <div className="mt-4 space-y-3">
           {!data.topMembersToday || data.topMembersToday.length === 0 ? (
-            <EmptyState message="Sin ventas por socio hoy." className="rounded-[1.5rem]" />
+            <EmptyState
+              title="Sin ventas por socio hoy"
+              message="El ranking se completara cuando haya ventas asociadas a socios."
+              className="rounded-[1.5rem] bg-white/70"
+            />
           ) : (
             data.topMembersToday.slice(0, 8).map((member) => (
               <div
                 key={member.memberId}
                 className="rounded-[1.5rem] border border-black/8 bg-white/85 p-4"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="font-semibold">{member.fullName}</div>
-                    <div className="mt-1 text-sm app-muted">
-                      {member.dni} · {member.salesCount} venta(s) · {formatQty(member.totalQty)}
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="break-words font-semibold">{member.fullName}</div>
+                    <div className="mt-1 break-words text-sm app-muted">
+                      {member.dni} - {member.salesCount} venta(s) -{" "}
+                      {formatQty(member.totalQty)}
                     </div>
                   </div>
-                  <MarginBadge
-                    marginPercent={member.marginPercent}
-                    estimated={member.marginIsEstimated}
-                  />
+                  <div className="shrink-0">
+                    <MarginBadge
+                      marginPercent={member.marginPercent}
+                      estimated={member.marginIsEstimated}
+                    />
+                  </div>
                 </div>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  <div className="rounded-2xl bg-black/[0.03] px-3 py-2">
-                    <div className="text-xs uppercase tracking-[0.18em] app-muted">Revenue</div>
-                    <div className="mt-1 font-black">
+                  <div className="min-w-0 rounded-2xl bg-black/[0.03] px-3 py-2">
+                    <div className="text-xs uppercase app-muted">Revenue</div>
+                    <div className="mt-1 break-words font-black">
                       {formatCurrency(member.totalAmount)}
                     </div>
                   </div>
-                  <div className="rounded-2xl bg-black/[0.03] px-3 py-2">
-                    <div className="text-xs uppercase tracking-[0.18em] app-muted">
+                  <div className="min-w-0 rounded-2xl bg-black/[0.03] px-3 py-2">
+                    <div className="text-xs uppercase app-muted">
                       Beneficio
                     </div>
-                    <div className="mt-1 font-black">{formatCurrency(member.profit)}</div>
+                    <div className="mt-1 break-words font-black">
+                      {formatCurrency(member.profit)}
+                    </div>
                   </div>
                 </div>
               </div>

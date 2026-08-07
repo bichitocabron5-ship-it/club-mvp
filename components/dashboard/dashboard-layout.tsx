@@ -4,6 +4,7 @@ import type { KeyboardEvent, ReactNode } from "react";
 import { useMemo, useState } from "react";
 
 import { DashboardCustomizePanel } from "@/components/dashboard/dashboard-customize-panel";
+import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 
 export type DashboardSectionConfig = {
@@ -199,13 +200,13 @@ export function DashboardLayout({
 
   const customizeControls = (
     <>
-      <div className="flex justify-end">
+      <div className="flex justify-stretch sm:justify-end">
         <button
           type="button"
           aria-expanded={isCustomizeOpen}
           aria-controls={customizePanelId}
           onClick={() => setIsCustomizeOpen((isOpen) => !isOpen)}
-          className="app-button-secondary rounded-full px-4 py-2 text-sm font-bold"
+          className="app-button-secondary w-full rounded-full px-4 py-2 text-sm font-bold sm:w-auto"
         >
           Personalizar dashboard
         </button>
@@ -251,7 +252,8 @@ export function DashboardLayout({
           <div
             role="tablist"
             aria-label="Navegación interna del dashboard"
-            className="flex gap-2 overflow-x-auto"
+            aria-orientation="horizontal"
+            className="flex gap-2 overflow-x-auto pb-1"
           >
             {visibleSections.map((section, index) => {
               const isActive = section.id === activeSection.id;
@@ -267,7 +269,7 @@ export function DashboardLayout({
                   tabIndex={isActive ? 0 : -1}
                   onClick={() => setSelectedSectionId(section.id)}
                   onKeyDown={(event) => handleTabKeyDown(event, index)}
-                  className={`min-w-36 rounded-[1.1rem] px-4 py-3 text-left text-sm font-black ${
+                  className={`min-w-[9rem] shrink-0 rounded-[1.1rem] px-4 py-3 text-left text-sm font-black outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 ${
                     isActive
                       ? "app-button-primary"
                       : "text-[var(--foreground)] hover:bg-black/[0.04]"
@@ -288,8 +290,8 @@ export function DashboardLayout({
         </section>
 
         <div className="space-y-5">
-          <div>
-            <h2 className="text-xl font-black">{activeSection.label}</h2>
+          <div className="min-w-0">
+            <h2 className="break-words text-xl font-black">{activeSection.label}</h2>
             <p className="mt-1 max-w-3xl text-sm leading-6 app-muted">
               {activeSection.description}
             </p>
@@ -309,9 +311,14 @@ export function DashboardLayout({
                 data-dashboard-section={section.id}
               >
                 {sectionWidgets.length === 0 ? (
-                  <div className="app-panel rounded-[2rem] p-5 text-sm app-muted">
-                    {section.emptyMessage ?? "Sin widgets visibles."}
-                  </div>
+                  <EmptyState
+                    title="Sin widgets visibles"
+                    message={
+                      section.emptyMessage ??
+                      "Activa algun widget de esta seccion desde Personalizar dashboard."
+                    }
+                    className="rounded-[2rem] bg-white/80 p-5"
+                  />
                 ) : (
                   <div className="grid gap-4 xl:grid-cols-12">
                     {sectionWidgets.map((widget) => (

@@ -8,16 +8,17 @@ import type { DashboardAuditLog } from "@/lib/types";
 export function DashboardAuditSection({ logs }: { logs: DashboardAuditLog[] }) {
   return (
     <section className="app-panel rounded-[2rem] p-5">
-      <h2 className="text-lg font-black">Últimas acciones</h2>
+      <h2 className="text-lg font-black">Ultimas acciones</h2>
       <p className="mt-1 text-sm app-muted">
-        Últimos eventos de auditoría registrados en el sistema.
+        Eventos recientes de auditoria registrados en el sistema.
       </p>
 
       <div className="mt-4 space-y-3">
         {logs.length === 0 ? (
           <EmptyState
-            message="Sin eventos recientes de auditoría."
-            className="rounded-[1.5rem]"
+            title="Sin eventos recientes"
+            message="No hay actividad de auditoria registrada en esta lectura."
+            className="rounded-[1.5rem] bg-white/70"
           />
         ) : (
           logs.map((log) => (
@@ -26,22 +27,25 @@ export function DashboardAuditSection({ logs }: { logs: DashboardAuditLog[] }) {
               className="rounded-[1.5rem] border border-black/8 bg-white/85 p-4"
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <div className="font-semibold">{log.summary}</div>
-                  <div className="mt-1 text-sm app-muted">
-                    {log.actorUser?.name || log.actorEmail || "Sistema"} · {log.entityType}
+                <div className="min-w-0">
+                  <div className="break-words font-semibold">{log.summary}</div>
+                  <div className="mt-1 break-words text-sm app-muted">
+                    {log.actorUser?.name || log.actorEmail || "Sistema"} -{" "}
+                    {log.entityType}
                     {log.entityId ? ` #${log.entityId}` : ""}
                   </div>
                 </div>
                 <div
-                  className={`rounded-full px-3 py-1 text-xs font-bold ${actionTone(
+                  className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${actionTone(
                     log.action
                   )}`}
                 >
                   {log.action}
                 </div>
               </div>
-              <div className="mt-2 text-xs app-muted">{formatDateTime(log.createdAt)}</div>
+              <div className="mt-2 text-xs app-muted">
+                {formatDateTime(log.createdAt)}
+              </div>
             </div>
           ))
         )}

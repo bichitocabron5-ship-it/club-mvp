@@ -15,8 +15,9 @@ export function DashboardAlertsSection({ alerts }: { alerts: DashboardAlert[] })
       <div className="mt-4 space-y-3">
         {alerts.length === 0 ? (
           <EmptyState
-            message="Sin alertas operativas pendientes."
-            className="rounded-[1.5rem]"
+            title="Sin alertas pendientes"
+            message="No hay incidencias operativas que requieran seguimiento ahora."
+            className="rounded-[1.5rem] bg-white/70"
           />
         ) : (
           alerts.map((alert) => (
@@ -24,15 +25,15 @@ export function DashboardAlertsSection({ alerts }: { alerts: DashboardAlert[] })
               key={alert.id}
               className={`rounded-[1.5rem] border p-4 ${alertClassName(alert)}`}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="font-black">{alert.title}</div>
-                  <div className="mt-1 text-sm">{alert.description}</div>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="break-words font-black">{alert.title}</div>
+                  <div className="mt-1 break-words text-sm">{alert.description}</div>
                 </div>
                 {alert.href ? (
                   <Link
                     href={alert.href}
-                    className="rounded-full border border-current/15 px-3 py-1 text-xs font-bold"
+                    className="inline-flex w-full shrink-0 justify-center rounded-full border border-current/15 px-3 py-1 text-xs font-bold sm:w-auto"
                   >
                     Abrir
                   </Link>
