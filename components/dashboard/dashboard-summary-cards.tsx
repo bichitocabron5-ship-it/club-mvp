@@ -17,7 +17,11 @@ export function DashboardSummaryCards({
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Socios con acceso hoy" value={data.summary.activeMembersToday} />
         <StatCard label="Dentro ahora" value={data.summary.currentInsideCount} />
-        <StatCard label="Ventas hoy" value={data.summary.salesTodayCount} />
+        <StatCard
+          label="Ventas hoy"
+          value={data.summary.salesTodayCount}
+          comparison={data.comparisons.salesCount}
+        />
         <StatCard
           label="Stock bajo"
           value={data.summary.lowStockProductsCount}
@@ -33,10 +37,15 @@ export function DashboardSummaryCards({
         <StatCard
           label="Ventas hoy"
           value={formatCurrency(data.summary.salesTodayTotal)}
+          comparison={data.comparisons.salesTotal}
           className="bg-emerald-50"
           valueClassName="text-3xl font-black text-emerald-800"
         />
-        <StatCard label="Tickets hoy" value={data.summary.salesTodayCount} />
+        <StatCard
+          label="Tickets hoy"
+          value={data.summary.salesTodayCount}
+          comparison={data.comparisons.salesCount}
+        />
         <StatCard
           label="Beneficio hoy"
           value={formatCurrency(data.summary.profitToday)}
