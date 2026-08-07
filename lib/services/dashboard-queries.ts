@@ -2,8 +2,37 @@ import { buildTodayDayClosureSummary } from "@/lib/day-closure";
 import type { DashboardQueryResultDto } from "@/lib/dtos/dashboard";
 import { prisma } from "@/lib/prisma";
 
+const dashboardSaleSelect = {
+  id: true,
+  memberId: true,
+  qty: true,
+  totalAmount: true,
+  finalAmount: true,
+  originalAmount: true,
+  discountAmount: true,
+  discountPercent: true,
+  unitCost: true,
+  profit: true,
+  createdAt: true,
+  member: {
+    select: {
+      fullName: true,
+      dni: true,
+    },
+  },
+  product: {
+    select: {
+      id: true,
+      name: true,
+      unit: true,
+    },
+  },
+} as const;
+
 type DashboardQueryInput = {
   day: string;
+  previousDay: string;
+  previousDayStart: Date;
   start: Date;
   end: Date;
   isAdmin: boolean;
@@ -13,6 +42,8 @@ type DashboardQueryInput = {
 
 export async function getDashboardRecords({
   day,
+  previousDay,
+  previousDayStart,
   start,
   end,
   isAdmin,
@@ -30,6 +61,8 @@ export async function getDashboardRecords({
     accessInToday,
     sevenDaySales,
     sevenDayCashMoves,
+    previousDaySales,
+    comparisonCashMoves,
   ] = await Promise.all([
     buildTodayDayClosureSummary(),
     prisma.dayClosure.findUnique({
@@ -48,32 +81,7 @@ export async function getDashboardRecords({
       orderBy: {
         createdAt: "desc",
       },
-      select: {
-        id: true,
-        memberId: true,
-        qty: true,
-        totalAmount: true,
-        finalAmount: true,
-        originalAmount: true,
-        discountAmount: true,
-        discountPercent: true,
-        unitCost: true,
-        profit: true,
-        createdAt: true,
-        member: {
-          select: {
-            fullName: true,
-            dni: true,
-          },
-        },
-        product: {
-          select: {
-            id: true,
-            name: true,
-            unit: true,
-          },
-        },
-      },
+      select: dashboardSaleSelect,
     }),
     prisma.product.findMany({
       where: {
@@ -198,12 +206,52 @@ export async function getDashboardRecords({
           },
         })
       : Promise.resolve([]),
+    isAdmin
+      ? Promise.resolve([])
+      : prisma.sale.findMany({
+          where: {
+            cancelledAt: null,
+            createdAt: {
+              gte: previousDayStart,
+              lt: start,
+            },
+          },
+          select: dashboardSaleSelect,
+        }),
+    prisma.cashMove.findMany({
+      where: {
+        OR: [
+          {
+            day: {
+              in: [previousDay, day],
+            },
+          },
+          {
+            day: null,
+            createdAt: {
+              gte: previousDayStart,
+              lt: end,
+            },
+          },
+        ],
+      },
+      select: {
+        day: true,
+        createdAt: true,
+        type: true,
+        amount: true,
+        source: true,
+        note: true,
+        paymentMethod: true,
+      },
+    }),
   ]);
 
   return {
     dayClosureSummary,
     dayClosure,
     sales,
+    previousDaySales,
     products,
     members,
     recentAuditLogs,
@@ -211,5 +259,6 @@ export async function getDashboardRecords({
     accessInToday,
     sevenDaySales,
     sevenDayCashMoves,
+    comparisonCashMoves,
   };
 }

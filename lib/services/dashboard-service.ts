@@ -1,6 +1,7 @@
 import { getDayClosureStatus } from "@/lib/day-closure";
 import type { DashboardServiceInputDto } from "@/lib/dtos/dashboard";
 import {
+  getDashboardComparisons,
   getDailyFinance,
   getDashboardSalesSummary,
   getLowStockProducts,
@@ -25,12 +26,17 @@ export async function getDashboardData({
 }: DashboardServiceInputDto): Promise<DashboardData> {
   const isAdmin = role === "ADMIN";
   const { start, end, day } = getTodayRange();
+  const [previousDay] = buildDashboardDayKeys(day, 2);
+  const previousDayStart = new Date(start);
+  previousDayStart.setDate(previousDayStart.getDate() - 1);
   const sevenDayKeys = buildDashboardDayKeys(day, 7);
   const sevenDayStart = new Date(start);
   sevenDayStart.setDate(sevenDayStart.getDate() - 6);
 
   const records = await getDashboardRecords({
     day,
+    previousDay,
+    previousDayStart,
     start,
     end,
     isAdmin,
@@ -54,7 +60,7 @@ export async function getDashboardData({
     generatedAt: new Date().toISOString(),
     summary: {
       salesTodayTotal: salesSummary.salesTodayTotal,
-      salesTodayCount: sales.length,
+      salesTodayCount: salesSummary.salesTodayCount,
       profitToday: salesSummary.profitToday,
       marginPercent: salesSummary.marginPercent,
       marginIsEstimated: salesSummary.marginIsEstimated,
@@ -64,10 +70,23 @@ export async function getDashboardData({
       currentInsideCount,
       lowStockProductsCount: lowStockProducts.length,
     },
+    comparisons: getDashboardComparisons({
+      currentSalesMetrics: {
+        total: salesSummary.salesTodayTotal,
+        count: salesSummary.salesTodayCount,
+        averageTicket: salesSummary.averageTicketToday,
+      },
+      previousDaySales: records.previousDaySales,
+      sevenDaySales: records.sevenDaySales,
+      isAdmin,
+      currentDay: day,
+      previousDay,
+      cashMoves: records.comparisonCashMoves,
+    }),
     cash: isAdmin
       ? {
           salesTodayTotal: salesSummary.salesTodayTotal,
-          salesTodayCount: sales.length,
+          salesTodayCount: salesSummary.salesTodayCount,
           profitToday: salesSummary.profitToday,
           marginPercent: salesSummary.marginPercent,
           marginIsEstimated: salesSummary.marginIsEstimated,

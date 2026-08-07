@@ -1,5 +1,12 @@
-import { formatLocalDay, normalizeCashMoveSource } from "@/lib/cash-move";
+import {
+  formatLocalDay,
+  normalizeCashMovePaymentMethod,
+  normalizeCashMoveSource,
+} from "@/lib/cash-move";
 import type {
+  DashboardComparisonCashMoveRecord,
+  DashboardComparisonMetricDto,
+  DashboardComparisonsDto,
   DashboardMemberAggregateDto,
   DashboardProductAggregateDto,
   DashboardProductRecord,
@@ -29,6 +36,32 @@ import type {
 
 const HIGH_DISCOUNT_PERCENT_THRESHOLD = 20;
 const HIGH_DISCOUNT_AMOUNT_THRESHOLD = 20;
+
+type DashboardSalesMetrics = {
+  total: number;
+  count: number;
+  averageTicket: number;
+};
+
+type DashboardRevenueSale = {
+  totalAmount: number;
+  finalAmount: number | null;
+};
+
+type DashboardPaymentTotals = {
+  cashTotal: number;
+  cardTotal: number;
+};
+
+type DashboardComparisonsInput = {
+  currentSalesMetrics: DashboardSalesMetrics;
+  previousDaySales: DashboardRawSaleRecord[];
+  sevenDaySales: DashboardSevenDaySaleRecord[];
+  isAdmin: boolean;
+  currentDay: string;
+  previousDay: string;
+  cashMoves: DashboardComparisonCashMoveRecord[];
+};
 
 export function normalizeDashboardSales(
   sales: DashboardRawSaleRecord[]
@@ -60,10 +93,130 @@ export function getLowStockProducts(
     .map(serializeDashboardProduct);
 }
 
-export function getDashboardSalesSummary(sales: DashboardSaleRecord[]) {
-  const salesTodayTotal = roundCurrency(
+function getDashboardSalesMetrics(sales: DashboardRevenueSale[]): DashboardSalesMetrics {
+  const total = roundCurrency(
     sales.reduce((acc, sale) => acc + getDashboardSaleRevenue(sale), 0)
   );
+
+  return {
+    total,
+    count: sales.length,
+    averageTicket: sales.length > 0 ? roundCurrency(total / sales.length) : 0,
+  };
+}
+
+function buildDashboardComparisonMetric(
+  current: number,
+  previous: number
+): DashboardComparisonMetricDto {
+  const currentValue = roundCurrency(current);
+  const previousValue = roundCurrency(previous);
+  const delta = roundCurrency(currentValue - previousValue);
+
+  return {
+    current: currentValue,
+    previous: previousValue,
+    delta,
+    deltaPercent:
+      previousValue === 0 ? null : roundCurrency((delta / previousValue) * 100),
+  };
+}
+
+function getPaymentComparisonDay(
+  cashMove: DashboardComparisonCashMoveRecord,
+  currentDay: string,
+  previousDay: string
+) {
+  const moveDay = cashMove.day || formatLocalDay(cashMove.createdAt);
+
+  if (moveDay === currentDay) {
+    return "current" as const;
+  }
+
+  if (moveDay === previousDay) {
+    return "previous" as const;
+  }
+
+  return null;
+}
+
+function getDashboardPaymentTotals(
+  cashMoves: DashboardComparisonCashMoveRecord[],
+  currentDay: string,
+  previousDay: string
+) {
+  const totals: Record<"current" | "previous", DashboardPaymentTotals> = {
+    current: {
+      cashTotal: 0,
+      cardTotal: 0,
+    },
+    previous: {
+      cashTotal: 0,
+      cardTotal: 0,
+    },
+  };
+
+  for (const cashMove of cashMoves) {
+    const source = normalizeCashMoveSource(cashMove.source, {
+      type: cashMove.type,
+      note: cashMove.note,
+    });
+    const isSaleIncome = cashMove.type === "income" && source === "SALE";
+    const isSaleCancellation =
+      cashMove.type === "expense" && source === "SALE_CANCELLED";
+
+    if (!isSaleIncome && !isSaleCancellation) {
+      continue;
+    }
+
+    const comparisonDay = getPaymentComparisonDay(
+      cashMove,
+      currentDay,
+      previousDay
+    );
+
+    if (!comparisonDay) {
+      continue;
+    }
+
+    const amount = Number(cashMove.amount);
+    const signedAmount = isSaleIncome ? amount : -amount;
+    const paymentMethod = normalizeCashMovePaymentMethod(
+      cashMove.paymentMethod
+    );
+
+    if (paymentMethod === "CASH") {
+      totals[comparisonDay].cashTotal += signedAmount;
+    }
+
+    if (paymentMethod === "CARD") {
+      totals[comparisonDay].cardTotal += signedAmount;
+    }
+  }
+
+  return totals;
+}
+
+function getPreviousSalesForComparisons({
+  isAdmin,
+  previousDay,
+  previousDaySales,
+  sevenDaySales,
+}: Pick<
+  DashboardComparisonsInput,
+  "isAdmin" | "previousDay" | "previousDaySales" | "sevenDaySales"
+>): DashboardRevenueSale[] {
+  if (isAdmin) {
+    return sevenDaySales.filter(
+      (sale) => formatLocalDay(sale.createdAt) === previousDay
+    );
+  }
+
+  return normalizeDashboardSales(previousDaySales);
+}
+
+export function getDashboardSalesSummary(sales: DashboardSaleRecord[]) {
+  const salesMetrics = getDashboardSalesMetrics(sales);
   const profitToday = roundCurrency(
     sales.reduce((acc, sale) => acc + Number(sale.profit || 0), 0)
   );
@@ -72,9 +225,11 @@ export function getDashboardSalesSummary(sales: DashboardSaleRecord[]) {
   );
 
   return {
-    salesTodayTotal,
+    salesTodayTotal: salesMetrics.total,
+    salesTodayCount: salesMetrics.count,
+    averageTicketToday: salesMetrics.averageTicket,
     profitToday,
-    marginPercent: getDashboardMarginPercent(profitToday, salesTodayTotal),
+    marginPercent: getDashboardMarginPercent(profitToday, salesMetrics.total),
     marginIsEstimated,
     discountsTodayTotal: roundCurrency(
       sales.reduce((acc, sale) => acc + Number(sale.discountAmount || 0), 0)
@@ -84,6 +239,53 @@ export function getDashboardSalesSummary(sales: DashboardSaleRecord[]) {
         Number(sale.discountPercent || 0) >= HIGH_DISCOUNT_PERCENT_THRESHOLD ||
         Number(sale.discountAmount || 0) >= HIGH_DISCOUNT_AMOUNT_THRESHOLD
     ).length,
+  };
+}
+
+export function getDashboardComparisons({
+  currentSalesMetrics,
+  previousDaySales,
+  sevenDaySales,
+  isAdmin,
+  currentDay,
+  previousDay,
+  cashMoves,
+}: DashboardComparisonsInput): DashboardComparisonsDto {
+  const previousSalesMetrics = getDashboardSalesMetrics(
+    getPreviousSalesForComparisons({
+      isAdmin,
+      previousDay,
+      previousDaySales,
+      sevenDaySales,
+    })
+  );
+  const paymentTotals = getDashboardPaymentTotals(
+    cashMoves,
+    currentDay,
+    previousDay
+  );
+
+  return {
+    salesTotal: buildDashboardComparisonMetric(
+      currentSalesMetrics.total,
+      previousSalesMetrics.total
+    ),
+    salesCount: buildDashboardComparisonMetric(
+      currentSalesMetrics.count,
+      previousSalesMetrics.count
+    ),
+    averageTicket: buildDashboardComparisonMetric(
+      currentSalesMetrics.averageTicket,
+      previousSalesMetrics.averageTicket
+    ),
+    cashTotal: buildDashboardComparisonMetric(
+      paymentTotals.current.cashTotal,
+      paymentTotals.previous.cashTotal
+    ),
+    cardTotal: buildDashboardComparisonMetric(
+      paymentTotals.current.cardTotal,
+      paymentTotals.previous.cardTotal
+    ),
   };
 }
 
