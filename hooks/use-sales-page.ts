@@ -67,7 +67,8 @@ export function useSalesPage() {
   const [recentSalesDayClosed, setRecentSalesDayClosed] = useState(false);
   const [recentSalesError, setRecentSalesError] = useState("");
   const [showRecentSales, setShowRecentSales] = useState(false);
-  const [error, setError] = useState("");
+  const [bootstrapError, setBootstrapError] = useState("");
+  const [memberLoadError, setMemberLoadError] = useState("");
   const [loading, setLoading] = useState(false);
   const [rfidInput, setRfidInput] = useState("");
   const [rfidError, setRfidError] = useState("");
@@ -79,6 +80,7 @@ export function useSalesPage() {
   const rfidSubmittingRef = useRef(false);
   const rfidScanBufferRef = useRef<RfidScanBuffer | null>(null);
   const currentMemberIdRef = useRef("");
+  const memberContextVersionRef = useRef(0);
 
   const focusRfidInput = useCallback(() => {
     rfidRef.current?.focus();
@@ -90,12 +92,22 @@ export function useSalesPage() {
     }, 0);
   }, []);
 
+  const updateCurrentMemberContext = useCallback((nextMemberId: string) => {
+    const normalizedMemberId = nextMemberId.trim();
+
+    if (currentMemberIdRef.current !== normalizedMemberId) {
+      memberContextVersionRef.current += 1;
+    }
+
+    currentMemberIdRef.current = normalizedMemberId;
+  }, []);
+
   const handleMemberLoadSuccess = useCallback(() => {
-    setError("");
+    setMemberLoadError("");
   }, []);
 
   const handleMemberLoadError = useCallback((message: string) => {
-    setError(message);
+    setMemberLoadError(message);
   }, []);
 
   const focusProductSearchInput = useCallback(() => {
@@ -126,6 +138,8 @@ export function useSalesPage() {
     onAddProduct: cart.addProduct,
   });
 
+  const error = bootstrapError || memberLoadError;
+
   const loadRecentSales = useCallback(async () => {
     const data = await fetchJson<RecentSalesResponse>("/api/sales");
     setRecentSales(data.sales);
@@ -134,8 +148,8 @@ export function useSalesPage() {
   }, []);
 
   useEffect(() => {
-    currentMemberIdRef.current = member.memberId.trim();
-  }, [member.memberId]);
+    updateCurrentMemberContext(member.memberId);
+  }, [member.memberId, updateCurrentMemberContext]);
 
   useEffect(() => {
     const focusTimer = window.setTimeout(() => {
@@ -162,12 +176,14 @@ export function useSalesPage() {
         if (!cancelled) {
           setMembers(membersData);
           setProducts(productsData);
-          setError("");
+          setBootstrapError("");
         }
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Error cargando datos");
+          setBootstrapError(
+            err instanceof Error ? err.message : "Error cargando datos"
+          );
         }
       });
 
@@ -218,19 +234,19 @@ export function useSalesPage() {
     loading;
 
   function handleMemberChange(nextMemberId: string) {
-    currentMemberIdRef.current = nextMemberId.trim();
+    updateCurrentMemberContext(nextMemberId);
     member.handleMemberChange(nextMemberId);
     cart.clearCart();
   }
 
   function handleNextMember() {
-    currentMemberIdRef.current = "";
+    updateCurrentMemberContext("");
     member.handleClearMember();
     cart.clearCart();
     productFilters.resetProductFilters();
     setRfidInput("");
     setRfidError("");
-    setError("");
+    setMemberLoadError("");
     focusRfidInput();
   }
 
@@ -239,6 +255,10 @@ export function useSalesPage() {
 
     submittingRef.current = true;
     const selectedMemberId = member.memberId.trim();
+    const selectedMemberContextVersion = memberContextVersionRef.current;
+    const isWithdrawalContextCurrent = () =>
+      currentMemberIdRef.current === selectedMemberId &&
+      memberContextVersionRef.current === selectedMemberContextVersion;
 
     const items = cart.cartLines
       .filter((line) => !line.conversionError)
@@ -276,7 +296,9 @@ export function useSalesPage() {
 
       alert("Retirada registrada");
 
-      cart.clearCart();
+      if (isWithdrawalContextCurrent()) {
+        cart.clearCart();
+      }
 
       const refreshedProducts = await fetchJson<ProductSummary[]>("/api/products");
       setProducts(refreshedProducts);
@@ -288,9 +310,8 @@ export function useSalesPage() {
       await member.loadMemberRecentSales(selectedMemberId);
       await loadRecentSales();
 
-      setRfidInput("");
-
-      if (currentMemberIdRef.current === selectedMemberId) {
+      if (isWithdrawalContextCurrent()) {
+        setRfidInput("");
         focusProductSearchInput();
       }
     } catch (err) {
@@ -387,7 +408,7 @@ export function useSalesPage() {
       const selectedMember = (await res.json()) as MemberSummary;
       const nextMemberId = String(selectedMember.id);
 
-      currentMemberIdRef.current = nextMemberId;
+      updateCurrentMemberContext(nextMemberId);
       member.setMemberId(nextMemberId);
       member.setMemberSearch(selectedMember.fullName);
       cart.clearCart();
