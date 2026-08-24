@@ -28,6 +28,7 @@ export function useSalesMember({
   const [memberId, setMemberId] = useState("");
   const [memberStatus, setMemberStatus] =
     useState<MemberOperationalStatus | null>(null);
+  const [memberStatusLoading, setMemberStatusLoading] = useState(false);
   const [memberSearch, setMemberSearch] = useState("");
   const [memberRecentSales, setMemberRecentSales] = useState<
     MemberRecentSale[]
@@ -35,12 +36,12 @@ export function useSalesMember({
   const [memberRecentSalesLoading, setMemberRecentSalesLoading] =
     useState(false);
   const [memberRecentSalesError, setMemberRecentSalesError] = useState("");
+  const currentMemberIdRef = useRef("");
+  const memberStatusRequestIdRef = useRef(0);
   const memberRecentSalesRequestIdRef = useRef(0);
 
   const loadMemberRecentSales = useCallback(async (selectedMemberId: string) => {
     const normalizedMemberId = selectedMemberId.trim();
-    const requestId = memberRecentSalesRequestIdRef.current + 1;
-    memberRecentSalesRequestIdRef.current = requestId;
 
     if (!normalizedMemberId) {
       setMemberRecentSales([]);
@@ -49,6 +50,12 @@ export function useSalesMember({
       return;
     }
 
+    if (currentMemberIdRef.current !== normalizedMemberId) {
+      return;
+    }
+
+    const requestId = memberRecentSalesRequestIdRef.current + 1;
+    memberRecentSalesRequestIdRef.current = requestId;
     setMemberRecentSalesLoading(true);
 
     try {
@@ -56,19 +63,32 @@ export function useSalesMember({
         `/api/members/${normalizedMemberId}/recent-sales`
       );
 
-      if (memberRecentSalesRequestIdRef.current !== requestId) return;
+      if (
+        memberRecentSalesRequestIdRef.current !== requestId ||
+        currentMemberIdRef.current !== normalizedMemberId
+      ) {
+        return;
+      }
 
       setMemberRecentSales(data.sales);
       setMemberRecentSalesError("");
     } catch (err) {
-      if (memberRecentSalesRequestIdRef.current !== requestId) return;
+      if (
+        memberRecentSalesRequestIdRef.current !== requestId ||
+        currentMemberIdRef.current !== normalizedMemberId
+      ) {
+        return;
+      }
 
       setMemberRecentSales([]);
       setMemberRecentSalesError(
         err instanceof Error ? err.message : "Error cargando historial"
       );
     } finally {
-      if (memberRecentSalesRequestIdRef.current === requestId) {
+      if (
+        memberRecentSalesRequestIdRef.current === requestId &&
+        currentMemberIdRef.current === normalizedMemberId
+      ) {
         setMemberRecentSalesLoading(false);
       }
     }
@@ -83,25 +103,42 @@ export function useSalesMember({
   }, [loadMemberRecentSales, memberId]);
 
   useEffect(() => {
-    if (!memberId) return;
+    const selectedMemberId = memberId.trim();
+
+    if (!selectedMemberId) {
+      return;
+    }
 
     let cancelled = false;
+    const requestId = memberStatusRequestIdRef.current;
 
     void Promise.all([
-      fetchJson<TodayTotals>(`/api/members/${memberId}/today`),
+      fetchJson<TodayTotals>(`/api/members/${selectedMemberId}/today`),
       fetchJson<MemberOperationalStatus>(
-        `/api/members/${memberId}/operational-status`
+        `/api/members/${selectedMemberId}/operational-status`
       ),
     ])
       .then(([todayData, statusData]) => {
-        if (!cancelled) {
+        if (
+          !cancelled &&
+          memberStatusRequestIdRef.current === requestId &&
+          currentMemberIdRef.current === selectedMemberId
+        ) {
           setToday(todayData);
           setMemberStatus(statusData);
+          setMemberStatusLoading(false);
           onMemberLoadSuccess();
         }
       })
       .catch((err) => {
-        if (!cancelled) {
+        if (
+          !cancelled &&
+          memberStatusRequestIdRef.current === requestId &&
+          currentMemberIdRef.current === selectedMemberId
+        ) {
+          setToday(emptySalesToday);
+          setMemberStatus(null);
+          setMemberStatusLoading(false);
           onMemberLoadError(
             err instanceof Error ? err.message : "Error cargando socio"
           );
@@ -142,19 +179,49 @@ export function useSalesMember({
         ? `Último retirado: ${memberRecentProductNames[0]}`
         : `Últimas retiradas: ${memberRecentProductNames.join(" · ")}`;
 
-  function handleMemberChange(nextMemberId: string) {
+  function setSelectedMemberId(nextMemberId: string) {
+    const normalizedMemberId = nextMemberId.trim();
+
+    if (normalizedMemberId === currentMemberIdRef.current) {
+      setMemberId(nextMemberId);
+      return;
+    }
+
+    currentMemberIdRef.current = normalizedMemberId;
+    memberStatusRequestIdRef.current += 1;
+    memberRecentSalesRequestIdRef.current += 1;
+    setToday(emptySalesToday);
+    setMemberStatus(null);
+    setMemberStatusLoading(Boolean(normalizedMemberId));
+    setMemberRecentSales([]);
+    setMemberRecentSalesError("");
+    setMemberRecentSalesLoading(Boolean(normalizedMemberId));
     setMemberId(nextMemberId);
   }
 
+  function handleMemberChange(nextMemberId: string) {
+    setSelectedMemberId(nextMemberId);
+  }
+
   function handleClearMember() {
+    currentMemberIdRef.current = "";
+    memberStatusRequestIdRef.current += 1;
+    memberRecentSalesRequestIdRef.current += 1;
     setMemberId("");
     setMemberSearch("");
     setToday(emptySalesToday);
     setMemberStatus(null);
+    setMemberStatusLoading(false);
     setMemberRecentSales([]);
     setMemberRecentSalesError("");
     setMemberRecentSalesLoading(false);
     rfidRef.current?.focus();
+  }
+
+  function setTodayForMember(selectedMemberId: string, nextToday: TodayTotals) {
+    if (selectedMemberId.trim() !== currentMemberIdRef.current) return;
+
+    setToday(nextToday);
   }
 
   return {
@@ -165,13 +232,14 @@ export function useSalesMember({
     memberRecentSummary,
     memberSearch,
     memberStatus,
+    memberStatusLoading,
     today,
     visibleToday,
     handleClearMember,
     handleMemberChange,
     loadMemberRecentSales,
-    setMemberId,
+    setMemberId: setSelectedMemberId,
     setMemberSearch,
-    setToday,
+    setTodayForMember,
   };
 }

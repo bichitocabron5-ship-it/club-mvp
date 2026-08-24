@@ -15,6 +15,7 @@ export function SalesCart({
   invalid,
   loading,
   visibleToday,
+  visibleTodayLoading,
   onCartValueKeyDown,
   onCartValueInputRef,
   onRegisterButtonKeyDown,
@@ -29,6 +30,7 @@ export function SalesCart({
   invalid: boolean;
   loading: boolean;
   visibleToday: TodayTotals;
+  visibleTodayLoading: boolean;
   onCartValueKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
   onCartValueInputRef: (
     productId: number,
@@ -79,6 +81,12 @@ export function SalesCart({
         </div>
       </div>
 
+      {visibleTodayLoading ? (
+        <div className="mt-3 rounded-2xl border border-black/8 bg-white/80 p-3 text-sm">
+          Cargando limites del socio...
+        </div>
+      ) : (
+        <>
       <div className="mt-3 rounded-2xl border border-black/8 bg-white/80 p-3 text-sm">
         Con carrito:{" "}
         <strong
@@ -123,6 +131,9 @@ export function SalesCart({
         <div className="mt-3 rounded-2xl bg-red-100 p-3 text-sm text-red-700">
           Se supera el límite mensual de {visibleToday.limits.monthlyLimitG} g.
         </div>
+      )}
+
+        </>
       )}
 
       {cartTotals.stockProblems.length > 0 && (

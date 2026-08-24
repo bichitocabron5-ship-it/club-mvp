@@ -22,6 +22,7 @@ export default function SalesPage() {
       <SalesPageHeader
         showRecentSales={sales.showRecentSales}
         visibleToday={sales.visibleToday}
+        visibleTodayLoading={sales.memberStatusLoading}
         onToggleRecentSales={() =>
           sales.setShowRecentSales((current) => !current)
         }
@@ -52,7 +53,10 @@ export default function SalesPage() {
             onMemberSearchChange={sales.setMemberSearch}
           />
 
-          <SalesMemberStatus memberStatus={sales.memberStatus} />
+          <SalesMemberStatus
+            loading={sales.memberStatusLoading}
+            memberStatus={sales.memberStatus}
+          />
 
           <SalesProductControls
             availableHashTypes={sales.availableHashTypes}
@@ -79,6 +83,7 @@ export default function SalesPage() {
           invalid={sales.invalid}
           loading={sales.loading}
           visibleToday={sales.visibleToday}
+          visibleTodayLoading={sales.memberStatusLoading}
           onCartValueKeyDown={sales.handleCartValueKeyDown}
           onCartValueInputRef={sales.setCartValueInputRef}
           onRegisterButtonKeyDown={sales.handleRegisterButtonKeyDown}
