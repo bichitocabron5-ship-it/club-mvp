@@ -1,10 +1,20 @@
 import type { MemberOperationalStatus } from "@/lib/helpers/sales-cart";
 
 export function SalesMemberStatus({
+  loading,
   memberStatus,
 }: {
+  loading: boolean;
   memberStatus: MemberOperationalStatus | null;
 }) {
+  if (loading) {
+    return (
+      <div className="app-panel rounded-3xl p-4 text-sm">
+        <div className="font-semibold">Cargando estado del socio...</div>
+      </div>
+    );
+  }
+
   if (!memberStatus) {
     return null;
   }

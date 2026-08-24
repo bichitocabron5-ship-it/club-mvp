@@ -203,6 +203,7 @@ export function useSalesPage() {
     cartTotals.overMonthly ||
     cartTotals.conversionProblems.length > 0 ||
     cartTotals.stockProblems.length > 0 ||
+    member.memberStatusLoading ||
     loading;
 
   function handleMemberChange(nextMemberId: string) {
@@ -265,7 +266,7 @@ export function useSalesPage() {
       const refreshedToday = await fetchJson<TodayTotals>(
         `/api/members/${selectedMemberId}/today`
       );
-      member.setToday(refreshedToday);
+      member.setTodayForMember(selectedMemberId, refreshedToday);
       await member.loadMemberRecentSales(selectedMemberId);
       await loadRecentSales();
 
@@ -332,11 +333,12 @@ export function useSalesPage() {
       setProducts(refreshedProducts);
 
       if (member.memberId) {
+        const selectedMemberId = member.memberId;
         const refreshedToday = await fetchJson<TodayTotals>(
-          `/api/members/${member.memberId}/today`
+          `/api/members/${selectedMemberId}/today`
         );
-        member.setToday(refreshedToday);
-        await member.loadMemberRecentSales(member.memberId);
+        member.setTodayForMember(selectedMemberId, refreshedToday);
+        await member.loadMemberRecentSales(selectedMemberId);
       }
 
       await loadRecentSales();
@@ -480,6 +482,7 @@ export function useSalesPage() {
     memberRecentSummary: member.memberRecentSummary,
     memberSearch: member.memberSearch,
     memberStatus: member.memberStatus,
+    memberStatusLoading: member.memberStatusLoading,
     productCategories: productFilters.productCategories,
     productSearchRef,
     recentSales,
