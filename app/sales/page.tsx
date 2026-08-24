@@ -15,7 +15,10 @@ export default function SalesPage() {
   const sales = useSalesPage();
 
   return (
-    <main className="mx-auto max-w-7xl p-4 md:p-6">
+    <main
+      className="mx-auto max-w-7xl p-4 md:p-6"
+      onKeyDownCapture={sales.handleRfidScannerKeyDownCapture}
+    >
       <SalesPageHeader
         showRecentSales={sales.showRecentSales}
         visibleToday={sales.visibleToday}
@@ -30,6 +33,7 @@ export default function SalesPage() {
         rfidError={sales.rfidError}
         rfidInput={sales.rfidInput}
         rfidRef={sales.rfidRef}
+        onFocusRfid={sales.focusRfidInput}
         onRfidInputChange={sales.setRfidInput}
         onSubmit={sales.handleRfidSubmit}
       />

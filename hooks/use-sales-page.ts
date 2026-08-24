@@ -1,19 +1,64 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { FormEvent } from "react";
+import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 
 import { useSalesCart } from "@/hooks/use-sales-cart";
 import { useSalesMember } from "@/hooks/use-sales-member";
 import { useSalesProducts } from "@/hooks/use-sales-products";
 import { fetchJson } from "@/lib/fetch-json";
 import { getSalesCartTotals } from "@/lib/helpers/sales-cart";
+import { normalizeRfidCode } from "@/lib/rfid";
 import type {
   RecentSale,
   RecentSalesResponse,
   TodayTotals,
 } from "@/lib/helpers/sales-cart";
 import type { MemberSummary, ProductSummary } from "@/lib/types";
+
+const RFID_SCAN_MIN_LENGTH = 6;
+const RFID_SCAN_MAX_KEY_GAP_MS = 50;
+const RFID_SCAN_DIGIT_PATTERN = /^\d$/;
+
+type RfidScanBuffer = {
+  value: string;
+  lastKeyAt: number;
+  target: HTMLInputElement | HTMLTextAreaElement | null;
+  targetStartValue: string;
+};
+
+function getEditableScanTarget(
+  target: EventTarget
+): HTMLInputElement | HTMLTextAreaElement | null {
+  if (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement
+  ) {
+    if (target.disabled || target.readOnly) return null;
+    return target;
+  }
+
+  return null;
+}
+
+function restoreEditableTargetValue(
+  target: HTMLInputElement | HTMLTextAreaElement,
+  value: string
+) {
+  const prototype =
+    target instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype;
+  const valueSetter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+
+  if (valueSetter) {
+    valueSetter.call(target, value);
+  } else {
+    target.value = value;
+  }
+
+  target.dispatchEvent(new Event("input", { bubbles: true }));
+}
 
 export function useSalesPage() {
   const [members, setMembers] = useState<MemberSummary[]>([]);
@@ -31,6 +76,15 @@ export function useSalesPage() {
   const rfidRef = useRef<HTMLInputElement | null>(null);
   const productSearchRef = useRef<HTMLInputElement | null>(null);
   const submittingRef = useRef(false);
+  const rfidSubmittingRef = useRef(false);
+  const rfidScanBufferRef = useRef<RfidScanBuffer | null>(null);
+
+  const focusRfidInput = useCallback(() => {
+    window.setTimeout(() => {
+      rfidRef.current?.focus();
+      rfidRef.current?.select();
+    }, 0);
+  }, []);
 
   const handleMemberLoadSuccess = useCallback(() => {
     setError("");
@@ -80,6 +134,7 @@ export function useSalesPage() {
       }
 
       rfidRef.current?.focus();
+      rfidRef.current?.select();
     }, 0);
 
     return () => window.clearTimeout(focusTimer);
@@ -292,29 +347,113 @@ export function useSalesPage() {
     }
   }
 
+  async function processRfidCode(rawCode: string) {
+    const code = normalizeRfidCode(rawCode);
+    if (!code || rfidSubmittingRef.current) return;
+
+    rfidSubmittingRef.current = true;
+    setRfidError("");
+
+    try {
+      const res = await fetch(`/api/members/by-rfid/${encodeURIComponent(code)}`);
+
+      if (!res.ok) {
+        setRfidError("Chapita no asignada");
+        setRfidInput("");
+        focusRfidInput();
+        return;
+      }
+
+      const selectedMember = (await res.json()) as MemberSummary;
+
+      member.setMemberId(String(selectedMember.id));
+      member.setMemberSearch(selectedMember.fullName);
+      cart.clearCart();
+      setRfidInput("");
+
+      focusProductSearchInput();
+    } finally {
+      rfidSubmittingRef.current = false;
+    }
+  }
+
   async function handleRfidSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const code = rfidInput.trim();
-    if (!code) return;
+    await processRfidCode(rfidInput);
+  }
 
-    setRfidError("");
-
-    const res = await fetch(`/api/members/by-rfid/${encodeURIComponent(code)}`);
-
-    if (!res.ok) {
-      setRfidError("Chapita no asignada");
+  function handleRfidScannerKeyDownCapture(
+    event: ReactKeyboardEvent<HTMLElement>
+  ) {
+    if (
+      event.defaultPrevented ||
+      event.repeat ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.nativeEvent.isComposing
+    ) {
+      rfidScanBufferRef.current = null;
       return;
     }
 
-    const selectedMember = (await res.json()) as MemberSummary;
+    if (event.key === "Enter") {
+      const buffer = rfidScanBufferRef.current;
+      rfidScanBufferRef.current = null;
 
-    member.setMemberId(String(selectedMember.id));
-    member.setMemberSearch(selectedMember.fullName);
-    cart.clearCart();
-    setRfidInput("");
+      if (!buffer) return;
 
-    focusProductSearchInput();
+      const code = normalizeRfidCode(buffer.value);
+      const enterGap = event.timeStamp - buffer.lastKeyAt;
+      const looksLikeRfidScan =
+        code.length >= RFID_SCAN_MIN_LENGTH &&
+        code === buffer.value &&
+        enterGap <= RFID_SCAN_MAX_KEY_GAP_MS;
+
+      if (!looksLikeRfidScan) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (buffer.target) {
+        restoreEditableTargetValue(buffer.target, buffer.targetStartValue);
+      }
+
+      void processRfidCode(code);
+      return;
+    }
+
+    if (!RFID_SCAN_DIGIT_PATTERN.test(event.key)) {
+      rfidScanBufferRef.current = null;
+      return;
+    }
+
+    const currentTarget = getEditableScanTarget(event.target);
+    const previousBuffer = rfidScanBufferRef.current;
+    const keyGap = previousBuffer
+      ? event.timeStamp - previousBuffer.lastKeyAt
+      : Number.POSITIVE_INFINITY;
+
+    if (
+      !previousBuffer ||
+      previousBuffer.target !== currentTarget ||
+      keyGap > RFID_SCAN_MAX_KEY_GAP_MS
+    ) {
+      rfidScanBufferRef.current = {
+        value: event.key,
+        lastKeyAt: event.timeStamp,
+        target: currentTarget,
+        targetStartValue: currentTarget?.value ?? "",
+      };
+      return;
+    }
+
+    rfidScanBufferRef.current = {
+      ...previousBuffer,
+      value: previousBuffer.value + event.key,
+      lastKeyAt: event.timeStamp,
+    };
   }
 
   function handleRefreshRecentSales() {
@@ -365,7 +504,9 @@ export function useSalesPage() {
     handleRefreshRecentSales,
     handleRegisterButtonKeyDown: cart.handleRegisterButtonKeyDown,
     handleRegisterWithdrawal,
+    handleRfidScannerKeyDownCapture,
     handleRfidSubmit,
+    focusRfidInput,
     removeProduct: cart.removeProduct,
     setCartValueInputRef: cart.setCartValueInputRef,
     setMemberSearch: member.setMemberSearch,

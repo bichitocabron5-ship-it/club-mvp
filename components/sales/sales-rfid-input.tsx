@@ -4,18 +4,30 @@ export function SalesRfidInput({
   rfidError,
   rfidInput,
   rfidRef,
+  onFocusRfid,
   onRfidInputChange,
   onSubmit,
 }: {
   rfidError: string;
   rfidInput: string;
   rfidRef: RefObject<HTMLInputElement | null>;
+  onFocusRfid: () => void;
   onRfidInputChange: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
     <form onSubmit={onSubmit} className="app-panel mb-4 space-y-2 rounded-3xl p-4">
-      <label className="block text-sm font-medium">Escanear chapita</label>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <label className="block text-sm font-medium">Escanear chapita</label>
+
+        <button
+          type="button"
+          onClick={onFocusRfid}
+          className="app-button-secondary rounded-full px-3 py-2 text-sm font-semibold"
+        >
+          Enfocar RFID
+        </button>
+      </div>
 
       <input
         className="w-full rounded-2xl border border-black/10 bg-white/80 p-3 text-base"
