@@ -10,15 +10,29 @@ import { fetchJson } from "@/lib/fetch-json";
 import { getSalesCartTotals } from "@/lib/helpers/sales-cart";
 import { normalizeRfidCode } from "@/lib/rfid";
 import type {
+  AddProductOptions,
+  CartInputMode,
   RecentSale,
   RecentSalesResponse,
   TodayTotals,
 } from "@/lib/helpers/sales-cart";
-import type { MemberSummary, ProductSummary } from "@/lib/types";
+import type {
+  MemberSummary,
+  ProductHashType,
+  ProductSummary,
+} from "@/lib/types";
 
 const RFID_SCAN_MIN_LENGTH = 6;
 const RFID_SCAN_MAX_KEY_GAP_MS = 50;
 const RFID_SCAN_DIGIT_PATTERN = /^\d$/;
+const WITHDRAWAL_SUCCESS_FEEDBACK_MS = 4000;
+const WITHDRAWAL_ERROR_FEEDBACK_MS = 12000;
+
+type WithdrawalFeedback = {
+  kind: "success" | "error";
+  title: string;
+  message: string;
+};
 
 type RfidScanBuffer = {
   value: string;
@@ -73,14 +87,53 @@ export function useSalesPage() {
   const [rfidInput, setRfidInput] = useState("");
   const [rfidError, setRfidError] = useState("");
   const [cancelingSaleId, setCancelingSaleId] = useState<number | null>(null);
+  const [withdrawalFeedback, setWithdrawalFeedback] =
+    useState<WithdrawalFeedback | null>(null);
 
   const rfidRef = useRef<HTMLInputElement | null>(null);
   const productSearchRef = useRef<HTMLInputElement | null>(null);
   const submittingRef = useRef(false);
   const rfidSubmittingRef = useRef(false);
   const rfidScanBufferRef = useRef<RfidScanBuffer | null>(null);
+  const withdrawalFeedbackTimerRef = useRef<number | null>(null);
+  const mountedRef = useRef(true);
   const currentMemberIdRef = useRef("");
   const memberContextVersionRef = useRef(0);
+
+  const clearWithdrawalFeedback = useCallback(() => {
+    if (withdrawalFeedbackTimerRef.current !== null) {
+      window.clearTimeout(withdrawalFeedbackTimerRef.current);
+      withdrawalFeedbackTimerRef.current = null;
+    }
+
+    if (mountedRef.current) {
+      setWithdrawalFeedback(null);
+    }
+  }, []);
+
+  const showWithdrawalFeedback = useCallback(
+    (feedback: WithdrawalFeedback, visibleMs: number) => {
+      if (!mountedRef.current) return;
+
+      if (withdrawalFeedbackTimerRef.current !== null) {
+        window.clearTimeout(withdrawalFeedbackTimerRef.current);
+        withdrawalFeedbackTimerRef.current = null;
+      }
+
+      setWithdrawalFeedback(feedback);
+
+      withdrawalFeedbackTimerRef.current = window.setTimeout(() => {
+        if (!mountedRef.current) {
+          withdrawalFeedbackTimerRef.current = null;
+          return;
+        }
+
+        setWithdrawalFeedback(null);
+        withdrawalFeedbackTimerRef.current = null;
+      }, visibleMs);
+    },
+    []
+  );
 
   const focusRfidInput = useCallback(() => {
     rfidRef.current?.focus();
@@ -133,9 +186,17 @@ export function useSalesPage() {
     focusProductSearchInput,
   });
 
+  function handleAddProduct(
+    product: ProductSummary,
+    options?: AddProductOptions
+  ) {
+    clearWithdrawalFeedback();
+    return cart.addProduct(product, options);
+  }
+
   const productFilters = useSalesProducts({
     products,
-    onAddProduct: cart.addProduct,
+    onAddProduct: handleAddProduct,
   });
 
   const error = bootstrapError || memberLoadError;
@@ -150,6 +211,19 @@ export function useSalesPage() {
   useEffect(() => {
     updateCurrentMemberContext(member.memberId);
   }, [member.memberId, updateCurrentMemberContext]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    return () => {
+      mountedRef.current = false;
+
+      if (withdrawalFeedbackTimerRef.current !== null) {
+        window.clearTimeout(withdrawalFeedbackTimerRef.current);
+        withdrawalFeedbackTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const focusTimer = window.setTimeout(() => {
@@ -234,12 +308,14 @@ export function useSalesPage() {
     loading;
 
   function handleMemberChange(nextMemberId: string) {
+    clearWithdrawalFeedback();
     updateCurrentMemberContext(nextMemberId);
     member.handleMemberChange(nextMemberId);
     cart.clearCart();
   }
 
   function handleNextMember() {
+    clearWithdrawalFeedback();
     updateCurrentMemberContext("");
     member.handleClearMember();
     cart.clearCart();
@@ -250,8 +326,70 @@ export function useSalesPage() {
     focusRfidInput();
   }
 
+  function handleMemberSearchChange(value: string) {
+    clearWithdrawalFeedback();
+    member.setMemberSearch(value);
+  }
+
+  function handleRfidInputChange(value: string) {
+    clearWithdrawalFeedback();
+    setRfidInput(value);
+  }
+
+  function handleSearchChange(value: string) {
+    clearWithdrawalFeedback();
+    productFilters.setSearch(value);
+  }
+
+  function handleCategoryFilter(category: string) {
+    clearWithdrawalFeedback();
+    productFilters.handleCategoryFilter(category);
+  }
+
+  function handleHashTypeFilter(hashType: ProductHashType | "ALL") {
+    clearWithdrawalFeedback();
+    productFilters.handleHashTypeFilter(hashType);
+  }
+
+  function handleRemoveProduct(productId: number) {
+    clearWithdrawalFeedback();
+    cart.removeProduct(productId);
+  }
+
+  function handleUpdateAmount(productId: number, value: string) {
+    clearWithdrawalFeedback();
+    cart.updateAmount(productId, value);
+  }
+
+  function handleUpdateInputMode(productId: number, inputMode: CartInputMode) {
+    clearWithdrawalFeedback();
+    cart.updateInputMode(productId, inputMode);
+  }
+
+  function handleUpdateQty(productId: number, value: string) {
+    clearWithdrawalFeedback();
+    cart.updateQty(productId, value);
+  }
+
   async function handleRegisterWithdrawal() {
-    if (invalid || submittingRef.current) return;
+    if (submittingRef.current) return;
+
+    clearWithdrawalFeedback();
+
+    if (cartTotals.conversionProblems.length > 0) {
+      showWithdrawalFeedback(
+        {
+          kind: "error",
+          title: "Revisa el carrito",
+          message:
+            "Hay lineas con errores de conversion. Revisa el carrito antes de registrar.",
+        },
+        WITHDRAWAL_ERROR_FEEDBACK_MS
+      );
+      return;
+    }
+
+    if (invalid) return;
 
     submittingRef.current = true;
     const selectedMemberId = member.memberId.trim();
@@ -259,6 +397,14 @@ export function useSalesPage() {
     const isWithdrawalContextCurrent = () =>
       currentMemberIdRef.current === selectedMemberId &&
       memberContextVersionRef.current === selectedMemberContextVersion;
+    const showFeedbackIfWithdrawalContextCurrent = (
+      feedback: WithdrawalFeedback,
+      visibleMs: number
+    ) => {
+      if (!isWithdrawalContextCurrent()) return;
+
+      showWithdrawalFeedback(feedback, visibleMs);
+    };
 
     const items = cart.cartLines
       .filter((line) => !line.conversionError)
@@ -269,7 +415,15 @@ export function useSalesPage() {
       .filter((item) => item.qty > 0);
 
     if (items.length !== cart.cart.length) {
-      alert("Hay lineas con errores de conversion. Revisa el carrito antes de enviar.");
+      showWithdrawalFeedback(
+        {
+          kind: "error",
+          title: "Revisa el carrito",
+          message:
+            "Hay lineas con errores de conversion. Revisa el carrito antes de registrar.",
+        },
+        WITHDRAWAL_ERROR_FEEDBACK_MS
+      );
       submittingRef.current = false;
       return;
     }
@@ -290,11 +444,25 @@ export function useSalesPage() {
 
       if (!res.ok) {
         const err: { error?: string } = await res.json();
-        alert(err.error || "Error al registrar retirada");
+        showFeedbackIfWithdrawalContextCurrent(
+          {
+            kind: "error",
+            title: "No se pudo registrar la retirada",
+            message: err.error || "Error al registrar retirada",
+          },
+          WITHDRAWAL_ERROR_FEEDBACK_MS
+        );
         return;
       }
 
-      alert("Retirada registrada");
+      showFeedbackIfWithdrawalContextCurrent(
+        {
+          kind: "success",
+          title: "Retirada registrada",
+          message: "La retirada se ha guardado correctamente.",
+        },
+        WITHDRAWAL_SUCCESS_FEEDBACK_MS
+      );
 
       if (isWithdrawalContextCurrent()) {
         cart.clearCart();
@@ -315,7 +483,15 @@ export function useSalesPage() {
         focusProductSearchInput();
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Error al registrar retirada");
+      showFeedbackIfWithdrawalContextCurrent(
+        {
+          kind: "error",
+          title: "No se pudo registrar la retirada",
+          message:
+            err instanceof Error ? err.message : "Error al registrar retirada",
+        },
+        WITHDRAWAL_ERROR_FEEDBACK_MS
+      );
     } finally {
       submittingRef.current = false;
       setLoading(false);
@@ -393,6 +569,7 @@ export function useSalesPage() {
     if (!code || rfidSubmittingRef.current) return;
 
     rfidSubmittingRef.current = true;
+    clearWithdrawalFeedback();
     setRfidError("");
 
     try {
@@ -537,11 +714,12 @@ export function useSalesPage() {
     selectedHashType: productFilters.selectedHashType,
     showRecentSales,
     visibleToday: member.visibleToday,
-    addProduct: cart.addProduct,
+    withdrawalFeedback,
+    addProduct: handleAddProduct,
     handleCancelRecentSale,
     handleCartValueKeyDown: cart.handleCartValueKeyDown,
-    handleCategoryFilter: productFilters.handleCategoryFilter,
-    handleHashTypeFilter: productFilters.handleHashTypeFilter,
+    handleCategoryFilter,
+    handleHashTypeFilter,
     handleMemberChange,
     handleNextMember,
     handleProductSearchKeyDown: productFilters.handleProductSearchKeyDown,
@@ -551,14 +729,14 @@ export function useSalesPage() {
     handleRfidScannerKeyDownCapture,
     handleRfidSubmit,
     focusRfidInput,
-    removeProduct: cart.removeProduct,
+    removeProduct: handleRemoveProduct,
     setCartValueInputRef: cart.setCartValueInputRef,
-    setMemberSearch: member.setMemberSearch,
-    setRfidInput,
-    setSearch: productFilters.setSearch,
+    setMemberSearch: handleMemberSearchChange,
+    setRfidInput: handleRfidInputChange,
+    setSearch: handleSearchChange,
     setShowRecentSales,
-    updateAmount: cart.updateAmount,
-    updateInputMode: cart.updateInputMode,
-    updateQty: cart.updateQty,
+    updateAmount: handleUpdateAmount,
+    updateInputMode: handleUpdateInputMode,
+    updateQty: handleUpdateQty,
   };
 }
