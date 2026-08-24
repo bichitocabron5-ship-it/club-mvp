@@ -9,6 +9,43 @@ import type {
   TodayTotals,
 } from "@/lib/helpers/sales-cart";
 
+type SalesCartFeedback = {
+  kind: "success" | "error";
+  title: string;
+  message: string;
+};
+
+function SalesCartFeedbackMessage({
+  feedback,
+}: {
+  feedback: SalesCartFeedback;
+}) {
+  const isError = feedback.kind === "error";
+
+  return (
+    <div
+      role={isError ? "alert" : "status"}
+      aria-live={isError ? "assertive" : "polite"}
+      aria-atomic="true"
+      className={`mt-3 rounded-2xl border p-3 text-sm leading-5 ${
+        isError
+          ? "border-red-200 bg-red-100 text-red-800"
+          : "border-green-200 bg-green-100 text-green-800"
+      }`}
+    >
+      <div className="flex min-w-0 items-start gap-3">
+        <span className="shrink-0 rounded-full bg-white/85 px-2 py-1 text-xs font-black">
+          {isError ? "ERROR" : "OK"}
+        </span>
+        <div className="min-w-0">
+          <p className="font-black">{feedback.title}</p>
+          <p className="mt-1">{feedback.message}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function SalesCart({
   cartLines,
   cartTotals,
@@ -16,6 +53,7 @@ export function SalesCart({
   loading,
   visibleToday,
   visibleTodayLoading,
+  withdrawalFeedback,
   onCartValueKeyDown,
   onCartValueInputRef,
   onNextMember,
@@ -32,6 +70,7 @@ export function SalesCart({
   loading: boolean;
   visibleToday: TodayTotals;
   visibleTodayLoading: boolean;
+  withdrawalFeedback: SalesCartFeedback | null;
   onCartValueKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
   onCartValueInputRef: (
     productId: number,
@@ -145,9 +184,18 @@ export function SalesCart({
       )}
 
       {cartTotals.conversionProblems.length > 0 && (
-        <div className="mt-3 rounded-2xl bg-red-100 p-3 text-sm text-red-700">
-          Hay lineas con errores de conversion. Corrigelas antes de registrar.
+        <div
+          role="alert"
+          aria-atomic="true"
+          className="mt-3 rounded-2xl bg-red-100 p-3 text-sm text-red-700"
+        >
+          Revisa el carrito: hay lineas con errores de conversion. Corrigelas
+          antes de registrar.
         </div>
+      )}
+
+      {withdrawalFeedback && (
+        <SalesCartFeedbackMessage feedback={withdrawalFeedback} />
       )}
 
       <button

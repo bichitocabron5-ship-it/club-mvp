@@ -84,6 +84,7 @@ export default function SalesPage() {
           loading={sales.loading}
           visibleToday={sales.visibleToday}
           visibleTodayLoading={sales.memberStatusLoading}
+          withdrawalFeedback={sales.withdrawalFeedback}
           onCartValueKeyDown={sales.handleCartValueKeyDown}
           onCartValueInputRef={sales.setCartValueInputRef}
           onNextMember={sales.handleNextMember}
