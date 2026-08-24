@@ -78,8 +78,12 @@ export function useSalesPage() {
   const submittingRef = useRef(false);
   const rfidSubmittingRef = useRef(false);
   const rfidScanBufferRef = useRef<RfidScanBuffer | null>(null);
+  const currentMemberIdRef = useRef("");
 
   const focusRfidInput = useCallback(() => {
+    rfidRef.current?.focus();
+    rfidRef.current?.select();
+
     window.setTimeout(() => {
       rfidRef.current?.focus();
       rfidRef.current?.select();
@@ -95,6 +99,9 @@ export function useSalesPage() {
   }, []);
 
   const focusProductSearchInput = useCallback(() => {
+    productSearchRef.current?.focus();
+    productSearchRef.current?.select();
+
     window.setTimeout(() => {
       productSearchRef.current?.focus();
       productSearchRef.current?.select();
@@ -125,6 +132,10 @@ export function useSalesPage() {
     setRecentSalesDayClosed(data.dayClosed);
     setRecentSalesError("");
   }, []);
+
+  useEffect(() => {
+    currentMemberIdRef.current = member.memberId.trim();
+  }, [member.memberId]);
 
   useEffect(() => {
     const focusTimer = window.setTimeout(() => {
@@ -207,20 +218,27 @@ export function useSalesPage() {
     loading;
 
   function handleMemberChange(nextMemberId: string) {
+    currentMemberIdRef.current = nextMemberId.trim();
     member.handleMemberChange(nextMemberId);
     cart.clearCart();
   }
 
-  function handleClearMember() {
+  function handleNextMember() {
+    currentMemberIdRef.current = "";
     member.handleClearMember();
     cart.clearCart();
+    productFilters.resetProductFilters();
+    setRfidInput("");
+    setRfidError("");
+    setError("");
+    focusRfidInput();
   }
 
   async function handleRegisterWithdrawal() {
     if (invalid || submittingRef.current) return;
 
     submittingRef.current = true;
-    const selectedMemberId = member.memberId;
+    const selectedMemberId = member.memberId.trim();
 
     const items = cart.cartLines
       .filter((line) => !line.conversionError)
@@ -272,9 +290,9 @@ export function useSalesPage() {
 
       setRfidInput("");
 
-      setTimeout(() => {
-        productSearchRef.current?.focus();
-      }, 0);
+      if (currentMemberIdRef.current === selectedMemberId) {
+        focusProductSearchInput();
+      }
     } catch (err) {
       alert(err instanceof Error ? err.message : "Error al registrar retirada");
     } finally {
@@ -367,8 +385,10 @@ export function useSalesPage() {
       }
 
       const selectedMember = (await res.json()) as MemberSummary;
+      const nextMemberId = String(selectedMember.id);
 
-      member.setMemberId(String(selectedMember.id));
+      currentMemberIdRef.current = nextMemberId;
+      member.setMemberId(nextMemberId);
       member.setMemberSearch(selectedMember.fullName);
       cart.clearCart();
       setRfidInput("");
@@ -500,9 +520,9 @@ export function useSalesPage() {
     handleCancelRecentSale,
     handleCartValueKeyDown: cart.handleCartValueKeyDown,
     handleCategoryFilter: productFilters.handleCategoryFilter,
-    handleClearMember,
     handleHashTypeFilter: productFilters.handleHashTypeFilter,
     handleMemberChange,
+    handleNextMember,
     handleProductSearchKeyDown: productFilters.handleProductSearchKeyDown,
     handleRefreshRecentSales,
     handleRegisterButtonKeyDown: cart.handleRegisterButtonKeyDown,

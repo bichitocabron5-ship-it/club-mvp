@@ -48,7 +48,7 @@ export default function SalesPage() {
             memberRecentSalesLoading={sales.memberRecentSalesLoading}
             memberRecentSummary={sales.memberRecentSummary}
             memberSearch={sales.memberSearch}
-            onClearMember={sales.handleClearMember}
+            onClearMember={sales.handleNextMember}
             onMemberChange={sales.handleMemberChange}
             onMemberSearchChange={sales.setMemberSearch}
           />
@@ -86,6 +86,7 @@ export default function SalesPage() {
           visibleTodayLoading={sales.memberStatusLoading}
           onCartValueKeyDown={sales.handleCartValueKeyDown}
           onCartValueInputRef={sales.setCartValueInputRef}
+          onNextMember={sales.handleNextMember}
           onRegisterButtonKeyDown={sales.handleRegisterButtonKeyDown}
           onRegisterWithdrawal={() => void sales.handleRegisterWithdrawal()}
           onRemoveProduct={sales.removeProduct}

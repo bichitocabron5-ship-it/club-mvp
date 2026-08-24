@@ -124,6 +124,12 @@ export function useSalesProducts({
     }
   }
 
+  function resetProductFilters() {
+    setSearch("");
+    setSelectedCategory("ALL");
+    setSelectedHashType("ALL");
+  }
+
   return {
     availableHashTypes,
     filteredProducts,
@@ -134,6 +140,7 @@ export function useSalesProducts({
     handleCategoryFilter,
     handleHashTypeFilter,
     handleProductSearchKeyDown,
+    resetProductFilters,
     setSearch,
   };
 }

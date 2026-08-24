@@ -18,6 +18,7 @@ export function SalesCart({
   visibleTodayLoading,
   onCartValueKeyDown,
   onCartValueInputRef,
+  onNextMember,
   onRegisterButtonKeyDown,
   onRegisterWithdrawal,
   onRemoveProduct,
@@ -36,6 +37,7 @@ export function SalesCart({
     productId: number,
     node: HTMLInputElement | null
   ) => void;
+  onNextMember: () => void;
   onRegisterButtonKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => void;
   onRegisterWithdrawal: () => void;
   onRemoveProduct: (productId: number) => void;
@@ -156,6 +158,14 @@ export function SalesCart({
         className="app-button-primary mt-4 w-full rounded-3xl p-6 text-2xl font-black shadow-lg disabled:opacity-40"
       >
         {loading ? "Registrando..." : "COBRAR / REGISTRAR"}
+      </button>
+
+      <button
+        type="button"
+        onClick={onNextMember}
+        className="app-button-secondary mt-3 min-h-12 w-full rounded-2xl px-5 py-4 text-base font-bold"
+      >
+        Siguiente socio
       </button>
     </aside>
   );
