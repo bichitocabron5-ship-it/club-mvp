@@ -23,14 +23,14 @@ export function SalesRfidInput({
         <button
           type="button"
           onClick={onFocusRfid}
-          className="app-button-secondary rounded-full px-3 py-2 text-sm font-semibold"
+          className="app-button-secondary rounded-full px-3 py-2 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
         >
           Enfocar RFID
         </button>
       </div>
 
       <input
-        className="w-full rounded-2xl border border-black/10 bg-white/80 p-3 text-base"
+        className="w-full rounded-2xl border border-black/10 bg-white/80 p-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
         placeholder="Pasa la chapita por el lector..."
         value={rfidInput}
         onChange={(event) => onRfidInputChange(event.target.value)}

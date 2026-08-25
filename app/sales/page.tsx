@@ -50,6 +50,7 @@ export default function SalesPage() {
             memberSearch={sales.memberSearch}
             onClearMember={sales.handleNextMember}
             onMemberChange={sales.handleMemberChange}
+            onMemberSearchKeyDown={sales.handleMemberSearchKeyDown}
             onMemberSearchChange={sales.setMemberSearch}
           />
 
@@ -88,6 +89,7 @@ export default function SalesPage() {
           onCartValueKeyDown={sales.handleCartValueKeyDown}
           onCartValueInputRef={sales.setCartValueInputRef}
           onNextMember={sales.handleNextMember}
+          registerButtonRef={sales.registerButtonRef}
           onRegisterButtonKeyDown={sales.handleRegisterButtonKeyDown}
           onRegisterWithdrawal={() => void sales.handleRegisterWithdrawal()}
           onRemoveProduct={sales.removeProduct}

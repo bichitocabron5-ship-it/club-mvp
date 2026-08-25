@@ -92,6 +92,7 @@ export function useSalesPage() {
 
   const rfidRef = useRef<HTMLInputElement | null>(null);
   const productSearchRef = useRef<HTMLInputElement | null>(null);
+  const registerButtonRef = useRef<HTMLButtonElement | null>(null);
   const submittingRef = useRef(false);
   const rfidSubmittingRef = useRef(false);
   const rfidScanBufferRef = useRef<RfidScanBuffer | null>(null);
@@ -173,6 +174,18 @@ export function useSalesPage() {
     }, 0);
   }, []);
 
+  const focusRegisterButton = useCallback(() => {
+    const focusButton = () => {
+      const button = registerButtonRef.current;
+      if (!button || button.disabled) return;
+
+      button.focus();
+    };
+
+    focusButton();
+    window.setTimeout(focusButton, 0);
+  }, []);
+
   const member = useSalesMember({
     members,
     onMemberLoadError: handleMemberLoadError,
@@ -183,7 +196,7 @@ export function useSalesPage() {
   const cart = useSalesCart({
     products,
     discountPercent: Number(member.memberStatus?.member.discountPercent || 0),
-    focusProductSearchInput,
+    focusRegisterButton,
   });
 
   function handleAddProduct(
@@ -329,6 +342,31 @@ export function useSalesPage() {
   function handleMemberSearchChange(value: string) {
     clearWithdrawalFeedback();
     member.setMemberSearch(value);
+  }
+
+  function handleMemberSearchKeyDown(
+    event: ReactKeyboardEvent<HTMLInputElement>
+  ) {
+    if (event.key !== "Enter" && event.code !== "NumpadEnter") return;
+    if (event.nativeEvent.isComposing) return;
+
+    const [uniqueMember] = member.filteredMembers;
+
+    if (!uniqueMember || member.filteredMembers.length !== 1) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const nextMemberId = String(uniqueMember.id);
+    member.setMemberSearch(uniqueMember.fullName);
+
+    if (nextMemberId === member.memberId.trim()) {
+      focusProductSearchInput();
+      return;
+    }
+
+    handleMemberChange(nextMemberId);
   }
 
   function handleRfidInputChange(value: string) {
@@ -496,6 +534,32 @@ export function useSalesPage() {
       submittingRef.current = false;
       setLoading(false);
     }
+  }
+
+  function handleRegisterButtonKeyDown(
+    event: ReactKeyboardEvent<HTMLButtonElement>
+  ) {
+    const isRegisterActivationKey =
+      event.key === "Enter" ||
+      event.code === "NumpadEnter" ||
+      event.key === " " ||
+      event.key === "Spacebar";
+
+    if (!isRegisterActivationKey) return;
+
+    event.preventDefault();
+
+    if (
+      event.repeat ||
+      event.currentTarget !== document.activeElement ||
+      invalid ||
+      loading ||
+      submittingRef.current
+    ) {
+      return;
+    }
+
+    void handleRegisterWithdrawal();
   }
 
   async function handleCancelRecentSale(sale: RecentSale) {
@@ -709,6 +773,7 @@ export function useSalesPage() {
     rfidError,
     rfidInput,
     rfidRef,
+    registerButtonRef,
     search: productFilters.search,
     selectedCategory: productFilters.selectedCategory,
     selectedHashType: productFilters.selectedHashType,
@@ -721,10 +786,11 @@ export function useSalesPage() {
     handleCategoryFilter,
     handleHashTypeFilter,
     handleMemberChange,
+    handleMemberSearchKeyDown,
     handleNextMember,
     handleProductSearchKeyDown: productFilters.handleProductSearchKeyDown,
     handleRefreshRecentSales,
-    handleRegisterButtonKeyDown: cart.handleRegisterButtonKeyDown,
+    handleRegisterButtonKeyDown,
     handleRegisterWithdrawal,
     handleRfidScannerKeyDownCapture,
     handleRfidSubmit,

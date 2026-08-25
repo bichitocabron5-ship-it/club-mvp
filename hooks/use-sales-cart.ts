@@ -24,13 +24,13 @@ import type { ProductSummary } from "@/lib/types";
 type UseSalesCartOptions = {
   products: ProductSummary[];
   discountPercent: number;
-  focusProductSearchInput: () => void;
+  focusRegisterButton: () => void;
 };
 
 export function useSalesCart({
   products,
   discountPercent,
-  focusProductSearchInput,
+  focusRegisterButton,
 }: UseSalesCartOptions) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [focusedCartProductId, setFocusedCartProductId] = useState<
@@ -210,17 +210,33 @@ export function useSalesCart({
     setCart([]);
   }
 
-  function handleCartValueKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key !== "Enter") return;
+  function focusCartInput(productId: number) {
+    const input = cartInputRefs.current.get(productId);
+    if (!input) return false;
 
-    event.preventDefault();
-    focusProductSearchInput();
+    input.focus();
+    input.select();
+    return true;
   }
 
-  function handleRegisterButtonKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
-    if (event.key !== "Enter" && event.key !== "NumpadEnter") return;
+  function handleCartValueKeyDown(
+    productId: number,
+    event: KeyboardEvent<HTMLInputElement>
+  ) {
+    if (event.key !== "Enter" && event.code !== "NumpadEnter") return;
 
     event.preventDefault();
+
+    const currentIndex = cartLines.findIndex(
+      (line) => line.productId === productId
+    );
+    const nextLine = currentIndex >= 0 ? cartLines[currentIndex + 1] : null;
+
+    if (nextLine && focusCartInput(nextLine.productId)) {
+      return;
+    }
+
+    focusRegisterButton();
   }
 
   return {
@@ -229,7 +245,6 @@ export function useSalesCart({
     addProduct,
     clearCart,
     handleCartValueKeyDown,
-    handleRegisterButtonKeyDown,
     removeProduct,
     setCartValueInputRef,
     updateAmount,

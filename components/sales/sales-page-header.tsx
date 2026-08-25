@@ -26,7 +26,7 @@ export function SalesPageHeader({
           aria-controls="recent-sales-panel"
           aria-expanded={showRecentSales}
           onClick={onToggleRecentSales}
-          className="app-button-secondary rounded-full px-4 py-2 text-sm font-semibold"
+          className="app-button-secondary rounded-full px-4 py-2 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
         >
           {showRecentSales
             ? "Ocultar \u00faltimas retiradas"

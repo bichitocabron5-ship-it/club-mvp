@@ -40,7 +40,7 @@ export function SalesRecentSales({
         <button
           type="button"
           onClick={onRefreshRecentSales}
-          className="app-button-secondary rounded-full px-4 py-2 text-sm font-semibold"
+          className="app-button-secondary rounded-full px-4 py-2 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
         >
           Actualizar
         </button>
@@ -108,7 +108,7 @@ export function SalesRecentSales({
                           void onCancelRecentSale(sale);
                         }}
                         disabled={!sale.canCancel || cancelingSaleId !== null}
-                        className="mt-2 rounded-full bg-red-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-40"
+                        className="mt-2 rounded-full bg-red-600 px-4 py-2 text-sm font-bold text-white outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:opacity-40"
                       >
                         {cancelingSaleId === sale.id ? "Anulando..." : "Anular"}
                       </button>
