@@ -16,7 +16,10 @@ export function SalesCartItem({
   onUpdateQty,
 }: {
   line: CartLine;
-  onCartValueKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
+  onCartValueKeyDown: (
+    productId: number,
+    event: KeyboardEvent<HTMLInputElement>
+  ) => void;
   onCartValueInputRef: (
     productId: number,
     node: HTMLInputElement | null
@@ -51,7 +54,7 @@ export function SalesCartItem({
         <button
           type="button"
           onClick={() => onRemoveProduct(line.productId)}
-          className="text-sm text-red-600"
+          className="rounded px-2 py-1 text-sm text-red-600 outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
         >
           Quitar
         </button>
@@ -60,7 +63,7 @@ export function SalesCartItem({
       <div className="mt-3">
         <label className="text-xs text-gray-500">Modo de entrada</label>
         <select
-          className="mt-1 w-full rounded-2xl border border-black/10 bg-white p-3 text-sm font-medium"
+          className="mt-1 w-full rounded-2xl border border-black/10 bg-white p-3 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
           value={line.inputMode}
           onChange={(event) =>
             onUpdateInputMode(
@@ -96,14 +99,14 @@ export function SalesCartItem({
                       )
                     )
                   }
-                  className="h-11 w-11 rounded bg-gray-200 text-xl font-bold"
+                  className="h-11 w-11 rounded bg-gray-200 text-xl font-bold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
                 >
                   -
                 </button>
 
                 <input
                   ref={(node) => onCartValueInputRef(line.productId, node)}
-                  className="h-11 w-full rounded-2xl border border-black/10 bg-white p-2 text-center text-lg font-bold"
+                  className="h-11 w-full rounded-2xl border border-black/10 bg-white p-2 text-center text-lg font-bold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
                   type="number"
                   step={line.product?.unit === "UD" ? "1" : "0.001"}
                   min="0"
@@ -111,7 +114,9 @@ export function SalesCartItem({
                   onChange={(event) =>
                     onUpdateQty(line.productId, event.target.value)
                   }
-                  onKeyDown={onCartValueKeyDown}
+                  onKeyDown={(event) =>
+                    onCartValueKeyDown(line.productId, event)
+                  }
                 />
 
                 <button
@@ -125,7 +130,7 @@ export function SalesCartItem({
                       )
                     )
                   }
-                  className="h-11 w-11 rounded-2xl bg-gray-900 text-xl font-bold text-white"
+                  className="h-11 w-11 rounded-2xl bg-gray-900 text-xl font-bold text-white outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
                 >
                   +
                 </button>
@@ -140,7 +145,7 @@ export function SalesCartItem({
               <label className="text-xs text-gray-500">Importe en euros</label>
               <input
                 ref={(node) => onCartValueInputRef(line.productId, node)}
-                className="mt-1 h-11 w-full rounded-2xl border border-black/10 bg-white p-2 text-center text-lg font-bold"
+                className="mt-1 h-11 w-full rounded-2xl border border-black/10 bg-white p-2 text-center text-lg font-bold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
                 type="number"
                 step="0.01"
                 min="0"
@@ -148,7 +153,9 @@ export function SalesCartItem({
                 onChange={(event) =>
                   onUpdateAmount(line.productId, event.target.value)
                 }
-                onKeyDown={onCartValueKeyDown}
+                onKeyDown={(event) =>
+                  onCartValueKeyDown(line.productId, event)
+                }
               />
 
               <div className="mt-2 text-xs text-gray-500">

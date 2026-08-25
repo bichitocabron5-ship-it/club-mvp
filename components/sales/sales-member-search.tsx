@@ -1,3 +1,5 @@
+import type { KeyboardEvent } from "react";
+
 import type { MemberSummary } from "@/lib/types";
 
 export function SalesMemberSearch({
@@ -9,6 +11,7 @@ export function SalesMemberSearch({
   memberSearch,
   onClearMember,
   onMemberChange,
+  onMemberSearchKeyDown,
   onMemberSearchChange,
 }: {
   filteredMembers: MemberSummary[];
@@ -19,6 +22,7 @@ export function SalesMemberSearch({
   memberSearch: string;
   onClearMember: () => void;
   onMemberChange: (memberId: string) => void;
+  onMemberSearchKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
   onMemberSearchChange: (value: string) => void;
 }) {
   return (
@@ -26,14 +30,15 @@ export function SalesMemberSearch({
       <label className="block text-sm font-medium">Socio</label>
 
       <input
-        className="w-full rounded-2xl border border-black/10 bg-white/80 p-3 text-base"
+        className="w-full rounded-2xl border border-black/10 bg-white/80 p-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
         placeholder="Buscar socio por nombre o DNI..."
         value={memberSearch}
         onChange={(event) => onMemberSearchChange(event.target.value)}
+        onKeyDown={onMemberSearchKeyDown}
       />
 
       <select
-        className="w-full rounded-2xl border border-black/10 bg-white/80 p-3 text-base"
+        className="w-full rounded-2xl border border-black/10 bg-white/80 p-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
         value={memberId}
         onChange={(event) => onMemberChange(event.target.value)}
         required
@@ -70,7 +75,7 @@ export function SalesMemberSearch({
           <button
             type="button"
             onClick={onClearMember}
-            className="app-button-secondary shrink-0 rounded-full px-4 py-2 text-sm font-semibold"
+            className="app-button-secondary shrink-0 rounded-full px-4 py-2 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
           >
             Cambiar socio
           </button>

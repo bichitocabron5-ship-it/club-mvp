@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent, RefObject } from "react";
 
 import { SalesCartItem } from "@/components/sales/sales-cart-item";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -57,6 +57,7 @@ export function SalesCart({
   onCartValueKeyDown,
   onCartValueInputRef,
   onNextMember,
+  registerButtonRef,
   onRegisterButtonKeyDown,
   onRegisterWithdrawal,
   onRemoveProduct,
@@ -71,12 +72,16 @@ export function SalesCart({
   visibleToday: TodayTotals;
   visibleTodayLoading: boolean;
   withdrawalFeedback: SalesCartFeedback | null;
-  onCartValueKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
+  onCartValueKeyDown: (
+    productId: number,
+    event: KeyboardEvent<HTMLInputElement>
+  ) => void;
   onCartValueInputRef: (
     productId: number,
     node: HTMLInputElement | null
   ) => void;
   onNextMember: () => void;
+  registerButtonRef: RefObject<HTMLButtonElement | null>;
   onRegisterButtonKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => void;
   onRegisterWithdrawal: () => void;
   onRemoveProduct: (productId: number) => void;
@@ -199,11 +204,12 @@ export function SalesCart({
       )}
 
       <button
+        ref={registerButtonRef}
         type="button"
         onClick={onRegisterWithdrawal}
         onKeyDown={onRegisterButtonKeyDown}
         disabled={invalid || loading}
-        className="app-button-primary mt-4 w-full rounded-3xl p-6 text-2xl font-black shadow-lg disabled:opacity-40"
+        className="app-button-primary mt-4 w-full rounded-3xl p-6 text-2xl font-black shadow-lg outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:opacity-40"
       >
         {loading ? "Registrando..." : "COBRAR / REGISTRAR"}
       </button>
@@ -211,7 +217,7 @@ export function SalesCart({
       <button
         type="button"
         onClick={onNextMember}
-        className="app-button-secondary mt-3 min-h-12 w-full rounded-2xl px-5 py-4 text-base font-bold"
+        className="app-button-secondary mt-3 min-h-12 w-full rounded-2xl px-5 py-4 text-base font-bold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
       >
         Siguiente socio
       </button>

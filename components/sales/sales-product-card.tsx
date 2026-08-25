@@ -16,7 +16,7 @@ export function SalesProductCard({
       type="button"
       onClick={() => onAddProduct(product, { focusInput: true })}
       disabled={noStock}
-      className={`min-h-36 rounded-xl border p-4 text-left shadow-sm transition hover:scale-[1.02] disabled:opacity-40 ${
+      className={`min-h-36 rounded-xl border p-4 text-left shadow-sm outline-none transition hover:scale-[1.02] focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:opacity-40 ${
         noStock ? "bg-gray-100" : "bg-white hover:bg-blue-50"
       }`}
     >

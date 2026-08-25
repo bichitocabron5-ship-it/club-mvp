@@ -12,6 +12,22 @@ import {
 import { PRODUCT_HASH_TYPES } from "@/lib/types";
 import type { ProductHashType, ProductSummary } from "@/lib/types";
 
+function normalizeProductSearchValue(value: string | null | undefined) {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function hasReasonableProductSearchMatch(
+  product: ProductSummary,
+  query: string
+) {
+  if (query.length < 2) return false;
+
+  return (
+    normalizeProductSearchValue(product.sku).includes(query) ||
+    normalizeProductSearchValue(product.name).includes(query)
+  );
+}
+
 export function useSalesProducts({
   products,
   onAddProduct,
@@ -103,22 +119,41 @@ export function useSalesProducts({
   }
 
   function handleProductSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key !== "Enter") return;
+    if (event.key !== "Enter" && event.code !== "NumpadEnter") return;
+    if (event.nativeEvent.isComposing) return;
 
     event.preventDefault();
 
-    const query = event.currentTarget.value.trim().toLowerCase();
+    const query = normalizeProductSearchValue(event.currentTarget.value);
     if (!query) return;
 
     const exactSkuMatches = products.filter(
       (product) =>
-        product.active && (product.sku ?? "").trim().toLowerCase() === query
+        product.active && normalizeProductSearchValue(product.sku) === query
     );
 
+    if (exactSkuMatches.length > 0) {
+      if (
+        exactSkuMatches.length === 1 &&
+        Number(exactSkuMatches[0].stock) > 0 &&
+        onAddProduct(exactSkuMatches[0], { focusInput: true })
+      ) {
+        setSearch("");
+      }
+
+      return;
+    }
+
+    const visibleDirectMatches = filteredProducts.filter((product) => {
+      return (
+        Number(product.stock) > 0 &&
+        hasReasonableProductSearchMatch(product, query)
+      );
+    });
+
     if (
-      exactSkuMatches.length === 1 &&
-      Number(exactSkuMatches[0].stock) > 0 &&
-      onAddProduct(exactSkuMatches[0], { focusInput: true })
+      visibleDirectMatches.length === 1 &&
+      onAddProduct(visibleDirectMatches[0], { focusInput: true })
     ) {
       setSearch("");
     }

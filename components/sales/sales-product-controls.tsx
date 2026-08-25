@@ -42,7 +42,7 @@ export function SalesProductControls({
           Buscar producto
         </label>
         <input
-          className="w-full rounded-2xl border border-black/10 bg-white/80 p-3 text-base"
+          className="w-full rounded-2xl border border-black/10 bg-white/80 p-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
           placeholder="Buscar por código o nombre..."
           ref={productSearchRef}
           value={search}
@@ -61,7 +61,7 @@ export function SalesProductControls({
               key={category.value}
               type="button"
               onClick={() => onCategoryFilter(category.value)}
-              className={`rounded-full px-4 py-2 text-sm font-bold ${
+              className={`rounded-full px-4 py-2 text-sm font-bold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 ${
                 selectedCategory === category.value
                   ? "bg-gray-900 text-white"
                   : "bg-gray-100 text-gray-700"
@@ -81,7 +81,7 @@ export function SalesProductControls({
             <button
               type="button"
               onClick={() => onHashTypeFilter("ALL")}
-              className={`rounded-full px-4 py-2 text-sm font-bold ${
+              className={`rounded-full px-4 py-2 text-sm font-bold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 ${
                 selectedHashType === "ALL"
                   ? "bg-blue-700 text-white"
                   : "bg-blue-50 text-blue-700"
@@ -95,7 +95,7 @@ export function SalesProductControls({
                 key={hashType.value}
                 type="button"
                 onClick={() => onHashTypeFilter(hashType.value)}
-                className={`rounded-full px-4 py-2 text-sm font-bold ${
+                className={`rounded-full px-4 py-2 text-sm font-bold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 ${
                   selectedHashType === hashType.value
                     ? "bg-blue-700 text-white"
                     : "bg-blue-50 text-blue-700"
