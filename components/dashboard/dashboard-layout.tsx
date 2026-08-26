@@ -228,7 +228,11 @@ export function DashboardLayout({
   if (!activeSection) {
     return (
       <main className="mx-auto max-w-7xl p-4 md:p-6">
-        <PageHeader title={title} description={description} />
+        <PageHeader
+          title={title}
+          description={description}
+          showBrand={false}
+        />
         <div className="space-y-5">
           {statusBar}
           {customizeControls}
@@ -239,7 +243,26 @@ export function DashboardLayout({
 
   return (
     <main className="mx-auto max-w-7xl p-4 md:p-6">
-      <PageHeader title={title} description={description} />
+      <div className="mb-6 overflow-hidden rounded-[2rem] border border-black/8 bg-white/80 shadow-[0_20px_60px_rgba(22,20,18,0.08)] backdrop-blur-xl">
+        <div className="relative overflow-hidden px-5 py-6 sm:px-7 sm:py-7">
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#a7282d]/7 via-transparent to-[#b4a78d]/10" />
+
+          <div className="relative">
+            <div className="mb-3 flex items-center gap-3">
+              <span className="h-[2px] w-8 rounded-full bg-[#a7282d]" />
+              <span className="text-xs font-black uppercase tracking-[0.28em] text-[#a7282d]">
+                The Zen Wolves
+              </span>
+            </div>
+
+            <PageHeader
+              title={title}
+              description={description}
+              showBrand={false}
+            />
+          </div>
+        </div>
+      </div>
 
       <div className="space-y-5">
         {statusBar}
@@ -247,7 +270,7 @@ export function DashboardLayout({
 
         <section
           aria-label="Secciones del dashboard"
-          className="rounded-[1.5rem] border border-black/8 bg-white/75 p-2 shadow-sm"
+          className="rounded-[1.75rem] border border-black/8 bg-white/85 p-2.5 shadow-[0_12px_36px_rgba(22,20,18,0.06)] backdrop-blur"
         >
           <div
             role="tablist"
@@ -269,10 +292,10 @@ export function DashboardLayout({
                   tabIndex={isActive ? 0 : -1}
                   onClick={() => setSelectedSectionId(section.id)}
                   onKeyDown={(event) => handleTabKeyDown(event, index)}
-                  className={`min-w-[9rem] shrink-0 rounded-[1.1rem] px-4 py-3 text-left text-sm font-black outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 ${
+                  className={`min-w-[10rem] shrink-0 rounded-[1.25rem] px-4 py-3.5 text-left text-sm font-black outline-none transition-all focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 ${
                     isActive
                       ? "app-button-primary"
-                      : "text-[var(--foreground)] hover:bg-black/[0.04]"
+                      : "border border-transparent text-[var(--foreground)] hover:border-black/8 hover:bg-black/[0.035]"
                   }`}
                 >
                   <span className="block">{section.label}</span>
@@ -290,8 +313,11 @@ export function DashboardLayout({
         </section>
 
         <div className="space-y-5">
-          <div className="min-w-0">
-            <h2 className="break-words text-xl font-black">{activeSection.label}</h2>
+          <div className="min-w-0 border-l-4 border-[#a7282d] pl-4">
+            <h2 className="break-words text-2xl font-black tracking-[-0.02em] text-[#201f1d]">
+              {activeSection.label}
+            </h2>
+
             <p className="mt-1 max-w-3xl text-sm leading-6 app-muted">
               {activeSection.description}
             </p>

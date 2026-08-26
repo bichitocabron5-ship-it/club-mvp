@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { PageHeader } from "@/components/ui/page-header";
 
 type UserRole = "ADMIN" | "STAFF";
 
@@ -171,7 +172,9 @@ export function AdminUsersClient() {
   }
 
   async function resetPassword(userId: number) {
-    const password = prompt("Nueva contraseña, mínimo 8 caracteres:");
+    const password = prompt(
+      "Introduce la nueva contraseña. Debe tener al menos 8 caracteres:"
+    );
 
     if (!password) return;
 
@@ -198,284 +201,512 @@ export function AdminUsersClient() {
       return;
     }
 
-    alert("Contraseña actualizada");
+    alert("Contraseña actualizada correctamente");
   }
 
   return (
     <main className="mx-auto max-w-7xl p-4 md:p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">Usuarios internos</h1>
-        <p className="text-sm text-gray-500">
-          Gestión de cuentas STAFF y ADMIN, acceso y vínculo opcional con socios.
-        </p>
-      </div>
+      <PageHeader
+        title="Usuarios internos"
+        description="Gestiona cuentas de acceso, roles administrativos y vínculos con socios del club."
+      />
 
-      {error && (
-        <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          {error}
-        </div>
-      )}
-
-      <form onSubmit={createUser} className="mb-6 grid gap-3 rounded border p-4 lg:grid-cols-5">
-        <div className="lg:col-span-5">
-          <h2 className="text-lg font-bold">Crear usuario</h2>
-        </div>
-
-        <input
-          className="rounded border p-3"
-          placeholder="Nombre"
-          value={form.name}
-          onChange={(e) => setForm({ ...form, name: e.target.value })}
-          required
-        />
-
-        <input
-          className="rounded border p-3"
-          type="email"
-          placeholder="Email"
-          autoComplete="username"
-          value={form.email}
-          onChange={(e) => setForm({ ...form, email: e.target.value })}
-          required
-        />
-
-        <input
-          className="rounded border p-3"
-          type="password"
-          placeholder="Contraseña inicial"
-          autoComplete="new-password"
-          value={form.password}
-          onChange={(e) => setForm({ ...form, password: e.target.value })}
-          required
-        />
-
-        <select
-          className="rounded border p-3"
-          value={form.role}
-          onChange={(e) => setForm({ ...form, role: e.target.value as UserRole })}
+      {error ? (
+        <div
+          role="alert"
+          className="mb-5 rounded-[1.5rem] border border-red-200 bg-red-50 px-5 py-4"
         >
-          <option value="STAFF">STAFF</option>
-          <option value="ADMIN">ADMIN</option>
-        </select>
+          <div className="text-[0.65rem] font-black uppercase tracking-[0.14em] text-red-700">
+            Error de administración
+          </div>
 
-        <select
-          className="rounded border p-3"
-          value={form.memberId}
-          onChange={(e) => setForm({ ...form, memberId: e.target.value })}
+          <div className="mt-1 text-sm font-semibold text-red-700">
+            {error}
+          </div>
+        </div>
+      ) : null}
+
+      <section className="app-panel mb-6 overflow-hidden rounded-[2rem]">
+        <div className="border-b border-black/7 px-5 py-5 sm:px-6">
+          <div className="mb-2 flex items-center gap-2">
+            <span className="h-[2px] w-6 rounded-full bg-[#a7282d]" />
+
+            <span className="text-[0.65rem] font-black uppercase tracking-[0.2em] text-[#a7282d]">
+              Administración de acceso
+            </span>
+          </div>
+
+          <h2 className="text-xl font-black tracking-[-0.02em] text-[#201f1d]">
+            Crear usuario
+          </h2>
+
+          <p className="mt-1 max-w-2xl text-sm leading-6 app-muted">
+            Crea una cuenta interna, asigna su rol y, si procede, vincúlala con un socio.
+          </p>
+        </div>
+
+        <form
+          onSubmit={createUser}
+          className="grid gap-4 p-5 sm:p-6 md:grid-cols-2 xl:grid-cols-3"
         >
-          <option value="">Sin socio vinculado</option>
-          {members.map((member) => (
-            <option
-              key={member.id}
-              value={member.id}
-              disabled={Boolean(member.appUser)}
+          <label className="block text-sm font-bold text-[#201f1d]">
+            Nombre
+
+            <input
+              className="mt-2 w-full rounded-xl border border-black/10 bg-white px-4 py-3 outline-none placeholder:text-black/35 focus:border-[#a7282d]/40 focus:ring-4 focus:ring-[#a7282d]/8"
+              placeholder="Nombre del usuario"
+              value={form.name}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  name: e.target.value,
+                })
+              }
+              required
+            />
+          </label>
+
+          <label className="block text-sm font-bold text-[#201f1d]">
+            Correo electrónico
+
+            <input
+              className="mt-2 w-full rounded-xl border border-black/10 bg-white px-4 py-3 outline-none placeholder:text-black/35 focus:border-[#a7282d]/40 focus:ring-4 focus:ring-[#a7282d]/8"
+              type="email"
+              placeholder="usuario@club.com"
+              autoComplete="username"
+              value={form.email}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  email: e.target.value,
+                })
+              }
+              required
+            />
+          </label>
+
+          <label className="block text-sm font-bold text-[#201f1d]">
+            Contraseña inicial
+
+            <input
+              className="mt-2 w-full rounded-xl border border-black/10 bg-white px-4 py-3 outline-none placeholder:text-black/35 focus:border-[#a7282d]/40 focus:ring-4 focus:ring-[#a7282d]/8"
+              type="password"
+              placeholder="Mínimo 8 caracteres"
+              autoComplete="new-password"
+              value={form.password}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  password: e.target.value,
+                })
+              }
+              required
+            />
+          </label>
+
+          <label className="block text-sm font-bold text-[#201f1d]">
+            Rol
+
+            <select
+              className="mt-2 w-full rounded-xl border border-black/10 bg-white px-4 py-3 outline-none focus:border-[#a7282d]/40 focus:ring-4 focus:ring-[#a7282d]/8"
+              value={form.role}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  role: e.target.value as UserRole,
+                })
+              }
             >
-              {getMemberLabel(member)}
-            </option>
-          ))}
-        </select>
+              <option value="STAFF">Staff</option>
+              <option value="ADMIN">Administrador</option>
+            </select>
+          </label>
 
-        <button
-          disabled={loading}
-          className="rounded bg-blue-600 p-3 font-bold text-white disabled:opacity-40 lg:col-span-5"
-        >
-          {loading ? "Creando..." : "Crear usuario"}
-        </button>
-      </form>
+          <label className="block text-sm font-bold text-[#201f1d] md:col-span-2">
+            Socio vinculado
 
-      <section className="rounded border p-4">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-bold">Usuarios</h2>
-            <p className="text-sm text-gray-500">
-              ADMIN activos: <strong>{activeAdmins}</strong>
-            </p>
+            <select
+              className="mt-2 w-full rounded-xl border border-black/10 bg-white px-4 py-3 outline-none focus:border-[#a7282d]/40 focus:ring-4 focus:ring-[#a7282d]/8"
+              value={form.memberId}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  memberId: e.target.value,
+                })
+              }
+            >
+              <option value="">Sin socio vinculado</option>
+
+              {members.map((member) => (
+                <option
+                  key={member.id}
+                  value={member.id}
+                  disabled={Boolean(member.appUser)}
+                >
+                  {getMemberLabel(member)}
+                </option>
+              ))}
+            </select>
+
+            <span className="mt-2 block text-xs font-normal app-muted">
+              Un socio ya vinculado a otra cuenta no puede seleccionarse.
+            </span>
+          </label>
+
+          <div className="flex items-end">
+            <button
+              type="submit"
+              disabled={loading}
+              className="app-button-primary inline-flex w-full items-center justify-center rounded-xl px-5 py-3.5 font-bold disabled:cursor-not-allowed disabled:opacity-50 xl:w-auto"
+            >
+              {loading ? "Creando usuario..." : "Crear usuario"}
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section className="app-panel overflow-hidden rounded-[2rem]">
+        <div className="border-b border-black/7 px-5 py-5 sm:px-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="mb-2 flex items-center gap-2">
+                <span className="h-[2px] w-6 rounded-full bg-[#b4a78d]" />
+
+                <span className="text-[0.65rem] font-black uppercase tracking-[0.2em] text-[#6d6860]">
+                  Control de acceso
+                </span>
+              </div>
+
+              <h2 className="text-xl font-black tracking-[-0.02em] text-[#201f1d]">
+                Usuarios internos
+              </h2>
+
+              <p className="mt-1 text-sm app-muted">
+                Revisa cuentas, roles, estado y vínculos con socios.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <div className="rounded-2xl border border-black/8 bg-[#f7f4ee] px-4 py-3">
+                <div className="text-[0.62rem] font-black uppercase tracking-[0.12em] app-muted">
+                  Usuarios
+                </div>
+
+                <div className="mt-1 text-lg font-black tabular-nums text-[#201f1d]">
+                  {users.length}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-amber-200 bg-amber-50/70 px-4 py-3">
+                <div className="text-[0.62rem] font-black uppercase tracking-[0.12em] text-amber-800/70">
+                  Admin activos
+                </div>
+
+                <div className="mt-1 text-lg font-black tabular-nums text-amber-800">
+                  {activeAdmins}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-        {users.length === 0 ? (
-          <p className="text-sm text-gray-500">No hay usuarios creados.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full border-collapse text-sm">
-              <thead>
-                <tr className="border-b text-left text-gray-500">
-                  <th className="px-3 py-2">Usuario</th>
-                  <th className="px-3 py-2">Rol</th>
-                  <th className="px-3 py-2">Estado</th>
-                  <th className="px-3 py-2">Socio vinculado</th>
-                  <th className="px-3 py-2">Creado</th>
-                  <th className="px-3 py-2">Acciones</th>
-                </tr>
-              </thead>
+        <div className="p-5 sm:p-6">
+          {users.length === 0 ? (
+            <div className="rounded-[1.5rem] border border-black/8 bg-white/70 p-7 text-center">
+              <div className="font-black text-[#201f1d]">
+                No hay usuarios creados
+              </div>
 
-              <tbody>
-                {users.map((user) => {
-                  const draft = editing[user.id];
+              <p className="mt-2 text-sm app-muted">
+                Crea la primera cuenta interna desde el formulario superior.
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-4 xl:grid-cols-2">
+              {users.map((user, index) => {
+                const draft = editing[user.id];
 
-                  if (!draft) return null;
+                if (!draft) return null;
 
-                  return (
-                    <tr key={user.id} className="border-b align-top">
-                      <td className="px-3 py-3">
-                        <div className="grid gap-2">
-                          <input
-                            className="rounded border p-2"
-                            value={draft.name}
-                            onChange={(e) =>
-                              setEditing({
-                                ...editing,
-                                [user.id]: { ...draft, name: e.target.value },
-                              })
-                            }
-                          />
+                const isAdmin = user.role === "ADMIN";
+                const isActive = user.active;
 
-                          <input
-                            className="rounded border p-2"
-                            type="email"
-                            value={draft.email}
-                            onChange={(e) =>
-                              setEditing({
-                                ...editing,
-                                [user.id]: { ...draft, email: e.target.value },
-                              })
-                            }
-                          />
-                        </div>
-                      </td>
-
-                      <td className="px-3 py-3">
-                        <div className="grid gap-2">
-                          <span
-                            className={
-                              user.role === "ADMIN"
-                                ? "inline-flex rounded bg-amber-100 px-3 py-1 font-bold text-amber-800"
-                                : "inline-flex rounded bg-blue-100 px-3 py-1 font-bold text-blue-700"
-                            }
-                          >
-                            {user.role}
+                return (
+                  <article
+                    key={user.id}
+                    className="overflow-hidden rounded-[1.75rem] border border-black/8 bg-white/88 transition-all hover:border-[#b4a78d]/40 hover:shadow-[0_10px_28px_rgba(22,20,18,0.05)]"
+                  >
+                    <div className="border-b border-black/7 p-4 sm:p-5">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="flex min-w-0 gap-3">
+                          <span className="flex h-9 min-w-9 shrink-0 items-center justify-center rounded-xl bg-[#0b0b0c] px-2 text-xs font-black text-[#b4a78d]">
+                            {String(index + 1).padStart(2, "0")}
                           </span>
 
-                          <select
-                            className="rounded border p-2"
-                            value={draft.role}
-                            onChange={(e) =>
-                              setEditing({
-                                ...editing,
-                                [user.id]: {
-                                  ...draft,
-                                  role: e.target.value as UserRole,
-                                },
-                              })
-                            }
-                          >
-                            <option value="STAFF">STAFF</option>
-                            <option value="ADMIN">ADMIN</option>
-                          </select>
-                        </div>
-                      </td>
+                          <div className="min-w-0">
+                            <h3 className="break-words text-lg font-black tracking-[-0.02em] text-[#201f1d]">
+                              {user.name}
+                            </h3>
 
-                      <td className="px-3 py-3">
-                        <div className="grid gap-2">
+                            <div className="mt-1 break-all text-sm app-muted">
+                              {user.email}
+                            </div>
+
+                            <div className="mt-2 text-xs app-muted">
+                              Creado:{" "}
+                              {new Date(user.createdAt).toLocaleString("es-ES")}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
                           <span
-                            className={
-                              user.active
-                                ? "inline-flex rounded bg-green-100 px-3 py-1 font-bold text-green-700"
-                                : "inline-flex rounded bg-red-100 px-3 py-1 font-bold text-red-700"
-                            }
+                            className={`rounded-full border px-3 py-1 text-xs font-black ${
+                              isAdmin
+                                ? "border-amber-200 bg-amber-50 text-amber-800"
+                                : "border-[#b4a78d]/30 bg-[#f3f0e9] text-[#645b4c]"
+                            }`}
                           >
-                            {user.active ? "ACTIVE" : "INACTIVE"}
+                            {isAdmin ? "ADMIN" : "STAFF"}
                           </span>
 
-                          <label className="inline-flex items-center gap-2">
+                          <span
+                            className={`rounded-full border px-3 py-1 text-xs font-black ${
+                              isActive
+                                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                : "border-red-200 bg-red-50 text-red-700"
+                            }`}
+                          >
+                            {isActive ? "ACTIVO" : "INACTIVO"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4 p-4 sm:p-5">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-[1.25rem] bg-[#f7f4ee] p-4">
+                          <div className="text-[0.65rem] font-black uppercase tracking-[0.1em] app-muted">
+                            Rol actual
+                          </div>
+
+                          <div className="mt-2 font-black text-[#201f1d]">
+                            {isAdmin ? "Administrador" : "Staff"}
+                          </div>
+                        </div>
+
+                        <div className="rounded-[1.25rem] bg-[#f7f4ee] p-4">
+                          <div className="text-[0.65rem] font-black uppercase tracking-[0.1em] app-muted">
+                            Socio vinculado
+                          </div>
+
+                          <div className="mt-2 text-sm font-black text-[#201f1d]">
+                            {user.member
+                              ? user.member.fullName
+                              : "Sin socio vinculado"}
+                          </div>
+
+                          {user.member ? (
+                            <div className="mt-1 text-xs app-muted">
+                              DNI {user.member.dni}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div className="overflow-hidden rounded-[1.5rem] border border-[#b4a78d]/25 bg-[#f7f4ee]/65">
+                        <div className="border-b border-black/7 px-4 py-3">
+                          <div className="text-[0.65rem] font-black uppercase tracking-[0.12em] app-muted">
+                            Configuración de cuenta
+                          </div>
+                        </div>
+
+                        {!draft.active ? (
+                          <div className="rounded-[1.25rem] border border-red-200 bg-red-50 px-4 py-3">
+                            <div className="text-[0.65rem] font-black uppercase tracking-[0.12em] text-red-700">
+                              Acceso desactivado
+                            </div>
+
+                            <p className="mt-1 text-sm leading-6 text-red-700">
+                              Este usuario no podrá iniciar sesión cuando guardes los cambios.
+                            </p>
+                          </div>
+                        ) : null}
+
+                        {user.role === "ADMIN" && draft.role === "STAFF" ? (
+                          <div className="rounded-[1.25rem] border border-amber-200 bg-amber-50 px-4 py-3">
+                            <div className="text-[0.65rem] font-black uppercase tracking-[0.12em] text-amber-800">
+                              Cambio de permisos
+                            </div>
+
+                            <p className="mt-1 text-sm leading-6 text-amber-800">
+                              Al guardar, esta cuenta dejará de tener permisos de administrador.
+                            </p>
+                          </div>
+                        ) : null}
+
+                        <div className="grid gap-4 p-4 sm:grid-cols-2">
+                          <label className="block min-w-0 text-sm font-bold text-[#201f1d]">
+                            Nombre
+
+                            <input
+                              className="mt-2 w-full rounded-xl border border-black/10 bg-white px-4 py-3 outline-none focus:border-[#a7282d]/40 focus:ring-4 focus:ring-[#a7282d]/8"
+                              value={draft.name}
+                              onChange={(e) =>
+                                setEditing({
+                                  ...editing,
+                                  [user.id]: {
+                                    ...draft,
+                                    name: e.target.value,
+                                  },
+                                })
+                              }
+                            />
+                          </label>
+
+                          <label className="block text-sm font-bold text-[#201f1d]">
+                            Correo electrónico
+
+                            <input
+                              className="mt-2 w-full rounded-xl border border-black/10 bg-white px-4 py-3 outline-none focus:border-[#a7282d]/40 focus:ring-4 focus:ring-[#a7282d]/8"
+                              type="email"
+                              value={draft.email}
+                              onChange={(e) =>
+                                setEditing({
+                                  ...editing,
+                                  [user.id]: {
+                                    ...draft,
+                                    email: e.target.value,
+                                  },
+                                })
+                              }
+                            />
+                          </label>
+
+                          <label className="block text-sm font-bold text-[#201f1d]">
+                            Rol
+
+                            <select
+                              className="mt-2 w-full rounded-xl border border-black/10 bg-white px-4 py-3 outline-none focus:border-[#a7282d]/40 focus:ring-4 focus:ring-[#a7282d]/8"
+                              value={draft.role}
+                              onChange={(e) =>
+                                setEditing({
+                                  ...editing,
+                                  [user.id]: {
+                                    ...draft,
+                                    role: e.target.value as UserRole,
+                                  },
+                                })
+                              }
+                            >
+                              <option value="STAFF">Staff</option>
+                              <option value="ADMIN">Administrador</option>
+                            </select>
+                          </label>
+
+                          <label className="block text-sm font-bold text-[#201f1d]">
+                            Socio vinculado
+
+                            <select
+                              className="mt-2 w-full rounded-xl border border-black/10 bg-white px-4 py-3 outline-none focus:border-[#a7282d]/40 focus:ring-4 focus:ring-[#a7282d]/8"
+                              value={draft.memberId}
+                              onChange={(e) =>
+                                setEditing({
+                                  ...editing,
+                                  [user.id]: {
+                                    ...draft,
+                                    memberId: e.target.value,
+                                  },
+                                })
+                              }
+                            >
+                              <option value="">Sin socio vinculado</option>
+
+                              {members.map((member) => {
+                                const linkedToAnotherUser =
+                                  Boolean(member.appUser) &&
+                                  member.appUser?.id !== user.id;
+
+                                return (
+                                  <option
+                                    key={member.id}
+                                    value={member.id}
+                                    disabled={linkedToAnotherUser}
+                                  >
+                                    {getMemberLabel(member)}
+                                  </option>
+                                );
+                              })}
+                            </select>
+                          </label>
+
+                          <label className="flex min-h-[72px] items-center gap-3 rounded-[1.25rem] border border-black/8 bg-white px-4 py-3 sm:col-span-2">
                             <input
                               type="checkbox"
                               checked={draft.active}
                               onChange={(e) =>
                                 setEditing({
                                   ...editing,
-                                  [user.id]: { ...draft, active: e.target.checked },
+                                  [user.id]: {
+                                    ...draft,
+                                    active: e.target.checked,
+                                  },
                                 })
                               }
+                              className="h-4 w-4 accent-[#a7282d]"
                             />
-                            Activo
+
+                            <div>
+                              <div className="text-sm font-black text-[#201f1d]">
+                                {draft.active ? "Usuario activo" : "Usuario inactivo"}
+                              </div>
+
+                              <div className="mt-0.5 text-xs app-muted">
+                                {draft.active
+                                  ? "La cuenta puede iniciar sesión y utilizar la aplicación."
+                                  : "La cuenta quedará sin acceso al guardar los cambios."}
+                              </div>
+                            </div>
                           </label>
                         </div>
-                      </td>
+                      </div>
 
-                      <td className="px-3 py-3">
-                        <div className="grid gap-2">
-                          <div className="text-gray-700">
-                            {user.member
-                              ? `${user.member.fullName} · ${user.member.dni}`
-                              : "Sin socio"}
-                          </div>
+                      <div className="flex flex-col gap-2 border-t border-black/7 pt-4 sm:flex-row sm:flex-wrap sm:justify-end">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void resetPassword(user.id);
+                          }}
+                          disabled={savingId === user.id}
+                          className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-[#b4a78d]/35 bg-[#f7f4ee] px-4 py-2.5 text-sm font-bold text-[#645b4c] transition hover:bg-[#f0ece4] disabled:opacity-50 sm:w-auto"
+                        >
+                          Cambiar contraseña
+                        </button>
 
-                          <select
-                            className="rounded border p-2"
-                            value={draft.memberId}
-                            onChange={(e) =>
-                              setEditing({
-                                ...editing,
-                                [user.id]: { ...draft, memberId: e.target.value },
-                              })
-                            }
-                          >
-                            <option value="">Sin socio vinculado</option>
-                            {members.map((member) => {
-                              const linkedToAnotherUser =
-                                Boolean(member.appUser) && member.appUser?.id !== user.id;
-
-                              return (
-                                <option
-                                  key={member.id}
-                                  value={member.id}
-                                  disabled={linkedToAnotherUser}
-                                >
-                                  {getMemberLabel(member)}
-                                </option>
-                              );
-                            })}
-                          </select>
-                        </div>
-                      </td>
-
-                      <td className="px-3 py-3 text-gray-500">
-                        {new Date(user.createdAt).toLocaleString()}
-                      </td>
-
-                      <td className="px-3 py-3">
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              void saveUser(user.id);
-                            }}
-                            disabled={savingId === user.id}
-                            className="rounded bg-blue-600 px-3 py-2 font-bold text-white disabled:opacity-40"
-                          >
-                            Guardar
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => {
-                              void resetPassword(user.id);
-                            }}
-                            disabled={savingId === user.id}
-                            className="rounded bg-gray-900 px-3 py-2 font-bold text-white disabled:opacity-40"
-                          >
-                            Reset password
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void saveUser(user.id);
+                          }}
+                          disabled={savingId === user.id}
+                          className={`inline-flex min-h-11 w-full items-center justify-center rounded-xl px-4 py-2.5 text-sm font-bold disabled:opacity-50 sm:w-auto ${
+                            !draft.active || (user.role === "ADMIN" && draft.role === "STAFF")
+                              ? "app-button-danger"
+                              : "app-button-primary"
+                          }`}
+                        >
+                          {savingId === user.id
+                            ? "Guardando..."
+                            : "Guardar cambios"}
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </section>
     </main>
   );

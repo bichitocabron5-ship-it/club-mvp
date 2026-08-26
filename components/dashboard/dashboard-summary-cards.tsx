@@ -38,8 +38,8 @@ export function DashboardSummaryCards({
           label="Ventas hoy"
           value={formatCurrency(data.summary.salesTodayTotal)}
           comparison={data.comparisons.salesTotal}
-          className="bg-emerald-50"
-          valueClassName="text-2xl font-black text-emerald-800 md:text-3xl"
+          className="bg-white/90"
+          valueClassName="text-2xl font-black text-[#a7282d] md:text-3xl"
         />
         <StatCard
           label="Tickets hoy"
@@ -49,17 +49,29 @@ export function DashboardSummaryCards({
         <StatCard
           label="Beneficio hoy"
           value={formatCurrency(data.summary.profitToday)}
-          className={data.summary.profitToday >= 0 ? "bg-sky-50" : "bg-red-50"}
+          className={
+            data.summary.profitToday >= 0
+              ? "bg-emerald-50/70"
+              : "bg-red-50/80"
+          }
           valueClassName={
             data.summary.profitToday >= 0
-              ? "text-2xl font-black text-sky-800 md:text-3xl"
+              ? "text-2xl font-black text-emerald-800 md:text-3xl"
               : "text-2xl font-black text-red-800 md:text-3xl"
           }
         />
-        <StatCard label="Margen medio" value={formatPercent(data.summary.marginPercent)} />
+        <StatCard
+          label="Margen medio"
+          value={formatPercent(data.summary.marginPercent)}
+          className="bg-[#f7f4ee]/90"
+          valueClassName="text-2xl font-black text-[#201f1d] md:text-3xl"
+        />
+
         <StatCard
           label="Descuentos hoy"
           value={formatCurrency(data.summary.discountsTodayTotal)}
+          className="bg-[#f8f3f1]/90"
+          valueClassName="text-2xl font-black text-[#861f23] md:text-3xl"
         />
       </section>
 
