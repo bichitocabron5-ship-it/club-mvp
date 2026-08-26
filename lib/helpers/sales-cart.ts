@@ -170,7 +170,7 @@ export function buildSalesCartLines({
     } else if (parsedAmountInput === null) {
       conversionError = "Introduce un importe mayor que 0.";
     } else if (price <= 0) {
-      conversionError = "El producto no tiene un precio valido.";
+      conversionError = "El producto no tiene un precio válido.";
     } else if (normalizedDiscountPercent >= 100) {
       conversionError = "No se puede calcular por importe con descuento del 100 %.";
     } else if (product.unit === "UD") {

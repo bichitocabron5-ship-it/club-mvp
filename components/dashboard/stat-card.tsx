@@ -92,15 +92,34 @@ export function StatCard({
 }) {
   return (
     <div
-      className={`app-panel flex h-full min-w-0 flex-col rounded-3xl p-4 md:p-5 ${className}`.trim()}
+      className={`app-panel group relative flex h-full min-w-0 flex-col overflow-hidden rounded-[1.75rem] p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_50px_rgba(22,20,18,0.12)] md:p-5 ${className}`.trim()}
     >
-      <div className="break-words text-xs font-semibold uppercase leading-4 app-muted">
-        {label}
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-[#a7282d] via-[#c84a4f] to-[#b4a78d] opacity-80" />
+
+      <div className="flex items-center justify-between gap-3">
+        <div className="break-words text-[0.68rem] font-black uppercase leading-4 tracking-[0.14em] text-[#6d6860]">
+          {label}
+        </div>
+
+        <span
+          aria-hidden="true"
+          className="h-2 w-2 shrink-0 rounded-full bg-[#a7282d]/70"
+        />
       </div>
-      <div className={`mt-2 break-words leading-tight tabular-nums ${valueClassName}`}>
+
+      <div
+        className={`mt-3 break-words leading-tight tabular-nums tracking-[-0.03em] ${valueClassName}`}
+      >
         {value}
       </div>
-      {comparison ? <ComparisonBadge label={label} comparison={comparison} /> : null}
+
+      {comparison ? (
+        <ComparisonBadge label={label} comparison={comparison} />
+      ) : (
+        <div className="mt-auto pt-4">
+          <div className="h-px w-full bg-gradient-to-r from-black/8 to-transparent" />
+        </div>
+      )}
     </div>
   );
 }

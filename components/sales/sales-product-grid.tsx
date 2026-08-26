@@ -11,7 +11,7 @@ export function SalesProductGrid({
 }) {
   if (products.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-black/10 bg-white/70 p-6 text-center text-sm font-semibold text-gray-600">
+      <div className="rounded-2xl border border-dashed border-black/10 bg-white/70 p-6 text-center text-sm font-semibold app-muted">
         No hay productos con ese código o nombre.
       </div>
     );

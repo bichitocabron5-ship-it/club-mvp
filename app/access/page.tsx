@@ -9,6 +9,7 @@ import type {
   AccessToggleResponse,
 } from "@/lib/types";
 import { useEffect, useRef, useState } from "react";
+import { PageHeader } from "@/components/ui/page-header";
 
 type ScreenStatus = "OK" | "DENIED" | "IDLE";
 
@@ -42,14 +43,14 @@ function formatDate(value: string | null | undefined) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Sin vencimiento";
 
-  return date.toLocaleDateString();
+  return date.toLocaleDateString("es-ES");
 }
 
 function formatTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
 
-  return date.toLocaleTimeString([], {
+  return date.toLocaleTimeString("es-ES", {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
@@ -70,134 +71,201 @@ function getMemberWarnings(member: AccessMemberSnapshot) {
   return warnings;
 }
 
-function getScanResultText(scan: LastAccessScan) {
-  if (scan.status === "DENIED") {
-    return scan.error || "Acceso denegado";
-  }
-
-  return scan.action === "OUT" ? "Salida registrada" : "Entrada registrada";
-}
-
 function AccessMemberCard({ scan }: { scan: LastAccessScan }) {
   const member = scan.member;
   const warnings = getMemberWarnings(member);
   const expired = isExpired(member.expiresAt);
-  const displayNumber = member.displayNumber ?? member.memberNumber ?? member.id;
-  const cardTone =
-    scan.status === "OK"
-      ? "border-green-500 bg-green-50/90"
-      : "border-red-500 bg-red-50/90";
-  const resultTone =
-    scan.status === "OK" ? "text-green-800" : "text-red-800";
-  const resultBadge =
-    scan.status === "OK"
-      ? scan.action === "IN"
-        ? "bg-green-700 text-white"
-        : "bg-blue-700 text-white"
-      : "bg-red-700 text-white";
+  const displayNumber =
+    member.displayNumber ?? member.memberNumber ?? member.id;
+
+  const isDenied = scan.status === "DENIED";
+  const isEntry = scan.status === "OK" && scan.action === "IN";
+
+  const resultLabel = isDenied
+    ? "ACCESO DENEGADO"
+    : isEntry
+      ? "ENTRADA REGISTRADA"
+      : "SALIDA REGISTRADA";
+
+  const resultDescription = isDenied
+    ? scan.error || scan.message || "No se ha podido autorizar el acceso."
+    : isEntry
+      ? "El socio ha quedado registrado dentro del club."
+      : "La salida del socio se ha registrado correctamente.";
+
+  const resultTone = isDenied
+    ? "border-red-200 bg-red-50 text-red-800"
+    : isEntry
+      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+      : "border-sky-200 bg-sky-50 text-sky-800";
+
+  const resultDot = isDenied
+    ? "bg-red-600"
+    : isEntry
+      ? "bg-emerald-600"
+      : "bg-sky-600";
 
   return (
-    <section className={`mb-6 rounded-3xl border-4 p-4 shadow-xl md:p-6 ${cardTone}`}>
-      <div className="grid gap-5 md:grid-cols-[18rem_minmax(0,1fr)] md:items-stretch">
-        <div className="flex min-h-72 items-center justify-center overflow-hidden rounded-3xl border border-black/10 bg-white">
-          {member.photoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={member.photoUrl}
-              alt={`Foto de ${member.fullName}`}
-              className="h-full max-h-[24rem] w-full object-cover md:max-h-none"
-            />
-          ) : (
-            <div className="text-lg font-bold text-gray-500">Sin foto</div>
-          )}
-        </div>
+    <section className="app-panel mb-6 overflow-hidden rounded-[2rem]">
+      <div className={`border-b px-5 py-5 sm:px-6 ${resultTone}`}>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span
+                aria-hidden="true"
+                className={`h-3 w-3 shrink-0 rounded-full ${resultDot}`}
+              />
 
-        <div className="flex min-w-0 flex-col gap-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0">
-              <div className="text-sm font-bold uppercase tracking-wide text-gray-500">
-                Resultado
-              </div>
-              <h2 className={`mt-1 text-3xl font-black md:text-5xl ${resultTone}`}>
-                {getScanResultText(scan)}
-              </h2>
-              {scan.status === "DENIED" && scan.message ? (
-                <div className="mt-2 text-lg font-semibold text-red-800">
-                  {scan.message}
-                </div>
-              ) : null}
+              <span className="text-[0.68rem] font-black uppercase tracking-[0.18em]">
+                Resultado de lectura
+              </span>
             </div>
 
-            <span className={`inline-flex rounded-full px-4 py-2 text-sm font-black ${resultBadge}`}>
-              {scan.status === "OK"
-                ? scan.action === "IN"
-                  ? "ENTRADA"
-                  : "SALIDA"
-                : "DENEGADO"}
+            <h2 className="mt-2 text-2xl font-black tracking-[-0.03em] sm:text-3xl lg:text-4xl">
+              {resultLabel}
+            </h2>
+
+            <p className="mt-1 text-sm font-semibold opacity-85 sm:text-base">
+              {resultDescription}
+            </p>
+          </div>
+
+          <div className="shrink-0">
+            <span className="inline-flex rounded-full border border-current/20 bg-white/60 px-4 py-2 text-xs font-black">
+              {isDenied ? "DENEGADO" : isEntry ? "ENTRADA" : "SALIDA"}
             </span>
           </div>
+        </div>
+      </div>
 
-          <div>
-            <div className="text-sm font-bold uppercase tracking-wide text-gray-500">
-              Socio
-            </div>
-            <div className="mt-1 break-words text-3xl font-black text-gray-950 md:text-5xl">
-              {member.fullName}
-            </div>
+      <div className="grid gap-0 lg:grid-cols-[17rem_minmax(0,1fr)]">
+        <div className="border-b border-black/7 bg-[#f7f4ee] p-5 sm:p-6 lg:border-b-0 lg:border-r">
+          <div className="aspect-[4/5] overflow-hidden rounded-[1.5rem] border border-black/8 bg-white">
+            {member.photoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={member.photoUrl}
+                alt={`Foto de ${member.fullName}`}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="flex h-full min-h-64 flex-col items-center justify-center px-4 text-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#ece7dd] text-2xl font-black text-[#645b4c]">
+                  {member.fullName.trim().charAt(0).toUpperCase() || "?"}
+                </div>
+
+                <div className="mt-3 text-sm font-bold text-[#645b4c]">
+                  Sin fotografía
+                </div>
+              </div>
+            )}
           </div>
 
-          <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
-            <div className="border-t border-black/10 pt-3">
-              <dt className="text-sm font-semibold text-gray-500">Nro. socio</dt>
-              <dd className="mt-1 text-2xl font-black text-gray-950">
-                {displayNumber}
+          <div className="mt-4 text-center">
+            <div className="text-[0.62rem] font-black uppercase tracking-[0.12em] app-muted">
+              Número de socio
+            </div>
+
+            <div className="mt-1 text-2xl font-black tabular-nums text-[#201f1d]">
+              {displayNumber}
+            </div>
+          </div>
+        </div>
+
+        <div className="min-w-0 p-5 sm:p-6">
+          <div>
+            <div className="text-[0.65rem] font-black uppercase tracking-[0.14em] text-[#a7282d]">
+              Socio identificado
+            </div>
+
+            <h3 className="mt-1 break-words text-2xl font-black tracking-[-0.03em] text-[#201f1d] sm:text-3xl">
+              {member.fullName}
+            </h3>
+          </div>
+
+          <dl className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="rounded-[1.25rem] border border-black/8 bg-[#f7f4ee]/75 px-4 py-3.5">
+              <dt className="text-[0.62rem] font-black uppercase tracking-[0.1em] app-muted">
+                DNI
+              </dt>
+
+              <dd className="mt-1 break-all text-base font-black text-[#201f1d]">
+                {member.dni}
               </dd>
             </div>
 
-            <div className="border-t border-black/10 pt-3">
-              <dt className="text-sm font-semibold text-gray-500">DNI</dt>
-              <dd className="mt-1 text-2xl font-bold text-gray-950">{member.dni}</dd>
-            </div>
+            <div className="rounded-[1.25rem] border border-black/8 bg-[#f7f4ee]/75 px-4 py-3.5">
+              <dt className="text-[0.62rem] font-black uppercase tracking-[0.1em] app-muted">
+                Vencimiento
+              </dt>
 
-            <div className="border-t border-black/10 pt-3">
-              <dt className="text-sm font-semibold text-gray-500">Vencimiento</dt>
               <dd
-                className={
-                  expired
-                    ? "mt-1 text-xl font-black text-red-800"
-                    : "mt-1 text-xl font-bold text-gray-950"
-                }
+                className={`mt-1 text-base font-black ${
+                  expired ? "text-red-700" : "text-[#201f1d]"
+                }`}
               >
                 {formatDate(member.expiresAt)}
               </dd>
             </div>
 
-            <div className="border-t border-black/10 pt-3">
-              <dt className="text-sm font-semibold text-gray-500">Estado</dt>
+            <div className="rounded-[1.25rem] border border-black/8 bg-[#f7f4ee]/75 px-4 py-3.5">
+              <dt className="text-[0.62rem] font-black uppercase tracking-[0.1em] app-muted">
+                Estado
+              </dt>
+
               <dd className="mt-1">
                 <span
-                  className={
+                  className={`inline-flex rounded-full px-2.5 py-1 text-xs font-black ${
                     member.active
-                      ? "inline-flex rounded-full bg-green-700 px-3 py-1 text-sm font-black text-white"
-                      : "inline-flex rounded-full bg-red-700 px-3 py-1 text-sm font-black text-white"
-                  }
+                      ? "bg-emerald-100 text-emerald-800"
+                      : "bg-red-100 text-red-800"
+                  }`}
                 >
-                  {member.active ? "Activo" : "Inactivo"}
+                  {member.active ? "ACTIVO" : "INACTIVO"}
                 </span>
               </dd>
             </div>
           </dl>
 
           {warnings.length > 0 ? (
-            <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-lg font-bold text-amber-950">
-              {warnings.join(" - ")}
+            <div className="mt-4 rounded-[1.25rem] border border-amber-200 bg-amber-50 px-4 py-3.5">
+              <div className="text-[0.62rem] font-black uppercase tracking-[0.12em] text-amber-800">
+                Atención
+              </div>
+
+              <div className="mt-1 text-sm font-bold text-amber-900">
+                {warnings.join(" · ")}
+              </div>
             </div>
           ) : null}
 
-          <div className="flex flex-wrap gap-2 text-sm font-medium text-gray-600">
-            <span>Lectura: {scan.readCode}</span>
-            {scan.scannedAt ? <span>Hora: {formatTime(scan.scannedAt)}</span> : null}
-            {member.rfidCode ? <span>RFID: {member.rfidCode}</span> : null}
+          <div className="mt-5 border-t border-black/7 pt-4">
+            <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs app-muted">
+              <span>
+                Lectura:{" "}
+                <strong className="font-mono text-[#201f1d]">
+                  {scan.readCode}
+                </strong>
+              </span>
+
+              {scan.scannedAt ? (
+                <span>
+                  Hora:{" "}
+                  <strong className="text-[#201f1d]">
+                    {formatTime(scan.scannedAt)}
+                  </strong>
+                </span>
+              ) : null}
+
+              {member.rfidCode ? (
+                <span>
+                  RFID:{" "}
+                  <strong className="font-mono text-[#201f1d]">
+                    {member.rfidCode}
+                  </strong>
+                </span>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>
@@ -312,7 +380,7 @@ export default function AccessPage() {
       }
 
       if (!payload?.member || !payload.action || !payload.message) {
-        throw new Error("Respuesta de acceso invalida");
+        throw new Error("Respuesta de acceso inválida");
       }
 
       setLastScan({
@@ -360,7 +428,7 @@ export default function AccessPage() {
     }
 
     const confirmed = window.confirm(
-      `Hay ${current.count} socios dentro. Se registrara salida automatica para todos.`
+      `Hay ${current.count} socio${current.count === 1 ? "" : "s"} dentro. Se registrará la salida automática de todos. ¿Quieres continuar?`
     );
 
     if (!confirmed) {
@@ -381,19 +449,19 @@ export default function AccessPage() {
         | null;
 
       if (!res.ok) {
-        throw new Error(data?.error || "Error registrando salida automatica");
+        throw new Error(data?.error || "Error registrando salida automática");
       }
 
       const count = Number(data?.count || 0);
       setAutoCheckoutMessage(
-        `Se registro la salida automatica de ${count} socio(s).`
+        `Se registró la salida automática de ${count} socio${count === 1 ? "" : "s"}.`
       );
       await loadCurrent();
     } catch (autoCheckoutError) {
       setError(
         autoCheckoutError instanceof Error
           ? autoCheckoutError.message
-          : "Error registrando salida automatica"
+          : "Error registrando la salida automática"
       );
     } finally {
       setAutoCheckoutLoading(false);
@@ -403,113 +471,447 @@ export default function AccessPage() {
 
   return (
     <main className="mx-auto max-w-6xl p-4 md:p-6">
-      <div className="mb-6">
-        <h1 className="text-3xl font-black tracking-tight">Control de acceso</h1>
-        <p className="mt-2 text-sm text-gray-500">
-          Escanea una chapita para registrar entrada o salida.
-        </p>
-      </div>
+      <PageHeader
+        title="Control de acceso"
+        description="Registra entradas y salidas mediante la chapita RFID del socio."
+      />
 
       {lastScan ? (
         <AccessMemberCard scan={lastScan} />
+      ) : screenStatus === "DENIED" ? (
+        <section className="mb-6 overflow-hidden rounded-[2rem] border border-red-200 bg-white/88">
+          <div className="border-b border-red-200 bg-red-50 px-5 py-6 text-center sm:px-6 sm:py-8">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-red-100 text-2xl font-black text-red-700">
+              !
+            </div>
+
+            <div className="mt-4 text-[0.68rem] font-black uppercase tracking-[0.18em] text-red-700">
+              Resultado de lectura
+            </div>
+
+            <h2 className="mt-2 text-3xl font-black tracking-[-0.04em] text-red-800 sm:text-4xl">
+              ACCESO DENEGADO
+            </h2>
+
+            <p className="mx-auto mt-2 max-w-2xl text-base font-semibold leading-7 text-red-700 sm:text-lg">
+              {error || "Chapita no asignada"}
+            </p>
+          </div>
+
+          <div className="p-5 sm:p-6">
+            <div className="flex flex-col gap-4 rounded-[1.5rem] border border-red-100 bg-red-50/45 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="font-black text-[#201f1d]">
+                  No se ha registrado ningún acceso
+                </div>
+
+                <p className="mt-1 text-sm leading-6 app-muted">
+                  Comprueba la chapita o el estado del socio y vuelve a realizar la
+                  lectura.
+                </p>
+              </div>
+
+              {lastReadCode ? (
+                <div className="shrink-0 rounded-xl border border-red-200 bg-white px-3 py-2">
+                  <div className="text-[0.6rem] font-black uppercase tracking-[0.1em] text-red-700">
+                    Código leído
+                  </div>
+
+                  <div className="mt-1 font-mono text-sm font-black text-[#201f1d]">
+                    {lastReadCode}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </section>
       ) : (
-        <section
-          className={
-            screenStatus === "DENIED"
-              ? "mb-6 rounded-3xl border-4 border-red-600 bg-red-100 p-8 text-center text-red-800"
-              : "mb-6 rounded-3xl border-4 border-gray-300 bg-gray-50 p-8 text-center text-gray-600"
-          }
-        >
-          {screenStatus === "DENIED" ? (
-            <>
-              <div className="text-4xl font-black md:text-5xl">ACCESO DENEGADO</div>
-              <div className="mt-3 text-2xl">{error || "Chapita no asignada"}</div>
-            </>
-          ) : (
-            <>
-              <div className="text-4xl font-black">ESPERANDO CHAPITA</div>
-              <div className="mt-3 text-lg">Pasa una chapita por el lector RFID</div>
-            </>
-          )}
+        <section className="app-panel mb-6 overflow-hidden rounded-[2rem]">
+          <div className="px-5 py-8 text-center sm:px-6 sm:py-10">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#ece7dd] text-xl font-black text-[#645b4c]">
+              RFID
+            </div>
+
+            <div className="mt-4 text-[0.68rem] font-black uppercase tracking-[0.18em] text-[#a7282d]">
+              Control de acceso preparado
+            </div>
+
+            <h2 className="mt-2 text-3xl font-black tracking-[-0.04em] text-[#201f1d] sm:text-4xl">
+              ESPERANDO CHAPITA
+            </h2>
+
+            <p className="mx-auto mt-2 max-w-2xl text-base leading-7 app-muted">
+              Pasa una chapita por el lector RFID para registrar la siguiente entrada
+              o salida.
+            </p>
+
+            <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-black text-emerald-700">
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+              LISTO PARA LEER
+            </div>
+          </div>
         </section>
       )}
 
-      <form onSubmit={handleSubmit} className="app-panel mb-6 rounded-3xl p-4 md:p-5">
-        <label className="mb-2 block text-sm font-medium">Escanear chapita</label>
+      <section className="app-panel mb-6 overflow-hidden rounded-[2rem]">
+        <div className="border-b border-black/7 px-5 py-5 sm:px-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="mb-2 flex items-center gap-2">
+                <span className="h-[2px] w-6 rounded-full bg-[#a7282d]" />
 
-        <input
-          ref={inputRef}
-          autoFocus
-          className="w-full rounded-2xl border border-black/10 bg-white p-4 text-xl"
-          placeholder="Escanea la chapita o pega el codigo"
-          value={rfidInput}
-          onChange={(e) => setRfidInput(e.target.value)}
-          autoComplete="off"
-          disabled={processing}
-        />
+                <span className="text-[0.65rem] font-black uppercase tracking-[0.2em] text-[#a7282d]">
+                  Estación RFID
+                </span>
+              </div>
 
-        {lastReadCode && (
-          <div className="mt-2 text-xs text-gray-500">Lectura: {lastReadCode}</div>
-        )}
+              <h2 className="text-xl font-black tracking-[-0.02em] text-[#201f1d]">
+                Lector de acceso
+              </h2>
 
-        {error && (
-          <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-red-700">
-            {error}
-          </div>
-        )}
-      </form>
+              <p className="mt-1 text-sm leading-6 app-muted">
+                Pasa la chapita por el lector para identificar al socio y registrar
+                automáticamente su entrada o salida.
+              </p>
+            </div>
 
-      <section className="app-panel rounded-3xl p-4 md:p-5">
-        <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <h2 className="text-xl font-bold">Dentro ahora</h2>
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={() => void handleAutoCheckout()}
-              disabled={autoCheckoutLoading || current.count === 0}
-              className="rounded-2xl bg-blue-600 px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:bg-gray-300"
+            <span
+              className={`rounded-full border px-3 py-1.5 text-xs font-black ${
+                processing
+                  ? "border-amber-200 bg-amber-50 text-amber-800"
+                  : "border-emerald-200 bg-emerald-50 text-emerald-700"
+              }`}
             >
-              {autoCheckoutLoading
-                ? "Registrando..."
-                : "Cerrar salidas pendientes"}
-            </button>
-            <div className="rounded-2xl bg-gray-900 px-4 py-2 text-white">
-              Aforo: <strong>{current.count}</strong>
+              {processing ? "PROCESANDO" : "LECTOR PREPARADO"}
+            </span>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-5 sm:p-6">
+          <label className="block text-sm font-bold text-[#201f1d]">
+            Código RFID
+
+            <input
+              ref={inputRef}
+              autoFocus
+              className="mt-2 w-full rounded-xl border border-black/10 bg-white px-4 py-4 font-mono text-xl font-black tracking-[0.04em] outline-none placeholder:font-sans placeholder:text-base placeholder:font-normal placeholder:tracking-normal placeholder:text-black/35 focus:border-[#a7282d]/40 focus:ring-4 focus:ring-[#a7282d]/8 disabled:cursor-wait disabled:opacity-60"
+              placeholder={
+                processing
+                  ? "Procesando lectura..."
+                  : "Escanea la chapita o introduce el código"
+              }
+              value={rfidInput}
+              onChange={(e) => setRfidInput(e.target.value)}
+              autoComplete="off"
+              disabled={processing}
+            />
+          </label>
+
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-xs app-muted">
+              {lastReadCode ? (
+                <>
+                  Última lectura:{" "}
+                  <span className="font-mono font-black text-[#201f1d]">
+                    {lastReadCode}
+                  </span>
+                </>
+              ) : (
+                "El lector mantiene este campo preparado para la siguiente chapita."
+              )}
+            </div>
+
+            <div
+              className={`flex items-center gap-2 text-xs font-black ${
+                processing ? "text-amber-800" : "text-emerald-700"
+              }`}
+            >
+              <span
+                className={`h-2.5 w-2.5 rounded-full ${
+                  processing
+                    ? "animate-pulse bg-amber-500"
+                    : "bg-emerald-500"
+                }`}
+              />
+
+              {processing ? "COMPROBANDO SOCIO" : "ESPERANDO LECTURA"}
+            </div>
+          </div>
+        </form>
+      </section>
+
+      <section className="app-panel mb-6 overflow-hidden rounded-[2rem]">
+        <div className="border-b border-black/7 px-5 py-5 sm:px-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="mb-2 flex items-center gap-2">
+                <span className="h-[2px] w-6 rounded-full bg-[#b4a78d]" />
+
+                <span className="text-[0.65rem] font-black uppercase tracking-[0.2em] text-[#6d6860]">
+                  Ocupación actual
+                </span>
+              </div>
+
+              <h2 className="text-xl font-black tracking-[-0.02em] text-[#201f1d]">
+                Socios dentro del club
+              </h2>
+
+              <p className="mt-1 text-sm leading-6 app-muted">
+                Socios que tienen una entrada registrada y todavía no han marcado su
+                salida.
+              </p>
+            </div>
+
+            <div
+              className={`rounded-2xl border px-4 py-3 ${
+                current.count > 0
+                  ? "border-emerald-200 bg-emerald-50"
+                  : "border-black/8 bg-[#f7f4ee]"
+              }`}
+            >
+              <div
+                className={`text-[0.62rem] font-black uppercase tracking-[0.12em] ${
+                  current.count > 0
+                    ? "text-emerald-700"
+                    : "app-muted"
+                }`}
+              >
+                Dentro ahora
+              </div>
+
+              <div
+                className={`mt-1 text-2xl font-black tabular-nums ${
+                  current.count > 0
+                    ? "text-emerald-800"
+                    : "text-[#201f1d]"
+                }`}
+              >
+                {current.count}
+              </div>
             </div>
           </div>
         </div>
 
-        {autoCheckoutMessage ? (
-          <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 p-3 text-blue-800">
-            {autoCheckoutMessage}
-          </div>
-        ) : null}
-
-        {current.inside.length === 0 && (
-          <div className="rounded-2xl bg-gray-50 p-3 text-gray-500">
-            No hay socios dentro.
-          </div>
-        )}
-
-        <div className="space-y-2">
-          {current.inside.map((member) => (
-            <div
-              key={member.id}
-              className="flex flex-col gap-2 rounded-2xl border border-black/10 bg-white/70 p-3 md:flex-row md:items-center md:justify-between"
-            >
-              <div>
-                <div className="font-semibold">{member.fullName}</div>
-                <div className="text-sm text-gray-500">
-                  {member.displayNumber ? `Nro. ${member.displayNumber} - ` : ""}
-                  {member.dni}
-                </div>
+        <div className="p-5 sm:p-6">
+          {current.inside.length === 0 ? (
+            <div className="rounded-[1.5rem] border border-dashed border-[#b4a78d]/40 bg-[#f7f4ee]/55 px-5 py-8 text-center">
+              <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl bg-[#ece7dd] text-lg font-black text-[#645b4c]">
+                0
               </div>
 
-              <div className="text-sm text-gray-500">
-                Entrada: {new Date(member.lastAccessAt).toLocaleTimeString()}
+              <div className="mt-3 font-black text-[#201f1d]">
+                No hay socios dentro
+              </div>
+
+              <p className="mt-1 text-sm app-muted">
+                Las próximas entradas aparecerán automáticamente en este listado.
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-3 lg:grid-cols-2">
+              {current.inside.map((member, index) => {
+                const displayNumber =
+                  member.displayNumber ??
+                  member.memberNumber ??
+                  member.id;
+
+                const warnings: string[] = [];
+
+                if (!member.active) {
+                  warnings.push("Socio inactivo");
+                }
+
+                if (isExpired(member.expiresAt)) {
+                  warnings.push("Socio caducado");
+                }
+
+                return (
+                  <article
+                    key={member.id}
+                    className="overflow-hidden rounded-[1.5rem] border border-black/8 bg-white/88"
+                  >
+                    <div className="flex gap-4 p-4 sm:p-5">
+                      <div className="h-20 w-16 shrink-0 overflow-hidden rounded-xl border border-black/8 bg-[#f7f4ee] sm:h-24 sm:w-20">
+                        {member.photoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={member.photoUrl}
+                            alt={`Foto de ${member.fullName}`}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-full items-center justify-center text-xl font-black text-[#645b4c]">
+                            {member.fullName
+                              .trim()
+                              .charAt(0)
+                              .toUpperCase() || "?"}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="text-[0.62rem] font-black uppercase tracking-[0.1em] text-emerald-700">
+                              Dentro del club
+                            </div>
+
+                            <h3 className="mt-1 break-words text-base font-black leading-5 text-[#201f1d]">
+                              {member.fullName}
+                            </h3>
+
+                            <div className="mt-1 text-xs app-muted">
+                              Socio {displayNumber}
+                            </div>
+                          </div>
+
+                          <span className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[0.65rem] font-black text-emerald-700">
+                            DENTRO
+                          </span>
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs">
+                          <div>
+                            <span className="app-muted">Entrada </span>
+
+                            <strong className="font-black text-[#201f1d]">
+                              {new Date(member.lastAccessAt).toLocaleTimeString(
+                                "es-ES",
+                                {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                },
+                              )}
+                            </strong>
+                          </div>
+
+                          <div>
+                            <span className="app-muted">DNI </span>
+
+                            <strong className="font-black text-[#201f1d]">
+                              {member.dni}
+                            </strong>
+                          </div>
+                        </div>
+
+                        {warnings.length > 0 ? (
+                          <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
+                            {warnings.join(" · ")}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3 border-t border-black/7 bg-[#f7f4ee]/55 px-4 py-2.5 sm:px-5">
+                      <span className="text-[0.65rem] font-black uppercase tracking-[0.1em] app-muted">
+                        Entrada #{String(index + 1).padStart(2, "0")}
+                      </span>
+
+                      {member.rfidCode ? (
+                        <span className="font-mono text-xs font-bold text-[#645b4c]">
+                          RFID {member.rfidCode}
+                        </span>
+                      ) : null}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </section>
+      <section className="mt-6 overflow-hidden rounded-[2rem] border border-black/8 bg-white/82">
+        <div className="border-b border-black/7 px-5 py-5 sm:px-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="mb-2 flex items-center gap-2">
+                <span className="h-[2px] w-6 rounded-full bg-[#b4a78d]" />
+
+                <span className="text-[0.65rem] font-black uppercase tracking-[0.2em] text-[#6d6860]">
+                  Cierre operativo
+                </span>
+              </div>
+
+              <h2 className="text-xl font-black tracking-[-0.02em] text-[#201f1d]">
+                Cerrar salidas pendientes
+              </h2>
+
+              <p className="mt-1 max-w-2xl text-sm leading-6 app-muted">
+                Registra automáticamente la salida de todos los socios que todavía
+                constan dentro del club.
+              </p>
+            </div>
+
+            <span
+              className={`rounded-full border px-3 py-1.5 text-xs font-black ${
+                current.count > 0
+                  ? "border-amber-200 bg-amber-50 text-amber-800"
+                  : "border-emerald-200 bg-emerald-50 text-emerald-700"
+              }`}
+            >
+              {current.count > 0
+                ? `${current.count} SALIDA${current.count === 1 ? "" : "S"} PENDIENTE${current.count === 1 ? "" : "S"}`
+                : "SIN SALIDAS PENDIENTES"}
+            </span>
+          </div>
+        </div>
+
+        <div className="p-5 sm:p-6">
+          {autoCheckoutMessage ? (
+            <div
+              role="status"
+              className="mb-4 rounded-[1.25rem] border border-emerald-200 bg-emerald-50 px-4 py-3"
+            >
+              <div className="text-[0.65rem] font-black uppercase tracking-[0.12em] text-emerald-700">
+                Operación completada
+              </div>
+
+              <div className="mt-1 text-sm font-semibold text-emerald-700">
+                {autoCheckoutMessage}
               </div>
             </div>
-          ))}
+          ) : null}
+
+          <div
+            className={`rounded-[1.5rem] border p-5 ${
+              current.count > 0
+                ? "border-amber-200 bg-amber-50/45"
+                : "border-black/8 bg-[#f7f4ee]/55"
+            }`}
+          >
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="font-black text-[#201f1d]">
+                  {current.count > 0
+                    ? "Hay accesos abiertos"
+                    : "Todos los accesos están cerrados"}
+                </div>
+
+                <p className="mt-1 max-w-xl text-sm leading-6 app-muted">
+                  {current.count > 0
+                    ? "Utiliza esta acción únicamente al finalizar la operativa o cuando necesites regularizar todos los accesos abiertos."
+                    : "No hay ninguna entrada pendiente de registrar como salida."}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => void handleAutoCheckout()}
+                disabled={autoCheckoutLoading || current.count === 0}
+                className={`inline-flex min-h-11 w-full items-center justify-center rounded-xl px-5 py-3 font-bold disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto ${
+                  current.count > 0
+                    ? "app-button-danger"
+                    : "app-button-secondary"
+                }`}
+              >
+                {autoCheckoutLoading
+                  ? "Registrando salidas..."
+                  : current.count > 0
+                    ? "Cerrar todas las salidas"
+                    : "Sin salidas pendientes"}
+              </button>
+            </div>
+          </div>
         </div>
       </section>
     </main>

@@ -9,19 +9,19 @@ import { CashReopenDialog } from "@/components/cash/cash-reopen-dialog";
 import { CashStatusBar } from "@/components/cash/cash-status-bar";
 import { CashSummary } from "@/components/cash/cash-summary";
 import { useCashPage } from "@/hooks/use-cash-page";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default function CashPage() {
   const cash = useCashPage();
 
   return (
     <main className="mx-auto max-w-6xl p-4 md:p-6">
-      <div className="mb-6">
-        <h1 className="text-3xl font-black tracking-tight">Caja</h1>
-        <p className="mt-2 text-sm app-muted">
-          Apertura de turno, cierre diario guiado y reporte operativo.
-        </p>
-      </div>
+      <PageHeader
+        title="Caja"
+        description="Apertura de turno, control de efectivo, cierre diario y trazabilidad operativa."
+      />
 
+    <div className="space-y-5">
       <CashStatusBar
         dayStatus={cash.dayStatus}
         closure={cash.closure}
@@ -93,6 +93,7 @@ export default function CashPage() {
         groupedMoves={cash.groupedMoves}
         orderedGroups={cash.orderedGroups}
       />
+      </div>
     </main>
   );
 }

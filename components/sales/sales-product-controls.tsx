@@ -63,8 +63,8 @@ export function SalesProductControls({
               onClick={() => onCategoryFilter(category.value)}
               className={`rounded-full px-4 py-2 text-sm font-bold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 ${
                 selectedCategory === category.value
-                  ? "bg-gray-900 text-white"
-                  : "bg-gray-100 text-gray-700"
+                  ? "bg-[#0b0b0c] text-white"
+                  : "border border-black/8 bg-[#f7f4ee] text-[#645b4c]"
               }`}
             >
               {category.label}
@@ -83,8 +83,8 @@ export function SalesProductControls({
               onClick={() => onHashTypeFilter("ALL")}
               className={`rounded-full px-4 py-2 text-sm font-bold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 ${
                 selectedHashType === "ALL"
-                  ? "bg-blue-700 text-white"
-                  : "bg-blue-50 text-blue-700"
+                  ? "bg-[#a7282d] text-white"
+                  : "border border-[#a7282d]/15 bg-[#a7282d]/5 text-[#861f23]"
               }`}
             >
               Todos
@@ -97,8 +97,8 @@ export function SalesProductControls({
                 onClick={() => onHashTypeFilter(hashType.value)}
                 className={`rounded-full px-4 py-2 text-sm font-bold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 ${
                   selectedHashType === hashType.value
-                    ? "bg-blue-700 text-white"
-                    : "bg-blue-50 text-blue-700"
+                    ? "bg-[#a7282d] text-white"
+                    : "border border-[#a7282d]/15 bg-[#a7282d]/5 text-[#861f23]"
                 }`}
               >
                 {hashType.label}

@@ -1,16 +1,28 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f3f0e8;
-  --foreground: #1f241d;
-  --surface: rgba(255, 255, 255, 0.82);
-  --surface-strong: rgba(255, 255, 255, 0.94);
-  --border: rgba(63, 77, 54, 0.14);
-  --muted: #5d6758;
-  --brand: #2f5d50;
-  --brand-strong: #1f4036;
-  --accent: #a7c957;
-  --danger: #b64b4b;
+  --background: #f3f0e9;
+  --foreground: #201f1d;
+
+  --surface: rgba(255, 255, 255, 0.86);
+  --surface-strong: rgba(255, 255, 255, 0.96);
+
+  --border: rgba(32, 31, 29, 0.12);
+  --muted: #6d6860;
+
+  --brand: #a7282d;
+  --brand-strong: #861f23;
+  --brand-soft: #c84a4f;
+
+  --ink: #0b0b0c;
+  --ink-soft: #171719;
+
+  --sand: #b4a78d;
+  --sand-soft: #d8d0c1;
+
+  --success: #2f7a4d;
+  --warning: #b47a24;
+  --danger: #b93636;
 }
 
 @theme inline {
@@ -22,8 +34,8 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #f3f0e8;
-    --foreground: #1f241d;
+    --background: #f3f0e9;
+    --foreground: #201f1d;
   }
 }
 
@@ -38,9 +50,23 @@ html {
 body {
   min-height: 100vh;
   background:
-    radial-gradient(circle at top left, rgba(167, 201, 87, 0.2), transparent 28%),
-    radial-gradient(circle at top right, rgba(47, 93, 80, 0.12), transparent 24%),
-    linear-gradient(180deg, #f7f4ed 0%, var(--background) 55%, #ebe7dc 100%);
+    radial-gradient(
+      circle at top left,
+      rgba(167, 40, 45, 0.08),
+      transparent 28%
+    ),
+    radial-gradient(
+      circle at top right,
+      rgba(180, 167, 141, 0.12),
+      transparent 24%
+    ),
+    linear-gradient(
+      180deg,
+      #f7f4ee 0%,
+      var(--background) 55%,
+      #ebe6dc 100%
+    );
+
   color: var(--foreground);
   font-family: "Segoe UI Variable", "Segoe UI", Helvetica, sans-serif;
 }
@@ -78,13 +104,13 @@ textarea {
   border: 1px solid var(--border);
   background: var(--surface);
   backdrop-filter: blur(18px);
-  box-shadow: 0 18px 50px rgba(37, 44, 34, 0.08);
+  box-shadow: 0 18px 50px rgba(22, 20, 18, 0.08);
 }
 
 .app-panel-strong {
-  border: 1px solid rgba(63, 77, 54, 0.18);
+  border: 1px solid rgba(32, 31, 29, 0.16);
   background: var(--surface-strong);
-  box-shadow: 0 22px 60px rgba(37, 44, 34, 0.12);
+  box-shadow: 0 22px 60px rgba(22, 20, 18, 0.11);
 }
 
 .app-muted {
@@ -92,24 +118,40 @@ textarea {
 }
 
 .app-button-primary {
-  background: linear-gradient(135deg, var(--brand) 0%, var(--brand-strong) 100%);
+  background: linear-gradient(
+    135deg,
+    var(--brand) 0%,
+    var(--brand-strong) 100%
+  );
+
   color: white;
-  box-shadow: 0 10px 24px rgba(31, 64, 54, 0.2);
+
+  box-shadow: 0 10px 24px rgba(134, 31, 35, 0.22);
 }
 
 .app-button-primary:hover {
   transform: translateY(-1px);
+  box-shadow: 0 12px 28px rgba(134, 31, 35, 0.28);
 }
 
 .app-button-secondary {
-  border: 1px solid rgba(31, 64, 54, 0.16);
-  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(32, 31, 29, 0.14);
+  background: rgba(255, 255, 255, 0.9);
   color: var(--foreground);
 }
 
+.app-button-secondary:hover {
+  border-color: rgba(167, 40, 45, 0.28);
+  background: white;
+}
+
 .app-button-ghost {
-  background: rgba(47, 93, 80, 0.08);
+  background: rgba(167, 40, 45, 0.08);
   color: var(--brand-strong);
+}
+
+.app-button-ghost:hover {
+  background: rgba(167, 40, 45, 0.13);
 }
 
 .app-button-danger {
@@ -122,28 +164,32 @@ textarea {
   font-weight: 700;
 }
 
+/* Estados funcionales */
+
 .app-badge-positive {
-  border-color: rgba(54, 108, 64, 0.14);
-  background: rgba(224, 243, 228, 0.95);
-  color: #2c6a3c;
+  border-color: rgba(47, 122, 77, 0.16);
+  background: rgba(226, 242, 232, 0.96);
+  color: #28683f;
 }
 
 .app-badge-warning {
-  border-color: rgba(171, 129, 51, 0.14);
-  background: rgba(255, 243, 210, 0.96);
+  border-color: rgba(180, 122, 36, 0.16);
+  background: rgba(255, 243, 218, 0.96);
   color: #94661b;
 }
 
 .app-badge-danger {
-  border-color: rgba(182, 75, 75, 0.14);
+  border-color: rgba(185, 54, 54, 0.16);
   background: rgba(253, 232, 232, 0.96);
-  color: #a53939;
+  color: #a33333;
 }
 
+/* Información neutra con identidad Zen Wolves */
+
 .app-badge-info {
-  border-color: rgba(47, 93, 80, 0.14);
-  background: rgba(224, 239, 235, 0.96);
-  color: #285345;
+  border-color: rgba(180, 167, 141, 0.28);
+  background: rgba(238, 233, 222, 0.94);
+  color: #645b4c;
 }
 
 @media (min-width: 768px) {

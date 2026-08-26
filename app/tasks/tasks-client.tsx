@@ -147,7 +147,7 @@ function priorityBadgeClass(priority: TaskPriority) {
   }
 
   if (priority === "LOW") {
-    return "bg-gray-100 text-gray-700";
+    return "app-badge-info";
   }
 
   return "app-badge-info";
@@ -159,7 +159,7 @@ function statusBadgeClass(status: TaskStatus) {
   }
 
   if (status === "CANCELLED") {
-    return "bg-gray-200 text-gray-700";
+    return "app-badge-info";
   }
 
   return "app-badge-info";
@@ -372,7 +372,7 @@ export function TasksClient() {
             </div>
 
             {task.description ? (
-              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-gray-700">
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[#201f1d]">
                 {task.description}
               </p>
             ) : null}

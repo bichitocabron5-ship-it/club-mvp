@@ -35,7 +35,7 @@ export function SalesPageHeader({
 
         <div className="app-panel rounded-2xl p-3 text-sm">
           {visibleTodayLoading ? (
-            <>Hoy: cargando consumo y limites...</>
+            <>Hoy: cargando consumo y límites...</>
           ) : (
             <>
               Hoy: <strong>{visibleToday.grams.toFixed(2)} g</strong> /{" "}
