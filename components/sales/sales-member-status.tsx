@@ -25,53 +25,53 @@ export function SalesMemberStatus({
 
       <div className="flex flex-wrap gap-2">
         {memberStatus.member.active ? (
-          <span className="rounded bg-green-100 px-3 py-1 text-green-700">
+          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-emerald-700">
             Activo
           </span>
         ) : (
-          <span className="rounded bg-red-100 px-3 py-1 text-red-700">
+          <span className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-red-700">
             Bloqueado
           </span>
         )}
 
         {memberStatus.hasContract ? (
-          <span className="rounded bg-green-100 px-3 py-1 text-green-700">
+          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-emerald-700">
             Contrato firmado
           </span>
         ) : (
-          <span className="rounded bg-red-100 px-3 py-1 text-red-700">
+          <span className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-red-700">
             Sin contrato
           </span>
         )}
 
         {memberStatus.expired ? (
-          <span className="rounded bg-red-100 px-3 py-1 text-red-700">
+          <span className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-red-700">
             Membresía caducada
           </span>
         ) : (
-          <span className="rounded bg-blue-100 px-3 py-1 text-blue-700">
+          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-emerald-700">
             Membresía vigente
           </span>
         )}
 
-        <span className="rounded bg-gray-900 px-3 py-1 text-white">
+        <span className="rounded-full bg-[#0b0b0c] px-3 py-1 text-white">
           {memberStatus.member.commercialProfile}
         </span>
 
-        <span className="rounded bg-blue-100 px-3 py-1 text-blue-700">
+        <span className="rounded-full border border-[#b4a78d]/30 bg-[#f3f0e9] px-3 py-1 text-[#645b4c]">
           {Number(memberStatus.member.discountPercent || 0).toFixed(2)}%
           descuento
         </span>
 
         {memberStatus.contract?.monthlyLimitG !== null ? (
-          <span className="rounded bg-amber-100 px-3 py-1 text-amber-800">
+          <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-amber-800">
             Mensual {memberStatus.contract?.monthlyLimitG} g
           </span>
         ) : null}
       </div>
 
       {!memberStatus.canWithdraw && (
-        <div className="mt-3 rounded bg-red-100 p-2 text-red-700">
+        <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-2 text-red-700">
           Este socio no puede realizar retiradas.
         </div>
       )}

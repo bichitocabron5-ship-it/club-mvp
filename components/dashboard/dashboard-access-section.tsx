@@ -52,7 +52,7 @@ export function DashboardStaffAccessSection({
         {accessLogs.length === 0 ? (
           <EmptyState
             title="Sin accesos registrados"
-            message="Cuando haya movimientos de entrada o salida apareceran aqui."
+            message="Cuando haya movimientos de entrada o salida aparecerán aquí."
             className="rounded-[1.5rem] bg-white/70"
           />
         ) : (

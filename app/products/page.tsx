@@ -314,8 +314,8 @@ export default function ProductsPage() {
   if (status === "loading" && !session) {
     return (
       <ProductMenu
-        badge="Catalogo"
-        title="Catalogo de productos"
+        badge="Catálogo"
+        title="Catálogo de productos"
         description="Cargando vista de productos."
         products={[]}
         loading
@@ -327,8 +327,8 @@ export default function ProductsPage() {
     return (
       <ProductMenu
         badge="Vista staff"
-        title="Catalogo de productos"
-        description="Vista limpia para mostrar el catalogo activo al socio sin datos internos de stock o costes."
+        title="Catálogo de productos"
+        description="Vista limpia para mostrar el catálogo activo al socio sin datos internos de stock o costes."
         products={staffCatalogProducts}
         loading={loading || status === "loading"}
         error={error}
@@ -345,7 +345,7 @@ export default function ProductsPage() {
           Gestión completa para administrador con catálogo, stock, mínimos, activación e imágenes.
         </p>
         <p className="mt-2 text-sm text-[#5e6b61]">
-          El stock se anade desde Compras o Movimientos de stock. Crear producto solo crea la
+          El stock se añade desde Compras o Movimientos de stock. Crear producto solo crea la
           ficha.
         </p>
       </div>
@@ -366,7 +366,7 @@ export default function ProductsPage() {
         />
 
         <div>
-          <label className="mb-1 block text-xs font-bold text-gray-500">
+          <label className="mb-1 block text-xs font-bold app-muted">
             Código interno
           </label>
           <input
@@ -380,7 +380,7 @@ export default function ProductsPage() {
 
         <textarea
           className="rounded-2xl border border-black/10 bg-white/80 p-3 md:col-span-2 xl:col-span-2"
-          placeholder="Descripcion breve"
+          placeholder="Descripción breve"
           value={form.description}
           onChange={(e) => setForm({ ...form, description: e.target.value })}
           rows={3}
@@ -523,50 +523,50 @@ export default function ProductsPage() {
                         ) : null}
 
                         {!product.active ? (
-                          <span className="rounded bg-gray-200 px-2 py-1 text-xs text-gray-700">
+                          <span className="rounded-full border border-black/10 bg-[#f7f4ee] px-2.5 py-1 text-xs font-bold text-[#6d6860]">
                             INACTIVO
                           </span>
                         ) : null}
                       </div>
 
-                      <div className="mt-1 text-sm text-gray-500">
-                        Categoria: {getProductCategoryLabel(product.category)}
+                      <div className="mt-1 text-sm app-muted">
+                        Categoría: {getProductCategoryLabel(product.category)}
                         {product.hashType
                           ? ` - Subtipo: ${getProductHashTypeLabel(product.hashType)}`
                           : ""}
                       </div>
 
                       {product.sku ? (
-                        <div className="mt-1 text-sm text-gray-500">
+                        <div className="mt-1 text-sm app-muted">
                           Código: {product.sku}
                         </div>
                       ) : null}
 
                       {product.description ? (
-                        <div className="mt-2 text-sm text-gray-600">
+                        <div className="mt-2 text-sm text-[#201f1d]">
                           {product.description}
                         </div>
                       ) : null}
 
-                      <div className="mt-1 text-sm text-gray-500">
+                      <div className="mt-1 text-sm app-muted">
                         Precio: {Number(product.price).toFixed(2)} EUR/
                         {product.unit === "G" ? "g" : "ud"}
                       </div>
                     </div>
 
                     <div className="text-right">
-                      <strong className={lowStock ? "text-red-600" : "text-green-700"}>
+                      <strong className={lowStock ? "text-red-700" : "text-emerald-700"}>
                         {Number(product.stock).toFixed(2)} {product.unit}
                       </strong>
-                      <div className="text-xs text-gray-500">Disponible</div>
-                      <div className="text-sm text-gray-500">
+                      <div className="text-xs app-muted">Disponible</div>
+                      <div className="text-sm app-muted">
                         Reserva: {Number(product.reserveStock).toFixed(2)} {product.unit}
                       </div>
-                      <div className="text-sm text-gray-500">
-                        Total fisico:{" "}
+                      <div className="text-sm app-muted">
+                        Total físico:{" "}
                         {(Number(product.stock) + Number(product.reserveStock)).toFixed(2)} {product.unit}
                       </div>
-                      <div className="text-sm text-gray-500">
+                      <div className="text-sm app-muted">
                         Mínimo: {Number(product.minStock).toFixed(2)} {product.unit}
                       </div>
                     </div>
@@ -574,7 +574,7 @@ export default function ProductsPage() {
                 </div>
 
                 {isEditing && editForm ? (
-                  <div className="mt-4 grid gap-2 rounded-2xl border border-blue-100 bg-blue-50 p-3">
+                  <div className="mt-4 grid gap-2 rounded-2xl border border-[#b4a78d]/30 bg-[#f7f4ee]/75 p-3">
                     <input
                       className="rounded-2xl border border-black/10 bg-white p-3"
                       value={editForm.name}
@@ -585,7 +585,7 @@ export default function ProductsPage() {
                     />
 
                     <div>
-                      <label className="mb-1 block text-xs font-bold text-gray-500">
+                      <label className="mb-1 block text-xs font-bold app-muted">
                         Código interno
                       </label>
                       <input
@@ -605,7 +605,7 @@ export default function ProductsPage() {
                       onChange={(e) =>
                         setEditForm({ ...editForm, description: e.target.value })
                       }
-                      placeholder="Descripcion breve"
+                      placeholder="Descripción breve"
                       rows={3}
                       maxLength={500}
                     />
@@ -692,14 +692,14 @@ export default function ProductsPage() {
 
                     </div>
 
-                    <div className="text-sm text-gray-600">
+                    <div className="text-sm app-muted">
                       Disponible actual: {Number(product.stock).toFixed(2)} {product.unit} ·
                       Reserva actual: {Number(product.reserveStock).toFixed(2)} {product.unit}
                     </div>
 
                     <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                       Para modificar stock usa Compras o Stock. Desde producto solo se edita la
-                      ficha y el stock minimo.
+                      ficha y el stock mínimo.
                     </div>
 
                     <div className="flex flex-wrap gap-2">
@@ -744,7 +744,7 @@ export default function ProductsPage() {
                         className={`rounded-full px-3 py-2 text-sm ${
                           product.active
                             ? "bg-red-200 text-red-800"
-                            : "bg-green-200 text-green-800"
+                            : "border border-emerald-200 bg-emerald-50 text-emerald-700"
                         }`}
                         disabled={saving}
                       >
@@ -785,7 +785,7 @@ export default function ProductsPage() {
                       className={`rounded-full px-3 py-2 text-sm ${
                         product.active
                           ? "bg-red-200 text-red-800"
-                          : "bg-green-200 text-green-800"
+                          : "border border-emerald-200 bg-emerald-50 text-emerald-700"
                       }`}
                       disabled={saving}
                     >

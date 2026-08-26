@@ -114,6 +114,7 @@ export default function InventoryCountsPage() {
     e.preventDefault();
 
     setSubmitting(true);
+    setError("");
 
     try {
       const created = await fetchJson<InventoryCountListItem>("/api/inventory-counts", {
@@ -130,7 +131,7 @@ export default function InventoryCountsPage() {
 
       window.location.href = `/stock/counts/${created.id}`;
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Error creando conteo");
+      setError(err instanceof Error ? err.message : "Error creando conteo");
     } finally {
       setSubmitting(false);
     }
@@ -140,7 +141,7 @@ export default function InventoryCountsPage() {
     <main className="mx-auto max-w-7xl p-4 md:p-6">
       <PageHeader
         title="Conteos de inventario"
-        description="Registra conteos fisicos sin tocar stock hasta la confirmacion final."
+        description="Registra conteos físicos sin tocar stock hasta la confirmación final."
       />
 
       {error && <EmptyState message={error} className="mb-4" />}
@@ -366,7 +367,7 @@ export default function InventoryCountsPage() {
                               </div>
 
                               <div className="mt-1 text-sm app-muted">
-                                {new Date(count.createdAt).toLocaleString()}
+                                {new Date(count.createdAt).toLocaleString("es-ES")}
                               </div>
                             </div>
                           </div>

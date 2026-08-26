@@ -55,7 +55,7 @@ export function SalesMemberSearch({
         <div className="flex items-center gap-2">
           <p
             className={`min-w-0 flex-1 truncate text-xs font-medium ${
-              memberRecentSalesError ? "text-red-600" : "text-gray-500"
+              memberRecentSalesError ? "text-red-700" : "app-muted"
             }`}
             title={
               memberRecentSalesError

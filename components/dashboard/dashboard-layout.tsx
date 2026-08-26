@@ -341,7 +341,7 @@ export function DashboardLayout({
                     title="Sin widgets visibles"
                     message={
                       section.emptyMessage ??
-                      "Activa algun widget de esta seccion desde Personalizar dashboard."
+                      "Activa algún widget de esta sección desde Personalizar dashboard."
                     }
                     className="rounded-[2rem] bg-white/80 p-5"
                   />

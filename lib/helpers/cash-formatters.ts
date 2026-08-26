@@ -25,17 +25,17 @@ export function formatQty(value: number, unit: string) {
 }
 
 export function formatDateTime(value: string) {
-  return new Date(value).toLocaleString();
+  return new Date(value).toLocaleString("es-ES");
 }
 
 export function formatClosureStatus(status: DashboardClosureStatus) {
   switch (status) {
     case "OPEN":
-      return "Dia abierto";
+      return "Día abierto";
     case "CLOSED":
       return "Cierre realizado";
     case "REOPENED":
-      return "Dia reabierto";
+      return "Día reabierto";
     default:
       return "Apertura pendiente";
   }
@@ -48,22 +48,22 @@ export function closureStatusClassName(status: DashboardClosureStatus) {
     case "REOPENED":
       return "border-amber-200 bg-amber-50 text-amber-900";
     case "OPEN":
-      return "border-blue-200 bg-blue-50 text-blue-900";
+      return "border-[#b4a78d]/30 bg-[#f3f0e9] text-[#645b4c]";
     default:
-      return "border-gray-200 bg-gray-50 text-gray-800";
+      return "border-black/10 bg-[#f7f4ee] text-[#6d6860]";
   }
 }
 
 export function closureStatusMessage(status: DashboardClosureStatus) {
   switch (status) {
     case "OPEN":
-      return "El turno esta abierto. El cierre queda pendiente para el final del dia.";
+      return "El turno está abierto. El cierre queda pendiente para el final del día.";
     case "CLOSED":
-      return "El cierre diario ya esta guardado y bloquea nuevas retiradas del dia.";
+      return "El cierre diario ya está guardado y bloquea nuevas retiradas del día.";
     case "REOPENED":
       return "El cierre fue reabierto. Revisa la diferencia y deja nota al volver a cerrar.";
     default:
-      return "Registra la apertura con caja inicial antes de cerrar el dia.";
+      return "Registra la apertura con caja inicial antes de cerrar el día.";
   }
 }
 
@@ -106,7 +106,7 @@ export function formatPaymentMethodLabel(
 export function formatInventoryLabel(count: DayClosureInventoryOption) {
   const timestamp = new Date(
     count.confirmedAt ?? count.createdAt
-  ).toLocaleTimeString([], {
+  ).toLocaleTimeString("es-ES", {
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -119,7 +119,7 @@ export function formatInventoryLabel(count: DayClosureInventoryOption) {
           ? "Cancelado"
           : count.status;
 
-  return `#${count.id} ${count.type} - ${status} - ${timestamp} - ${count.countedItems}/${count.totalItems} lineas`;
+  return `#${count.id} ${count.type} - ${status} - ${timestamp} - ${count.countedItems}/${count.totalItems} líneas`;
 }
 
 export function getCountedCashValue(countedCash: string) {

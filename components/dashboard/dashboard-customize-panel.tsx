@@ -264,7 +264,7 @@ export function DashboardCustomizePanel({
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,18rem)_1fr]">
         <label className="text-sm font-bold">
-          Pestana inicial
+          Pestaña inicial
           <select
             value={draft.defaultTab}
             onChange={(event) =>

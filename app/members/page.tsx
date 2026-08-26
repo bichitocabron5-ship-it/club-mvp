@@ -422,7 +422,7 @@ export default function MembersPage() {
             </div>
           ) : (
             <div className="grid gap-3 lg:grid-cols-2">
-              {filteredMembers.map((member, index) => {
+              {filteredMembers.map((member) => {
                 const expired =
                   Boolean(member.expiresAt) &&
                   new Date(member.expiresAt as string) < new Date();

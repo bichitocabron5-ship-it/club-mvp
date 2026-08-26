@@ -30,7 +30,7 @@ function SalesCartFeedbackMessage({
       className={`mt-3 rounded-2xl border p-3 text-sm leading-5 ${
         isError
           ? "border-red-200 bg-red-100 text-red-800"
-          : "border-green-200 bg-green-100 text-green-800"
+          : "border-emerald-200 bg-emerald-50 text-emerald-700"
       }`}
     >
       <div className="flex min-w-0 items-start gap-3">
@@ -112,13 +112,13 @@ export function SalesCart({
         ))}
       </div>
 
-      <div className="mt-4 rounded-3xl bg-gray-900 p-4 text-white">
+      <div className="mt-4 rounded-3xl bg-[#0b0b0c] p-4 text-white">
         <div className="text-sm opacity-80">Subtotal original</div>
         <div className="text-2xl font-bold">
           {cartTotals.cartOriginalTotal.toFixed(2)} EUR
         </div>
         <div className="mt-3 text-sm opacity-80">Descuento</div>
-        <div className="text-2xl font-bold text-blue-200">
+        <div className="text-2xl font-bold text-[#d8d0c1]">
           -{cartTotals.cartDiscountTotal.toFixed(2)} EUR
         </div>
         <div className="mt-3 text-sm opacity-80">Total retirada</div>
@@ -129,20 +129,20 @@ export function SalesCart({
 
       {visibleTodayLoading ? (
         <div className="mt-3 rounded-2xl border border-black/8 bg-white/80 p-3 text-sm">
-          Cargando limites del socio...
+          Cargando límites del socio...
         </div>
       ) : (
         <>
       <div className="mt-3 rounded-2xl border border-black/8 bg-white/80 p-3 text-sm">
         Con carrito:{" "}
         <strong
-          className={cartTotals.overGrams ? "text-red-600" : "text-green-700"}
+          className={cartTotals.overGrams ? "text-red-700" : "text-emerald-700"}
         >
           {cartTotals.gramsAfter.toFixed(2)} g
         </strong>
         {" · "}
         <strong
-          className={cartTotals.overUnits ? "text-red-600" : "text-green-700"}
+          className={cartTotals.overUnits ? "text-red-700" : "text-emerald-700"}
         >
           {cartTotals.unitsAfter.toFixed(0)} ud
         </strong>
@@ -151,7 +151,7 @@ export function SalesCart({
             {" / "}
             <strong
               className={
-                cartTotals.overMonthly ? "text-red-600" : "text-green-700"
+                cartTotals.overMonthly ? "text-red-700" : "text-emerald-700"
               }
             >
               {cartTotals.monthGramsAfter.toFixed(2)} /{" "}
@@ -194,7 +194,7 @@ export function SalesCart({
           aria-atomic="true"
           className="mt-3 rounded-2xl bg-red-100 p-3 text-sm text-red-700"
         >
-          Revisa el carrito: hay lineas con errores de conversion. Corrigelas
+          Revisa el carrito: hay líneas con errores de conversión. Corrígelas
           antes de registrar.
         </div>
       )}

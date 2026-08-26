@@ -34,7 +34,7 @@ export function DashboardFinanceSection({ data }: { data: DashboardData }) {
           {!data.dailyFinance || data.dailyFinance.length === 0 ? (
             <EmptyState
               title="Sin datos financieros recientes"
-              message="Todavia no hay movimientos suficientes para mostrar esta comparativa."
+              message="Todavía no hay movimientos suficientes para mostrar esta comparativa."
               className="rounded-[1.5rem] bg-white/70"
             />
           ) : (
@@ -110,7 +110,7 @@ export function DashboardFinanceSection({ data }: { data: DashboardData }) {
           {!data.recentSales || data.recentSales.length === 0 ? (
             <EmptyState
               title="Sin ventas recientes"
-              message="Las ventas del dia apareceran aqui cuando se registren."
+              message="Las ventas del día aparecerán aquí cuando se registren."
               className="rounded-[1.5rem] bg-white/70"
             />
           ) : (

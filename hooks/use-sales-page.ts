@@ -420,7 +420,7 @@ export function useSalesPage() {
           kind: "error",
           title: "Revisa el carrito",
           message:
-            "Hay lineas con errores de conversion. Revisa el carrito antes de registrar.",
+            "Hay líneas con errores de conversión. Revisa el carrito antes de registrar.",
         },
         WITHDRAWAL_ERROR_FEEDBACK_MS
       );
@@ -458,7 +458,7 @@ export function useSalesPage() {
           kind: "error",
           title: "Revisa el carrito",
           message:
-            "Hay lineas con errores de conversion. Revisa el carrito antes de registrar.",
+            "Hay líneas con errores de conversión. Revisa el carrito antes de registrar.",
         },
         WITHDRAWAL_ERROR_FEEDBACK_MS
       );
@@ -576,12 +576,12 @@ export function useSalesPage() {
     const trimmedReason = reason.trim();
 
     if (!trimmedReason) {
-      alert("El motivo es obligatorio para anular una retirada.");
+      setRecentSalesError("El motivo es obligatorio para anular una retirada.");
       return;
     }
 
     const confirmed = window.confirm(
-      `Anular retirada #${sale.id} de ${sale.member.fullName}?`
+      `¿Anular retirada #${sale.id} de ${sale.member.fullName}?`
     );
 
     if (!confirmed) {
@@ -622,7 +622,9 @@ export function useSalesPage() {
 
       await loadRecentSales();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Error anulando retirada");
+      setRecentSalesError(
+        err instanceof Error ? err.message : "Error anulando retirada"
+      );
     } finally {
       setCancelingSaleId(null);
     }

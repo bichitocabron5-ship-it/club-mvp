@@ -163,7 +163,7 @@ export default function PanelPage() {
       const savedPreferences = parseDashboardPreferences(json);
 
       if (!savedPreferences) {
-        throw new Error("Respuesta invalida guardando preferencias");
+        throw new Error("Respuesta inválida guardando preferencias");
       }
 
       setPreferences(savedPreferences);

@@ -84,7 +84,7 @@ export function formatCurrencyLabel(value: number) {
 }
 
 export function formatTimeLabel(value: string) {
-  return new Date(value).toLocaleTimeString([], {
+  return new Date(value).toLocaleTimeString("es-ES", {
     hour: "2-digit",
     minute: "2-digit",
   });

@@ -60,6 +60,8 @@ export default function PurchasesPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   const [form, setForm] = useState({
     supplierId: "",
@@ -136,9 +138,12 @@ export default function PurchasesPage() {
       });
 
     if (cleanItems.length === 0) {
-      alert("Anade al menos un producto.");
+      setError("Añade al menos un producto a la compra.");
       return;
     }
+
+    setError("");
+    setSuccess("");
 
     setLoading(true);
 
@@ -159,7 +164,11 @@ export default function PurchasesPage() {
 
     if (!res.ok) {
       const err = await res.json();
-      alert(err.error || "Error registrando compra");
+
+      setError(
+        err.error || "No se ha podido registrar la compra."
+      );
+
       return;
     }
 
@@ -171,6 +180,7 @@ export default function PurchasesPage() {
     setItems([{ ...initialItem }]);
 
     await loadData();
+    setSuccess("Compra registrada correctamente.");
   }
 
   function statusLabel(status: string) {
@@ -200,9 +210,12 @@ export default function PurchasesPage() {
     const amount = Number(paymentAmounts[purchaseId] || 0);
 
     if (!amount || amount <= 0) {
-      alert("Introduce un importe valido");
+      setError("Introduce un importe válido.");
       return;
     }
+
+    setError("");
+    setSuccess("");
 
     const res = await fetch(`/api/purchases/${purchaseId}/pay`, {
       method: "POST",
@@ -217,7 +230,11 @@ export default function PurchasesPage() {
 
     if (!res.ok) {
       const err = await res.json();
-      alert(err.error || "Error registrando pago");
+
+      setError(
+        err.error || "No se ha podido registrar el pago."
+      );
+
       return;
     }
 
@@ -227,6 +244,7 @@ export default function PurchasesPage() {
     }));
 
     await loadData();
+    setSuccess("Pago registrado correctamente.");
   }
 
   return (
@@ -235,6 +253,36 @@ export default function PurchasesPage() {
         title="Compras"
         description="Registra compras, distribuye stock entre disponible y reserva y controla pagos pendientes a proveedores."
       />
+
+      {error ? (
+        <div
+          role="alert"
+          className="mb-5 rounded-[1.5rem] border border-red-200 bg-red-50 px-5 py-4"
+        >
+          <div className="text-[0.65rem] font-black uppercase tracking-[0.14em] text-red-700">
+            No se pudo completar la operación
+          </div>
+
+          <div className="mt-1 text-sm font-semibold text-red-700">
+            {error}
+          </div>
+        </div>
+      ) : null}
+
+      {success ? (
+        <div
+          role="status"
+          className="mb-5 rounded-[1.5rem] border border-emerald-200 bg-emerald-50 px-5 py-4"
+        >
+          <div className="text-[0.65rem] font-black uppercase tracking-[0.14em] text-emerald-700">
+            Operación completada
+          </div>
+
+          <div className="mt-1 text-sm font-semibold text-emerald-700">
+            {success}
+          </div>
+        </div>
+      ) : null}
 
       <div className="grid gap-5 xl:grid-cols-[minmax(380px,0.82fr)_minmax(0,1.18fr)]">
         <section className="app-panel overflow-hidden rounded-[2rem]">
@@ -684,7 +732,7 @@ export default function PurchasesPage() {
                               </h3>
 
                               <div className="mt-1 text-sm app-muted">
-                                {new Date(purchase.createdAt).toLocaleString()}
+                                {new Date(purchase.createdAt).toLocaleString("es-ES")}
                               </div>
 
                               {purchase.note ? (

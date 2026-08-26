@@ -40,7 +40,7 @@ export default function MemberContractPage() {
 
   async function createSession() {
     if (!validMemberId) {
-      setError("Socio invalido para crear la sesion de firma");
+      setError("Socio inválido para crear la sesión de firma");
       return;
     }
 
@@ -58,14 +58,14 @@ export default function MemberContractPage() {
       const error =
         data && typeof data === "object" && "error" in data
           ? String(data.error)
-          : "No se pudo crear la sesion de firma";
+          : "No se pudo crear la sesión de firma";
       setError(error);
       return;
     }
 
     if (!isInternalSigningSessionData(data)) {
       setError(
-        "La sesion de firma se creo, pero no devolvio un enlace valido. No se abrira /sign/undefined."
+        "La sesión de firma se creó, pero no devolvió un enlace válido. No se abrirá /sign/undefined."
       );
       return;
     }
@@ -310,8 +310,8 @@ export default function MemberContractPage() {
       )}
       {session && (
         <div className="space-y-4">
-          <div className="rounded border p-4">
-            <div className="text-sm text-gray-500">Estado</div>
+          <div className="rounded-[1.5rem] border border-[#b4a78d]/30 bg-[#f7f4ee]/65 p-4">
+            <div className="text-sm app-muted">Estado</div>
             <strong>{session.status}</strong>
           </div>
 
@@ -538,8 +538,8 @@ export default function MemberContractPage() {
           )}
 
           {session.status === "SIGNED" && (
-            <div className="rounded border bg-green-50 p-4">
-              <h2 className="mb-3 font-bold text-green-700">Contrato firmado</h2>
+            <div className="rounded-[1.5rem] border border-emerald-200 bg-emerald-50/55 p-4">
+              <h2 className="mb-3 font-bold text-emerald-700">Contrato firmado</h2>
 
               {session.signatureImage && (
                 <Image
@@ -548,7 +548,7 @@ export default function MemberContractPage() {
                   width={384}
                   height={192}
                   unoptimized
-                  className="max-w-sm rounded border bg-white p-2"
+                  className="max-w-sm rounded-xl border border-black/8 bg-white p-2"
                 />
               )}
             </div>

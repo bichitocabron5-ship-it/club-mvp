@@ -55,6 +55,7 @@ export default function StockPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
+    setError("");
 
     const res = await fetch("/api/stock/move", {
       method: "POST",
@@ -72,8 +73,8 @@ export default function StockPage() {
     setLoading(false);
 
     if (!res.ok) {
-      const err = await res.json();
-      alert(err.error || "Error registrando movimiento");
+      const err: { error?: string } = await res.json();
+      setError(err.error || "Error registrando movimiento");
       return;
     }
 
@@ -89,21 +90,23 @@ export default function StockPage() {
 
   async function adjustStock() {
     if (!selectedProduct) {
-      alert("Selecciona producto");
+      setError("Selecciona producto");
       return;
     }
 
     const qty = Number(adjustQty);
 
     if (!qty || qty <= 0) {
-      alert("Cantidad inválida");
+      setError("Cantidad inválida");
       return;
     }
 
     if (adjustReason.trim().length < 3) {
-      alert("Indica motivo");
+      setError("Indica motivo");
       return;
     }
+
+    setError("");
 
     const res = await fetch("/api/stock/adjust", {
       method: "POST",
@@ -119,8 +122,8 @@ export default function StockPage() {
     });
 
     if (!res.ok) {
-      const err = await res.json();
-      alert(err.error || "Error ajustando stock");
+      const err: { error?: string } = await res.json();
+      setError(err.error || "Error ajustando stock");
       return;
     }
 
@@ -132,16 +135,18 @@ export default function StockPage() {
 
   async function transferFromReserve() {
     if (!selectedProduct) {
-      alert("Selecciona producto");
+      setError("Selecciona producto");
       return;
     }
 
     const qty = Number(transferQty);
 
     if (!qty || qty <= 0) {
-      alert("Cantidad inválida");
+      setError("Cantidad inválida");
       return;
     }
+
+    setError("");
 
     const res = await fetch("/api/stock/move", {
       method: "POST",
@@ -157,8 +162,8 @@ export default function StockPage() {
     });
 
     if (!res.ok) {
-      const err = await res.json();
-      alert(err.error || "Error reponiendo stock");
+      const err: { error?: string } = await res.json();
+      setError(err.error || "Error reponiendo stock");
       return;
     }
 
@@ -739,7 +744,7 @@ export default function StockPage() {
                               </h3>
 
                               <div className="mt-1 text-xs app-muted">
-                                {new Date(move.createdAt).toLocaleString()}
+                                {new Date(move.createdAt).toLocaleString("es-ES")}
                               </div>
                             </div>
                           </div>

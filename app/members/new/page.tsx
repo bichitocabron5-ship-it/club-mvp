@@ -52,7 +52,7 @@ export default function NewMemberPage() {
   const [rfidMessage, setRfidMessage] = useState("");
   const [rfidInput, setRfidInput] = useState("");
   const [rfidProcessing, setRfidProcessing] = useState(false);
-  const [signingError, setSigningError] = useState("");
+  const [error, setError] = useState("");
 
   const [form, setForm] = useState({
     fullName: "",
@@ -71,6 +71,7 @@ export default function NewMemberPage() {
   async function createMember(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
+    setError("");
 
     const res = await fetch("/api/members", {
       method: "POST",
@@ -90,7 +91,7 @@ export default function NewMemberPage() {
 
     if (!res.ok) {
       const err = await res.json();
-      alert(err.error || "Error creando socio");
+      setError(err.error || "Error creando socio");
       return;
     }
 
@@ -105,6 +106,7 @@ export default function NewMemberPage() {
     if (!cleanCode || rfidProcessing) return;
 
     setRfidProcessing(true);
+    setError("");
 
     try {
       const res = await fetch(`/api/members/${createdMember.id}`, {
@@ -119,7 +121,7 @@ export default function NewMemberPage() {
 
       if (!res.ok) {
         const err = await res.json();
-        alert(err.error || "Error asignando RFID");
+        setError(err.error || "Error asignando RFID");
         return;
       }
 
@@ -136,7 +138,7 @@ export default function NewMemberPage() {
 
   async function createSigningSession() {
     if (!createdMember) return;
-    setSigningError("");
+    setError("");
 
     const res = await fetch("/api/signing-sessions", {
       method: "POST",
@@ -154,17 +156,17 @@ export default function NewMemberPage() {
       const error =
         data && typeof data === "object" && "error" in data
           ? String(data.error)
-          : "Error creando sesion de firma";
-      setSigningError(error);
-      alert(error);
+          : "Error creando sesión de firma";
+
+      setError(error);
       return;
     }
 
     if (!isInternalSigningSessionData(data)) {
       const error =
-        "La sesion de firma se creo, pero no devolvio un enlace valido. No se abrira /sign/undefined.";
-      setSigningError(error);
-      alert(error);
+        "La sesión de firma se creó, pero no devolvió un enlace válido. No se abrirá /sign/undefined.";
+
+      setError(error);
       return;
     }
 
@@ -211,24 +213,27 @@ export default function NewMemberPage() {
     return () => clearTimeout(timeout);
   }, [rfidMessage]);
 
-  const isReady =
-    createdMember &&
-    createdMember.active &&
-    createdMember.rfidCode &&
-    contractSigned;
-
-  const missing = {
-    rfid: !createdMember?.rfidCode,
-    contract: !contractSigned,
-    expires: !createdMember?.expiresAt,
-  };
-
   return (
     <main className="mx-auto max-w-5xl p-4 md:p-6">
       <PageHeader
         title="Alta de socio"
         description="Completa el expediente inicial, asigna la chapita RFID y formaliza el contrato."
       />
+
+      {error ? (
+        <div
+          role="alert"
+          className="mb-5 rounded-[1.5rem] border border-red-200 bg-red-50 px-5 py-4"
+        >
+          <div className="text-[0.65rem] font-black uppercase tracking-[0.14em] text-red-700">
+            No se pudo completar la operación
+          </div>
+
+          <div className="mt-1 text-sm font-semibold text-red-700">
+            {error}
+          </div>
+        </div>
+      ) : null}
 
       <section className="mb-5 overflow-hidden rounded-[1.75rem] border border-black/8 bg-white/75">
         <div className="grid sm:grid-cols-3">
@@ -978,12 +983,19 @@ export default function NewMemberPage() {
                   </div>
                 </div>
 
-                <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
+                <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap lg:w-auto lg:justify-end">
                   <Link
                     href={`/members/${createdMember.id}`}
                     className="app-button-primary inline-flex min-h-11 items-center justify-center rounded-xl px-5 py-3 text-center font-bold"
                   >
                     Abrir expediente
+                  </Link>
+
+                  <Link
+                    href="/members"
+                    className="app-button-secondary inline-flex min-h-11 items-center justify-center rounded-xl px-5 py-3 text-center font-bold"
+                  >
+                    Volver a socios
                   </Link>
 
                   <button
@@ -998,96 +1010,6 @@ export default function NewMemberPage() {
             </div>
           </section>
         ) : null}
-
-          <section className="app-panel rounded-3xl p-4 md:p-5">
-            <h2 className="mb-3 text-lg font-bold">Acciones principales</h2>
-
-            {!isReady && (
-              <div className="mb-4 space-y-2">
-                <div className="text-sm font-medium text-gray-600">
-                  Pendiente para completar:
-                </div>
-
-                <div className="flex flex-wrap gap-2 text-xs">
-                  {missing.rfid && (
-                    <span className="rounded bg-yellow-100 px-3 py-1 text-yellow-700">
-                      Falta RFID
-                    </span>
-                  )}
-
-                  {missing.contract && (
-                    <span className="rounded bg-yellow-100 px-3 py-1 text-yellow-700">
-                      Falta contrato
-                    </span>
-                  )}
-
-                  {missing.expires && (
-                    <span className="rounded bg-yellow-100 px-3 py-1 text-yellow-700">
-                      Sin vencimiento
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {isReady && (
-                <div className="mb-4 rounded-2xl bg-green-100 p-4 font-bold text-green-800">
-                Socio listo para operar
-              </div>
-            )}
-
-            <div className="flex flex-wrap gap-2">
-              <Link
-                href={`/members/${createdMember.id}`}
-                className="rounded-full bg-green-600 px-4 py-3 font-bold text-white"
-              >
-                Abrir ficha
-              </Link>
-
-              <Link
-                href="/sales"
-                className="app-button-primary rounded-full px-4 py-3 font-bold"
-              >
-                Ir al TPV
-              </Link>
-
-              <Link
-                href="/access"
-                className="rounded-full bg-gray-900 px-4 py-3 font-bold text-white"
-              >
-                Control de acceso
-              </Link>
-
-              <Link
-                href="/members"
-                className="app-button-secondary rounded-full px-4 py-3 font-bold"
-              >
-                Volver a socios
-              </Link>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setCreatedMember(null);
-                  setSigningSession(null);
-                  setContractSigned(false);
-                  setAssigningRfid(false);
-                  setRfidMessage("");
-                  setSigningError("");
-                  setForm({
-                    fullName: "",
-                    dni: "",
-                    phone: "",
-                    email: "",
-                    expiresAt: "",
-                  });
-                }}
-                className="app-button-secondary rounded-full px-4 py-3 font-bold"
-              >
-                Crear otro socio
-              </button>
-            </div>
-          </section>
         </div>
       )}
     </main>

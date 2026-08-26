@@ -53,6 +53,7 @@ export function AdminUsersClient() {
   const [loading, setLoading] = useState(false);
   const [savingId, setSavingId] = useState<number | null>(null);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [form, setForm] = useState(createInitialForm);
   const [editing, setEditing] = useState<Record<number, EditableUser>>({});
 
@@ -113,6 +114,8 @@ export function AdminUsersClient() {
   async function createUser(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
+    setError("");
+    setSuccess("");
 
     const res = await fetch("/api/admin/users", {
       method: "POST",
@@ -132,7 +135,7 @@ export function AdminUsersClient() {
 
     if (!res.ok) {
       const err: { error?: string } = await res.json();
-      alert(err.error || "Error creando usuario");
+      setError(err.error || "Error creando usuario");
       return;
     }
 
@@ -145,6 +148,8 @@ export function AdminUsersClient() {
     if (!draft) return;
 
     setSavingId(userId);
+    setError("");
+    setSuccess("");
 
     const res = await fetch(`/api/admin/users/${userId}`, {
       method: "PATCH",
@@ -164,7 +169,7 @@ export function AdminUsersClient() {
 
     if (!res.ok) {
       const err: { error?: string } = await res.json();
-      alert(err.error || "Error actualizando usuario");
+      setError(err.error || "Error actualizando usuario");
       return;
     }
 
@@ -178,8 +183,11 @@ export function AdminUsersClient() {
 
     if (!password) return;
 
+    setError("");
+    setSuccess("");
+
     if (password.length < 8) {
-      alert("La contraseña debe tener al menos 8 caracteres");
+      setError("La contraseña debe tener al menos 8 caracteres");
       return;
     }
 
@@ -197,11 +205,11 @@ export function AdminUsersClient() {
 
     if (!res.ok) {
       const err: { error?: string } = await res.json();
-      alert(err.error || "Error reseteando contraseña");
+      setError(err.error || "Error reseteando contraseña");
       return;
     }
 
-    alert("Contraseña actualizada correctamente");
+    setSuccess("Contraseña actualizada correctamente.");
   }
 
   return (
@@ -222,6 +230,21 @@ export function AdminUsersClient() {
 
           <div className="mt-1 text-sm font-semibold text-red-700">
             {error}
+          </div>
+        </div>
+      ) : null}
+
+      {success ? (
+        <div
+          role="status"
+          className="mb-5 rounded-[1.5rem] border border-emerald-200 bg-emerald-50 px-5 py-4"
+        >
+          <div className="text-[0.65rem] font-black uppercase tracking-[0.14em] text-emerald-700">
+            Operación completada
+          </div>
+
+          <div className="mt-1 text-sm font-semibold text-emerald-700">
+            {success}
           </div>
         </div>
       ) : null}

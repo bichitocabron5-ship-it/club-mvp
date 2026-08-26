@@ -30,10 +30,10 @@ export function SalesRecentSales({
     >
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-black">Ultimas retiradas de hoy</h2>
+          <h2 className="text-lg font-black">Últimas retiradas de hoy</h2>
           {recentSalesDayClosed ? (
             <div className="mt-1 text-xs text-amber-700">
-              El dia esta cerrado; no se pueden anular retiradas.
+              El día está cerrado; no se pueden anular retiradas.
             </div>
           ) : null}
         </div>
@@ -51,7 +51,7 @@ export function SalesRecentSales({
           {recentSalesError}
         </div>
       ) : recentSales.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-black/10 bg-white/70 p-4 text-sm text-gray-600">
+        <div className="rounded-2xl border border-dashed border-black/10 bg-white/70 p-4 text-sm app-muted">
           No hay retiradas registradas hoy.
         </div>
       ) : (
@@ -78,7 +78,7 @@ export function SalesRecentSales({
                         </span>
                       ) : null}
                     </div>
-                    <div className="mt-1 text-sm text-gray-500">
+                    <div className="mt-1 text-sm app-muted">
                       {sale.member.fullName} -{" "}
                       {formatQtyLabel(
                         sale.qty,
@@ -96,7 +96,7 @@ export function SalesRecentSales({
                   <div className="text-right">
                     <div
                       className={`font-black ${
-                        cancelled ? "text-gray-500 line-through" : ""
+                        cancelled ? "app-muted line-through" : ""
                       }`}
                     >
                       {formatCurrencyLabel(amount)}

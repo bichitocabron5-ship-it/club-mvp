@@ -16,6 +16,9 @@ type Supplier = {
 
 export default function SuppliersPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
@@ -41,27 +44,36 @@ export default function SuppliersPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    const res = await fetch("/api/suppliers", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(form),
-    });
+    setError("");
+    setSuccess("");
+    setSaving(true);
 
-    if (!res.ok) {
-      alert("Error creando proveedor");
-      return;
+    try {
+      const res = await fetch("/api/suppliers", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(form),
+      });
+
+      if (!res.ok) {
+        setError("No se ha podido crear el proveedor.");
+        return;
+      }
+
+      setForm({
+        name: "",
+        phone: "",
+        email: "",
+        notes: "",
+      });
+
+      await loadSuppliers();
+      setSuccess("Proveedor creado correctamente.");
+    } finally {
+      setSaving(false);
     }
-
-    setForm({
-      name: "",
-      phone: "",
-      email: "",
-      notes: "",
-    });
-
-    await loadSuppliers();
   }
 
   return (
@@ -70,6 +82,36 @@ export default function SuppliersPage() {
         title="Proveedores"
         description="Gestiona proveedores, datos de contacto y notas para el aprovisionamiento del club."
       />
+
+      {error ? (
+        <div
+          role="alert"
+          className="mb-5 rounded-[1.5rem] border border-red-200 bg-red-50 px-5 py-4"
+        >
+          <div className="text-[0.65rem] font-black uppercase tracking-[0.14em] text-red-700">
+            No se pudo completar la operación
+          </div>
+
+          <div className="mt-1 text-sm font-semibold text-red-700">
+            {error}
+          </div>
+        </div>
+      ) : null}
+
+      {success ? (
+        <div
+          role="status"
+          className="mb-5 rounded-[1.5rem] border border-emerald-200 bg-emerald-50 px-5 py-4"
+        >
+          <div className="text-[0.65rem] font-black uppercase tracking-[0.14em] text-emerald-700">
+            Operación completada
+          </div>
+
+          <div className="mt-1 text-sm font-semibold text-emerald-700">
+            {success}
+          </div>
+        </div>
+      ) : null}
 
       <section className="app-panel mb-6 overflow-hidden rounded-[2rem]">
         <div className="border-b border-black/7 px-5 py-5 sm:px-6">
@@ -163,9 +205,10 @@ export default function SuppliersPage() {
           <div className="md:col-span-2">
             <button
               type="submit"
-              className="app-button-primary inline-flex w-full items-center justify-center rounded-xl px-5 py-3.5 font-bold sm:w-auto"
+              disabled={saving}
+              className="app-button-primary inline-flex w-full items-center justify-center rounded-xl px-5 py-3.5 font-bold disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
             >
-              Crear proveedor
+              {saving ? "Creando proveedor..." : "Crear proveedor"}
             </button>
           </div>
         </form>
@@ -230,7 +273,7 @@ export default function SuppliersPage() {
 
                           <div className="mt-1 text-xs app-muted">
                             Alta:{" "}
-                            {new Date(supplier.createdAt).toLocaleDateString()}
+                            {new Date(supplier.createdAt).toLocaleDateString("es-ES")}
                           </div>
                         </div>
                       </div>

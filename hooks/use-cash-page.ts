@@ -119,13 +119,13 @@ export function useCashPage() {
   const reportDay = summary?.day ?? closure?.day;
   const csvHref = getCashReportHref(reportDay);
   const responsibleLabel =
-    session?.user?.name || session?.user?.email || "Sesion actual";
+    session?.user?.name || session?.user?.email || "Sesión actual";
 
   async function openDay() {
     const openingValue = openingCash.trim() ? Number(openingCash) : 0;
 
     if (!Number.isFinite(openingValue) || openingValue < 0) {
-      setError("La caja inicial debe ser un numero valido mayor o igual a cero");
+      setError("La caja inicial debe ser un número válido mayor o igual a cero");
       return;
     }
 
@@ -148,7 +148,7 @@ export function useCashPage() {
         const err = (await res.json().catch(() => null)) as
           | { error?: string }
           | null;
-        throw new Error(err?.error || "Error al abrir el dia");
+        throw new Error(err?.error || "Error al abrir el día");
       }
 
       await loadCash();
@@ -170,7 +170,7 @@ export function useCashPage() {
     }
 
     if (!Number.isFinite(Number(countedCash))) {
-      setError("La caja contada debe ser un numero valido");
+      setError("La caja contada debe ser un número válido");
       return;
     }
 
@@ -202,7 +202,7 @@ export function useCashPage() {
         const err = (await res.json().catch(() => null)) as
           | { error?: string }
           | null;
-        throw new Error(err?.error || "Error al cerrar el dia");
+        throw new Error(err?.error || "Error al cerrar el día");
       }
 
       setCountedCash("");
@@ -241,7 +241,7 @@ export function useCashPage() {
         const err = (await res.json().catch(() => null)) as
           | { error?: string }
           | null;
-        throw new Error(err?.error || "Error al reabrir el dia");
+        throw new Error(err?.error || "Error al reabrir el día");
       }
 
       setReopenReason("");

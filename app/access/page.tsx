@@ -380,7 +380,7 @@ export default function AccessPage() {
       }
 
       if (!payload?.member || !payload.action || !payload.message) {
-        throw new Error("Respuesta de acceso invalida");
+        throw new Error("Respuesta de acceso inválida");
       }
 
       setLastScan({

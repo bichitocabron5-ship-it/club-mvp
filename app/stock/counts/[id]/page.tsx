@@ -119,6 +119,7 @@ export default function InventoryCountDetailPage({
     }
 
     setSaving(true);
+    setError("");
 
     try {
       const updated = await fetchJson<InventoryCountDetail>(`/api/inventory-counts/${count.id}`, {
@@ -152,7 +153,7 @@ export default function InventoryCountDetailPage({
         )
       );
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Error guardando conteo");
+      setError(err instanceof Error ? err.message : "Error guardando conteo");
     } finally {
       setSaving(false);
     }
@@ -165,14 +166,15 @@ export default function InventoryCountDetailPage({
 
     const confirmed =
       action === "confirm"
-        ? window.confirm("La confirmacion es irreversible. Continuar?")
-        : window.confirm("Cancelar este conteo?");
+        ? window.confirm("La confirmación es irreversible. ¿Continuar?")
+        : window.confirm("¿Cancelar este conteo?");
 
     if (!confirmed) {
       return;
     }
 
     setProcessing(true);
+    setError("");
 
     try {
       const updated = await fetchJson<InventoryCountDetail>(
@@ -195,7 +197,13 @@ export default function InventoryCountDetailPage({
         )
       );
     } catch (err) {
-      alert(err instanceof Error ? err.message : `Error en ${action}`);
+      setError(
+        err instanceof Error
+          ? err.message
+          : action === "confirm"
+            ? "Error confirmando conteo"
+            : "Error cancelando conteo"
+      );
     } finally {
       setProcessing(false);
     }

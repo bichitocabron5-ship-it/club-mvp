@@ -287,7 +287,7 @@ export default function StockHistoryPage() {
                             </div>
 
                             <div className="mt-1 text-xs app-muted">
-                              {new Date(move.createdAt).toLocaleString()}
+                              {new Date(move.createdAt).toLocaleString("es-ES")}
                             </div>
                           </div>
                         </div>

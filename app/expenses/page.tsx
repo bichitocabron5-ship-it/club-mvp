@@ -510,7 +510,7 @@ export default function ExpensesPage() {
                             </div>
 
                             <div className="mt-2 text-xs app-muted">
-                              {new Date(expense.createdAt).toLocaleString()}
+                              {new Date(expense.createdAt).toLocaleString("es-ES")}
                             </div>
                           </div>
                         </div>
@@ -789,7 +789,7 @@ export default function ExpensesPage() {
 
                           <div className="mt-2 text-xs text-[#8b857c]">
                             Registrado:{" "}
-                            {new Date(expense.createdAt).toLocaleString()}
+                            {new Date(expense.createdAt).toLocaleString("es-ES")}
                           </div>
                         </div>
                       </div>
@@ -820,7 +820,7 @@ export default function ExpensesPage() {
                     {expense.cancelledAt ? (
                       <div className="mt-3 text-xs text-[#8b857c]">
                         Anulado el{" "}
-                        {new Date(expense.cancelledAt).toLocaleString()}
+                        {new Date(expense.cancelledAt).toLocaleString("es-ES")}
                       </div>
                     ) : null}
                   </div>
