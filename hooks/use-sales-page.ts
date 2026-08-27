@@ -41,6 +41,39 @@ type RfidScanBuffer = {
   targetStartValue: string;
 };
 
+type CancelledSaleResponse = {
+  productId?: unknown;
+  product?: {
+    id?: unknown;
+  } | null;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function parsePositiveInteger(value: unknown) {
+  const parsed = typeof value === "string" ? Number(value) : value;
+
+  if (typeof parsed !== "number" || !Number.isInteger(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function getCancelledSaleProductId(value: unknown) {
+  if (!isRecord(value)) return null;
+
+  const directProductId = parsePositiveInteger(value.productId);
+  if (directProductId !== null) return directProductId;
+
+  const product = value.product;
+  if (!isRecord(product)) return null;
+
+  return parsePositiveInteger(product.id);
+}
+
 function getEditableScanTarget(
   target: EventTarget
 ): HTMLInputElement | HTMLTextAreaElement | null {
@@ -95,6 +128,7 @@ export function useSalesPage() {
   const registerButtonRef = useRef<HTMLButtonElement | null>(null);
   const submittingRef = useRef(false);
   const rfidSubmittingRef = useRef(false);
+  const cancelingSaleRef = useRef(false);
   const rfidScanBufferRef = useRef<RfidScanBuffer | null>(null);
   const withdrawalFeedbackTimerRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
@@ -562,33 +596,33 @@ export function useSalesPage() {
     void handleRegisterWithdrawal();
   }
 
-  async function handleCancelRecentSale(sale: RecentSale) {
-    if (!sale.canCancel || recentSalesDayClosed || cancelingSaleId !== null) {
-      return;
-    }
-
-    const reason = window.prompt(`Motivo para anular la retirada #${sale.id}`);
-
-    if (reason === null) {
-      return;
-    }
-
+  async function handleCancelRecentSale(sale: RecentSale, reason: string) {
     const trimmedReason = reason.trim();
+    const selectedMemberId = member.memberId.trim();
+    const selectedMemberContextVersion = memberContextVersionRef.current;
+    const isCancellationContextCurrent = () =>
+      currentMemberIdRef.current === selectedMemberId &&
+      memberContextVersionRef.current === selectedMemberContextVersion;
+
+    if (!sale.canCancel || recentSalesDayClosed) {
+      const message = "No se puede anular esta retirada.";
+      setRecentSalesError(message);
+      throw new Error(message);
+    }
+
+    if (cancelingSaleRef.current) {
+      return;
+    }
 
     if (!trimmedReason) {
-      setRecentSalesError("El motivo es obligatorio para anular una retirada.");
-      return;
+      const message = "El motivo es obligatorio para anular una retirada.";
+      setRecentSalesError(message);
+      throw new Error(message);
     }
 
-    const confirmed = window.confirm(
-      `¿Anular retirada #${sale.id} de ${sale.member.fullName}?`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
+    cancelingSaleRef.current = true;
     setCancelingSaleId(sale.id);
+    setRecentSalesError("");
 
     try {
       const res = await fetch(`/api/sales/${sale.id}/cancel`, {
@@ -608,11 +642,43 @@ export function useSalesPage() {
         throw new Error(err?.error || "No se pudo anular la retirada");
       }
 
+      const cancelledSale = (await res.json().catch(() => null)) as
+        | CancelledSaleResponse
+        | null;
+      const cancelledProductId = getCancelledSaleProductId(cancelledSale);
       const refreshedProducts = await fetchJson<ProductSummary[]>("/api/products");
-      setProducts(refreshedProducts);
 
-      if (member.memberId) {
-        const selectedMemberId = member.memberId;
+      if (isCancellationContextCurrent()) {
+        setProducts(refreshedProducts);
+      } else if (cancelledProductId !== null) {
+        const refreshedProduct = refreshedProducts.find(
+          (product) => product.id === cancelledProductId
+        );
+
+        if (refreshedProduct) {
+          setProducts((currentProducts) => {
+            let productWasUpdated = false;
+            const nextProducts = currentProducts.map((product) => {
+              if (product.id !== refreshedProduct.id) return product;
+
+              productWasUpdated = true;
+
+              if (product.stock === refreshedProduct.stock) {
+                return product;
+              }
+
+              return {
+                ...product,
+                stock: refreshedProduct.stock,
+              };
+            });
+
+            return productWasUpdated ? nextProducts : currentProducts;
+          });
+        }
+      }
+
+      if (selectedMemberId && isCancellationContextCurrent()) {
         const refreshedToday = await fetchJson<TodayTotals>(
           `/api/members/${selectedMemberId}/today`
         );
@@ -622,10 +688,12 @@ export function useSalesPage() {
 
       await loadRecentSales();
     } catch (err) {
-      setRecentSalesError(
-        err instanceof Error ? err.message : "Error anulando retirada"
-      );
+      const message =
+        err instanceof Error ? err.message : "Error anulando retirada";
+      setRecentSalesError(message);
+      throw new Error(message);
     } finally {
+      cancelingSaleRef.current = false;
       setCancelingSaleId(null);
     }
   }
