@@ -30,10 +30,12 @@ export function SalesCartItem({
   onUpdateQty: (productId: number, value: string) => void;
 }) {
   return (
-    <div className="rounded-2xl border border-black/8 bg-white/82 p-3">
-      <div className="flex justify-between gap-2">
-        <div>
-          <div className="font-medium">{line.product?.name}</div>
+    <div className="rounded-2xl border border-black/8 bg-white/82 p-3 sm:p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="break-words font-medium leading-tight">
+            {line.product?.name}
+          </div>
           <div className="text-sm app-muted">
             Stock: {line.stock.toFixed(2)} {line.product?.unit}
           </div>
@@ -54,7 +56,7 @@ export function SalesCartItem({
         <button
           type="button"
           onClick={() => onRemoveProduct(line.productId)}
-          className="rounded-xl px-2 py-1 text-sm font-semibold text-red-700 outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
+          className="min-h-11 shrink-0 self-start rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-700 outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
         >
           Quitar
         </button>
@@ -63,7 +65,7 @@ export function SalesCartItem({
       <div className="mt-3">
         <label className="text-xs app-muted">Modo de entrada</label>
         <select
-          className="mt-1 w-full rounded-2xl border border-black/10 bg-white p-3 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
+          className="mt-1 min-h-12 w-full rounded-2xl border border-black/10 bg-white p-3 text-base font-medium outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
           value={line.inputMode}
           onChange={(event) =>
             onUpdateInputMode(
@@ -77,7 +79,7 @@ export function SalesCartItem({
         </select>
       </div>
 
-      <div className="mt-3 grid gap-3 md:grid-cols-2">
+      <div className="mt-3 grid gap-3">
         <div>
           {line.inputMode === "QTY" ? (
             <>
@@ -99,15 +101,16 @@ export function SalesCartItem({
                       )
                     )
                   }
-                  className="h-11 w-11 rounded-xl bg-[#f3f0e9] text-xl font-bold text-[#201f1d] outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
+                  className="h-12 w-12 shrink-0 rounded-xl bg-[#f3f0e9] text-xl font-bold text-[#201f1d] outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
                 >
                   -
                 </button>
 
                 <input
                   ref={(node) => onCartValueInputRef(line.productId, node)}
-                  className="h-11 w-full rounded-2xl border border-black/10 bg-white p-2 text-center text-lg font-bold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
+                  className="h-12 min-w-0 flex-1 rounded-2xl border border-black/10 bg-white p-2 text-center text-lg font-bold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
                   type="number"
+                  inputMode={line.product?.unit === "UD" ? "numeric" : "decimal"}
                   step={line.product?.unit === "UD" ? "1" : "0.001"}
                   min="0"
                   value={line.qtyInput}
@@ -130,7 +133,7 @@ export function SalesCartItem({
                       )
                     )
                   }
-                  className="h-11 w-11 rounded-2xl bg-[#0b0b0c] text-xl font-bold text-white outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
+                  className="h-12 w-12 shrink-0 rounded-2xl bg-[#0b0b0c] text-xl font-bold text-white outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
                 >
                   +
                 </button>
@@ -145,8 +148,9 @@ export function SalesCartItem({
               <label className="text-xs app-muted">Importe en euros</label>
               <input
                 ref={(node) => onCartValueInputRef(line.productId, node)}
-                className="mt-1 h-11 w-full rounded-2xl border border-black/10 bg-white p-2 text-center text-lg font-bold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
+                className="mt-1 h-12 w-full rounded-2xl border border-black/10 bg-white p-2 text-center text-lg font-bold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
                 type="number"
+                inputMode="decimal"
                 step="0.01"
                 min="0"
                 value={line.amountInput}
