@@ -90,7 +90,7 @@ export function SalesCart({
   onUpdateQty: (productId: number, value: string) => void;
 }) {
   return (
-    <aside className="app-panel-strong rounded-3xl p-4 xl:sticky xl:top-24 xl:self-start">
+    <aside className="app-panel-strong min-w-0 rounded-3xl p-4 md:sticky md:top-24 md:self-start">
       <h2 className="mb-3 text-lg font-bold">Carrito</h2>
 
       {cartLines.length === 0 && (
@@ -114,15 +114,15 @@ export function SalesCart({
 
       <div className="mt-4 rounded-3xl bg-[#0b0b0c] p-4 text-white">
         <div className="text-sm opacity-80">Subtotal original</div>
-        <div className="text-2xl font-bold">
+        <div className="text-xl font-bold lg:text-2xl">
           {cartTotals.cartOriginalTotal.toFixed(2)} EUR
         </div>
         <div className="mt-3 text-sm opacity-80">Descuento</div>
-        <div className="text-2xl font-bold text-[#d8d0c1]">
+        <div className="text-xl font-bold text-[#d8d0c1] lg:text-2xl">
           -{cartTotals.cartDiscountTotal.toFixed(2)} EUR
         </div>
         <div className="mt-3 text-sm opacity-80">Total retirada</div>
-        <div className="text-5xl font-black">
+        <div className="text-3xl font-black lg:text-4xl xl:text-5xl">
           {cartTotals.cartTotal.toFixed(2)} EUR
         </div>
       </div>
@@ -203,24 +203,26 @@ export function SalesCart({
         <SalesCartFeedbackMessage feedback={withdrawalFeedback} />
       )}
 
-      <button
-        ref={registerButtonRef}
-        type="button"
-        onClick={onRegisterWithdrawal}
-        onKeyDown={onRegisterButtonKeyDown}
-        disabled={invalid || loading}
-        className="app-button-primary mt-4 w-full rounded-3xl p-6 text-2xl font-black shadow-lg outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:opacity-40"
-      >
-        {loading ? "Registrando..." : "COBRAR / REGISTRAR"}
-      </button>
+      <div className="sticky bottom-3 z-20 -mx-4 mt-4 bg-white/95 px-4 pb-1 pt-3 backdrop-blur md:bottom-4">
+        <button
+          ref={registerButtonRef}
+          type="button"
+          onClick={onRegisterWithdrawal}
+          onKeyDown={onRegisterButtonKeyDown}
+          disabled={invalid || loading}
+          className="app-button-primary min-h-16 w-full rounded-3xl px-4 py-5 text-xl font-black leading-tight shadow-lg outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:opacity-40 lg:text-2xl"
+        >
+          {loading ? "Registrando..." : "COBRAR / REGISTRAR"}
+        </button>
 
-      <button
-        type="button"
-        onClick={onNextMember}
-        className="app-button-secondary mt-3 min-h-12 w-full rounded-2xl px-5 py-4 text-base font-bold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
-      >
-        Siguiente socio
-      </button>
+        <button
+          type="button"
+          onClick={onNextMember}
+          className="app-button-secondary mt-3 min-h-12 w-full rounded-2xl px-5 py-4 text-base font-bold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
+        >
+          Siguiente socio
+        </button>
+      </div>
     </aside>
   );
 }

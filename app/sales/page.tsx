@@ -39,7 +39,7 @@ export default function SalesPage() {
         onSubmit={sales.handleRfidSubmit}
       />
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.7fr)]">
+      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(18rem,0.72fr)] lg:grid-cols-[minmax(0,1.25fr)_minmax(20rem,0.72fr)] xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.7fr)]">
         <section className="space-y-4">
           <SalesMemberSearch
             filteredMembers={sales.filteredMembers}
