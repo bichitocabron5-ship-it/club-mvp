@@ -16,7 +16,7 @@ import type {
   ProductUnit,
 } from "@/lib/types";
 import { useSession } from "next-auth/react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type ProductForm = {
   name: string;
@@ -74,6 +74,7 @@ export default function ProductsPage() {
   const isAdmin = session?.user?.role === "ADMIN";
 
   const [products, setProducts] = useState<ProductSummary[]>([]);
+  const [productSearch, setProductSearch] = useState("");
   const [form, setForm] = useState<ProductForm>(initialForm);
   const [editingProductId, setEditingProductId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<ProductForm | null>(null);
@@ -92,6 +93,24 @@ export default function ProductsPage() {
   const staffCatalogProducts = products
     .filter((product) => product.active && isCatalogVisibleCategory(product.category))
     .map(toCatalogProduct);
+
+  const normalizedProductSearch = productSearch.trim().toLowerCase();
+  const hasProductSearch = normalizedProductSearch.length > 0;
+  const filteredProducts = useMemo(() => {
+    if (!hasProductSearch) {
+      return products;
+    }
+
+    return products.filter((product) => {
+      const productName = product.name.toLowerCase();
+      const productSku = (product.sku ?? "").toLowerCase();
+
+      return (
+        productName.includes(normalizedProductSearch) ||
+        productSku.includes(normalizedProductSearch)
+      );
+    });
+  }, [hasProductSearch, normalizedProductSearch, products]);
 
   async function loadProducts() {
     setLoading(true);
@@ -463,6 +482,44 @@ export default function ProductsPage() {
         </button>
       </form>
 
+      <section className="app-panel mb-4 rounded-xl p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <label
+            htmlFor="product-search"
+            className="flex-1 text-sm font-bold text-[#201f1d]"
+          >
+            Buscar producto
+
+            <input
+              id="product-search"
+              className="mt-2 w-full rounded-xl border border-black/10 bg-white/80 px-4 py-3 outline-none placeholder:text-black/35 focus:border-[#a7282d]/40 focus:ring-4 focus:ring-[#a7282d]/8"
+              placeholder="Buscar por nombre o código..."
+              value={productSearch}
+              onChange={(e) => setProductSearch(e.target.value)}
+              autoComplete="off"
+            />
+          </label>
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center md:shrink-0 md:justify-end">
+            <span className="rounded-full border border-[#b4a78d]/30 bg-[#f3f0e9] px-3 py-2 text-center text-xs font-bold text-[#6d6860]">
+              {hasProductSearch
+                ? `${filteredProducts.length} resultados`
+                : `${products.length} productos`}
+            </span>
+
+            {productSearch ? (
+              <button
+                type="button"
+                onClick={() => setProductSearch("")}
+                className="app-button-secondary rounded-xl px-4 py-3 text-sm font-bold"
+              >
+                Limpiar
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </section>
+
       {loading ? (
         <div className="grid gap-3 xl:grid-cols-2">
           {Array.from({ length: 6 }).map((_, index) => (
@@ -472,9 +529,15 @@ export default function ProductsPage() {
             />
           ))}
         </div>
+      ) : filteredProducts.length === 0 ? (
+        <div className="app-panel rounded-xl p-6 text-center text-sm font-semibold app-muted">
+          {hasProductSearch
+            ? "No se encontraron productos con esa búsqueda."
+            : "No hay productos registrados."}
+        </div>
       ) : (
         <div className="grid gap-3 xl:grid-cols-2">
-          {products.map((product) => {
+          {filteredProducts.map((product) => {
             const lowStock = Number(product.stock) <= Number(product.minStock);
             const isEditing = editingProductId === product.id && editForm !== null;
 
