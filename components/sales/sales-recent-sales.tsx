@@ -37,6 +37,7 @@ export function SalesRecentSales({
   recentSalesError,
   showRecentSales,
   onCancelRecentSale,
+  onCancelDialogOpenChange,
   onRefreshRecentSales,
 }: {
   cancelingSaleId: number | null;
@@ -45,6 +46,7 @@ export function SalesRecentSales({
   recentSalesError: string;
   showRecentSales: boolean;
   onCancelRecentSale: (sale: RecentSale, reason: string) => Promise<void>;
+  onCancelDialogOpenChange: (isOpen: boolean) => void;
   onRefreshRecentSales: () => void;
 }) {
   const [cancelDialogSale, setCancelDialogSale] = useState<RecentSale | null>(
@@ -71,6 +73,7 @@ export function SalesRecentSales({
   };
 
   const resetCancelDialog = () => {
+    onCancelDialogOpenChange(false);
     setCancelDialogSale(null);
     setCancelReason("");
     setCancelDialogError("");
@@ -86,6 +89,7 @@ export function SalesRecentSales({
     }
 
     cancelDialogTriggerRef.current = event.currentTarget;
+    onCancelDialogOpenChange(true);
     setCancelDialogSale(sale);
     setCancelReason("");
     setCancelDialogError("");
@@ -125,6 +129,14 @@ export function SalesRecentSales({
       setCancelDialogSubmitting(false);
     }
   };
+
+  useEffect(() => {
+    if (!cancelDialogSale) return;
+
+    return () => {
+      onCancelDialogOpenChange(false);
+    };
+  }, [cancelDialogSale, onCancelDialogOpenChange]);
 
   return (
     <section

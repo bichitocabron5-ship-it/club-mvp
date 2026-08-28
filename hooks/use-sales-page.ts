@@ -42,6 +42,8 @@ type RfidScanBuffer = {
 };
 
 type CancelledSaleResponse = {
+  cancelledAt?: unknown;
+  cancelReason?: unknown;
   productId?: unknown;
   product?: {
     id?: unknown;
@@ -72,6 +74,23 @@ function getCancelledSaleProductId(value: unknown) {
   if (!isRecord(product)) return null;
 
   return parsePositiveInteger(product.id);
+}
+
+function getOptionalString(value: unknown) {
+  return typeof value === "string" ? value : null;
+}
+
+function getCancelledSaleCancelledAt(value: unknown) {
+  if (!isRecord(value)) return null;
+
+  return getOptionalString(value.cancelledAt);
+}
+
+function getCancelledSaleReason(value: unknown) {
+  if (!isRecord(value)) return null;
+  if (value.cancelReason === null) return null;
+
+  return getOptionalString(value.cancelReason);
 }
 
 function getEditableScanTarget(
@@ -130,6 +149,7 @@ export function useSalesPage() {
   const rfidSubmittingRef = useRef(false);
   const cancelingSaleRef = useRef(false);
   const rfidScanBufferRef = useRef<RfidScanBuffer | null>(null);
+  const cancelDialogOpenRef = useRef(false);
   const withdrawalFeedbackTimerRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
   const currentMemberIdRef = useRef("");
@@ -169,6 +189,15 @@ export function useSalesPage() {
     },
     []
   );
+
+  const clearRfidScanBuffer = useCallback(() => {
+    rfidScanBufferRef.current = null;
+  }, []);
+
+  const setCancelDialogOpen = useCallback((isOpen: boolean) => {
+    cancelDialogOpenRef.current = isOpen;
+    clearRfidScanBuffer();
+  }, [clearRfidScanBuffer]);
 
   const focusRfidInput = useCallback(() => {
     rfidRef.current?.focus();
@@ -624,6 +653,8 @@ export function useSalesPage() {
     setCancelingSaleId(sale.id);
     setRecentSalesError("");
 
+    let cancelledSale: CancelledSaleResponse | null = null;
+
     try {
       const res = await fetch(`/api/sales/${sale.id}/cancel`, {
         method: "POST",
@@ -642,51 +673,9 @@ export function useSalesPage() {
         throw new Error(err?.error || "No se pudo anular la retirada");
       }
 
-      const cancelledSale = (await res.json().catch(() => null)) as
+      cancelledSale = (await res.json().catch(() => null)) as
         | CancelledSaleResponse
         | null;
-      const cancelledProductId = getCancelledSaleProductId(cancelledSale);
-      const refreshedProducts = await fetchJson<ProductSummary[]>("/api/products");
-
-      if (isCancellationContextCurrent()) {
-        setProducts(refreshedProducts);
-      } else if (cancelledProductId !== null) {
-        const refreshedProduct = refreshedProducts.find(
-          (product) => product.id === cancelledProductId
-        );
-
-        if (refreshedProduct) {
-          setProducts((currentProducts) => {
-            let productWasUpdated = false;
-            const nextProducts = currentProducts.map((product) => {
-              if (product.id !== refreshedProduct.id) return product;
-
-              productWasUpdated = true;
-
-              if (product.stock === refreshedProduct.stock) {
-                return product;
-              }
-
-              return {
-                ...product,
-                stock: refreshedProduct.stock,
-              };
-            });
-
-            return productWasUpdated ? nextProducts : currentProducts;
-          });
-        }
-      }
-
-      if (selectedMemberId && isCancellationContextCurrent()) {
-        const refreshedToday = await fetchJson<TodayTotals>(
-          `/api/members/${selectedMemberId}/today`
-        );
-        member.setTodayForMember(selectedMemberId, refreshedToday);
-        await member.loadMemberRecentSales(selectedMemberId);
-      }
-
-      await loadRecentSales();
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Error anulando retirada";
@@ -695,6 +684,92 @@ export function useSalesPage() {
     } finally {
       cancelingSaleRef.current = false;
       setCancelingSaleId(null);
+    }
+
+    const cancelledAt =
+      getCancelledSaleCancelledAt(cancelledSale) ?? new Date().toISOString();
+    const cancelReason =
+      getCancelledSaleReason(cancelledSale) ?? trimmedReason;
+    const cancelledProductId = getCancelledSaleProductId(cancelledSale);
+
+    setRecentSales((currentSales) =>
+      currentSales.map((currentSale) =>
+        currentSale.id === sale.id
+          ? {
+              ...currentSale,
+              cancelledAt,
+              cancelReason,
+              canCancel: false,
+            }
+          : currentSale
+      )
+    );
+
+    void refreshAfterSuccessfulCancellation();
+
+    async function refreshAfterSuccessfulCancellation() {
+      let refreshFailed = false;
+
+      try {
+        const refreshedProducts =
+          await fetchJson<ProductSummary[]>("/api/products");
+
+        if (isCancellationContextCurrent()) {
+          setProducts(refreshedProducts);
+        } else if (cancelledProductId !== null) {
+          const refreshedProduct = refreshedProducts.find(
+            (product) => product.id === cancelledProductId
+          );
+
+          if (refreshedProduct) {
+            setProducts((currentProducts) => {
+              let productWasUpdated = false;
+              const nextProducts = currentProducts.map((product) => {
+                if (product.id !== refreshedProduct.id) return product;
+
+                productWasUpdated = true;
+
+                if (product.stock === refreshedProduct.stock) {
+                  return product;
+                }
+
+                return {
+                  ...product,
+                  stock: refreshedProduct.stock,
+                };
+              });
+
+              return productWasUpdated ? nextProducts : currentProducts;
+            });
+          }
+        }
+      } catch {
+        refreshFailed = true;
+      }
+
+      if (selectedMemberId && isCancellationContextCurrent()) {
+        try {
+          const refreshedToday = await fetchJson<TodayTotals>(
+            `/api/members/${selectedMemberId}/today`
+          );
+          member.setTodayForMember(selectedMemberId, refreshedToday);
+          await member.loadMemberRecentSales(selectedMemberId);
+        } catch {
+          refreshFailed = true;
+        }
+      }
+
+      try {
+        await loadRecentSales();
+      } catch {
+        refreshFailed = true;
+      }
+
+      if (refreshFailed) {
+        setRecentSalesError(
+          "Anulacion completada, pero no se pudieron actualizar todos los datos. Pulsa Actualizar para sincronizar."
+        );
+      }
     }
   }
 
@@ -740,6 +815,11 @@ export function useSalesPage() {
   function handleRfidScannerKeyDownCapture(
     event: ReactKeyboardEvent<HTMLElement>
   ) {
+    if (cancelDialogOpenRef.current) {
+      clearRfidScanBuffer();
+      return;
+    }
+
     if (
       event.defaultPrevented ||
       event.repeat ||
@@ -870,6 +950,7 @@ export function useSalesPage() {
     setMemberSearch: handleMemberSearchChange,
     setRfidInput: handleRfidInputChange,
     setSearch: handleSearchChange,
+    setCancelDialogOpen,
     setShowRecentSales,
     updateAmount: handleUpdateAmount,
     updateInputMode: handleUpdateInputMode,

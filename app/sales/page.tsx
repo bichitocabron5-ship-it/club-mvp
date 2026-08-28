@@ -106,6 +106,7 @@ export default function SalesPage() {
         recentSalesError={sales.recentSalesError}
         showRecentSales={sales.showRecentSales}
         onCancelRecentSale={sales.handleCancelRecentSale}
+        onCancelDialogOpenChange={sales.setCancelDialogOpen}
         onRefreshRecentSales={sales.handleRefreshRecentSales}
       />
     </main>
