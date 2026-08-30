@@ -25,12 +25,14 @@ type UseSalesCartOptions = {
   products: ProductSummary[];
   discountPercent: number;
   focusRegisterButton: () => void;
+  registerMutationPending: boolean;
 };
 
 export function useSalesCart({
   products,
   discountPercent,
   focusRegisterButton,
+  registerMutationPending,
 }: UseSalesCartOptions) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [focusedCartProductId, setFocusedCartProductId] = useState<
@@ -76,6 +78,7 @@ export function useSalesCart({
     product: ProductSummary,
     options: AddProductOptions = {}
   ) {
+    if (registerMutationPending) return false;
     if (Number(product.stock) <= 0) return false;
 
     if (options.focusInput) {
@@ -128,6 +131,8 @@ export function useSalesCart({
   }
 
   function updateQty(productId: number, value: string) {
+    if (registerMutationPending) return;
+
     setCart((prev) =>
       prev.map((item) =>
         item.productId === productId ? { ...item, qtyInput: value } : item
@@ -136,6 +141,8 @@ export function useSalesCart({
   }
 
   function updateAmount(productId: number, value: string) {
+    if (registerMutationPending) return;
+
     setCart((prev) =>
       prev.map((item) =>
         item.productId === productId ? { ...item, amountInput: value } : item
@@ -144,6 +151,8 @@ export function useSalesCart({
   }
 
   function updateInputMode(productId: number, inputMode: CartInputMode) {
+    if (registerMutationPending) return;
+
     const product = products.find((candidate) => candidate.id === productId);
     if (!product) return;
 
@@ -203,6 +212,8 @@ export function useSalesCart({
   }
 
   function removeProduct(productId: number) {
+    if (registerMutationPending) return;
+
     setCart((prev) => prev.filter((item) => item.productId !== productId));
   }
 
@@ -226,6 +237,8 @@ export function useSalesCart({
     if (event.key !== "Enter" && event.code !== "NumpadEnter") return;
 
     event.preventDefault();
+
+    if (registerMutationPending) return;
 
     const currentIndex = cartLines.findIndex(
       (line) => line.productId === productId

@@ -3,20 +3,27 @@ import type { AddProductOptions } from "@/lib/helpers/sales-cart";
 import type { ProductSummary } from "@/lib/types";
 
 export function SalesProductCard({
+  disabled,
   product,
   onAddProduct,
 }: {
+  disabled: boolean;
   product: ProductSummary;
   onAddProduct: (product: ProductSummary, options?: AddProductOptions) => boolean;
 }) {
   const noStock = Number(product.stock) <= 0;
+  const unavailable = disabled || noStock;
 
   return (
     <button
       type="button"
-      onClick={() => onAddProduct(product, { focusInput: true })}
-      disabled={noStock}
-      className={`flex h-full min-h-40 flex-col justify-between rounded-xl border p-4 text-left shadow-sm outline-none transition hover:scale-[1.02] focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:opacity-40 ${
+      onClick={() => {
+        if (!disabled) {
+          onAddProduct(product, { focusInput: true });
+        }
+      }}
+      disabled={unavailable}
+      className={`flex h-full min-h-40 flex-col justify-between rounded-xl border p-4 text-left shadow-sm outline-none transition hover:scale-[1.02] focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40 ${
         noStock ? "bg-[#f3f0e9]" : "bg-white hover:bg-[#f7f4ee]"
       }`}
     >

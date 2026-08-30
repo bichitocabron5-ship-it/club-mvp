@@ -15,6 +15,7 @@ type SalesHashTypeOption = {
 export function SalesProductControls({
   availableHashTypes,
   categories,
+  disabled,
   productSearchRef,
   search,
   selectedCategory,
@@ -26,6 +27,7 @@ export function SalesProductControls({
 }: {
   availableHashTypes: SalesHashTypeOption[];
   categories: readonly SalesProductCategoryOption[];
+  disabled: boolean;
   productSearchRef: RefObject<HTMLInputElement | null>;
   search: string;
   selectedCategory: string;
@@ -42,13 +44,14 @@ export function SalesProductControls({
           Buscar producto
         </label>
         <input
-          className="min-h-12 w-full rounded-2xl border border-black/10 bg-white/80 p-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
+          className="min-h-12 w-full rounded-2xl border border-black/10 bg-white/80 p-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-black/5 disabled:text-black/50"
           placeholder="Buscar por código o nombre..."
           ref={productSearchRef}
           value={search}
           onChange={(event) => onSearchChange(event.target.value)}
           onKeyDown={onProductSearchKeyDown}
           autoComplete="off"
+          disabled={disabled}
         />
       </div>
 
@@ -61,7 +64,8 @@ export function SalesProductControls({
               key={category.value}
               type="button"
               onClick={() => onCategoryFilter(category.value)}
-              className={`min-h-11 rounded-full px-4 py-2.5 text-sm font-bold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 ${
+              disabled={disabled}
+              className={`min-h-11 rounded-full px-4 py-2.5 text-sm font-bold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
                 selectedCategory === category.value
                   ? "bg-[#0b0b0c] text-white"
                   : "border border-black/8 bg-[#f7f4ee] text-[#645b4c]"
@@ -81,7 +85,8 @@ export function SalesProductControls({
             <button
               type="button"
               onClick={() => onHashTypeFilter("ALL")}
-              className={`min-h-11 rounded-full px-4 py-2.5 text-sm font-bold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 ${
+              disabled={disabled}
+              className={`min-h-11 rounded-full px-4 py-2.5 text-sm font-bold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
                 selectedHashType === "ALL"
                   ? "bg-[#a7282d] text-white"
                   : "border border-[#a7282d]/15 bg-[#a7282d]/5 text-[#861f23]"
@@ -95,7 +100,8 @@ export function SalesProductControls({
                 key={hashType.value}
                 type="button"
                 onClick={() => onHashTypeFilter(hashType.value)}
-                className={`min-h-11 rounded-full px-4 py-2.5 text-sm font-bold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 ${
+                disabled={disabled}
+                className={`min-h-11 rounded-full px-4 py-2.5 text-sm font-bold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
                   selectedHashType === hashType.value
                     ? "bg-[#a7282d] text-white"
                     : "border border-[#a7282d]/15 bg-[#a7282d]/5 text-[#861f23]"

@@ -7,6 +7,7 @@ import {
 import type { CartInputMode, CartLine } from "@/lib/helpers/sales-cart";
 
 export function SalesCartItem({
+  disabled,
   line,
   onCartValueKeyDown,
   onCartValueInputRef,
@@ -15,6 +16,7 @@ export function SalesCartItem({
   onUpdateInputMode,
   onUpdateQty,
 }: {
+  disabled: boolean;
   line: CartLine;
   onCartValueKeyDown: (
     productId: number,
@@ -55,8 +57,13 @@ export function SalesCartItem({
 
         <button
           type="button"
-          onClick={() => onRemoveProduct(line.productId)}
-          className="min-h-11 shrink-0 self-start rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-700 outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
+          onClick={() => {
+            if (!disabled) {
+              onRemoveProduct(line.productId);
+            }
+          }}
+          disabled={disabled}
+          className="min-h-11 shrink-0 self-start rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-700 outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Quitar
         </button>
@@ -65,7 +72,7 @@ export function SalesCartItem({
       <div className="mt-3">
         <label className="text-xs app-muted">Modo de entrada</label>
         <select
-          className="mt-1 min-h-12 w-full rounded-2xl border border-black/10 bg-white p-3 text-base font-medium outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
+          className="mt-1 min-h-12 w-full rounded-2xl border border-black/10 bg-white p-3 text-base font-medium outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-black/5 disabled:text-black/50"
           value={line.inputMode}
           onChange={(event) =>
             onUpdateInputMode(
@@ -73,6 +80,7 @@ export function SalesCartItem({
               event.target.value as CartInputMode
             )
           }
+          disabled={disabled}
         >
           <option value="AMOUNT">Por importe</option>
           <option value="QTY">Por cantidad</option>
@@ -88,27 +96,30 @@ export function SalesCartItem({
               <div className="mt-1 flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() =>
-                    onUpdateQty(
-                      line.productId,
-                      formatQtyInput(
-                        Math.max(
-                          0,
-                          line.qty -
-                            (line.product?.unit === "UD" ? 1 : 0.001)
-                        ),
-                        line.product?.unit === "UD" ? "UD" : "G"
-                      )
-                    )
-                  }
-                  className="h-12 w-12 shrink-0 rounded-xl bg-[#f3f0e9] text-xl font-bold text-[#201f1d] outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
+                  onClick={() => {
+                    if (!disabled) {
+                      onUpdateQty(
+                        line.productId,
+                        formatQtyInput(
+                          Math.max(
+                            0,
+                            line.qty -
+                              (line.product?.unit === "UD" ? 1 : 0.001)
+                          ),
+                          line.product?.unit === "UD" ? "UD" : "G"
+                        )
+                      );
+                    }
+                  }}
+                  disabled={disabled}
+                  className="h-12 w-12 shrink-0 rounded-xl bg-[#f3f0e9] text-xl font-bold text-[#201f1d] outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   -
                 </button>
 
                 <input
                   ref={(node) => onCartValueInputRef(line.productId, node)}
-                  className="h-12 min-w-0 flex-1 rounded-2xl border border-black/10 bg-white p-2 text-center text-lg font-bold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
+                  className="h-12 min-w-0 flex-1 rounded-2xl border border-black/10 bg-white p-2 text-center text-lg font-bold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-black/5 disabled:text-black/50"
                   type="number"
                   inputMode={line.product?.unit === "UD" ? "numeric" : "decimal"}
                   step={line.product?.unit === "UD" ? "1" : "0.001"}
@@ -120,20 +131,24 @@ export function SalesCartItem({
                   onKeyDown={(event) =>
                     onCartValueKeyDown(line.productId, event)
                   }
+                  disabled={disabled}
                 />
 
                 <button
                   type="button"
-                  onClick={() =>
-                    onUpdateQty(
-                      line.productId,
-                      formatQtyInput(
-                        line.qty + (line.product?.unit === "UD" ? 1 : 0.001),
-                        line.product?.unit === "UD" ? "UD" : "G"
-                      )
-                    )
-                  }
-                  className="h-12 w-12 shrink-0 rounded-2xl bg-[#0b0b0c] text-xl font-bold text-white outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
+                  onClick={() => {
+                    if (!disabled) {
+                      onUpdateQty(
+                        line.productId,
+                        formatQtyInput(
+                          line.qty + (line.product?.unit === "UD" ? 1 : 0.001),
+                          line.product?.unit === "UD" ? "UD" : "G"
+                        )
+                      );
+                    }
+                  }}
+                  disabled={disabled}
+                  className="h-12 w-12 shrink-0 rounded-2xl bg-[#0b0b0c] text-xl font-bold text-white outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   +
                 </button>
@@ -148,7 +163,7 @@ export function SalesCartItem({
               <label className="text-xs app-muted">Importe en euros</label>
               <input
                 ref={(node) => onCartValueInputRef(line.productId, node)}
-                className="mt-1 h-12 w-full rounded-2xl border border-black/10 bg-white p-2 text-center text-lg font-bold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
+                className="mt-1 h-12 w-full rounded-2xl border border-black/10 bg-white p-2 text-center text-lg font-bold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-black/5 disabled:text-black/50"
                 type="number"
                 inputMode="decimal"
                 step="0.01"
@@ -160,6 +175,7 @@ export function SalesCartItem({
                 onKeyDown={(event) =>
                   onCartValueKeyDown(line.productId, event)
                 }
+                disabled={disabled}
               />
 
               <div className="mt-2 text-xs app-muted">

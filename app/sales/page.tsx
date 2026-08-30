@@ -31,6 +31,7 @@ export default function SalesPage() {
       {sales.error && <EmptyState message={sales.error} className="mb-4" />}
 
       <SalesRfidInput
+        disabled={sales.registerMutationPending}
         rfidError={sales.rfidError}
         rfidInput={sales.rfidInput}
         rfidRef={sales.rfidRef}
@@ -42,6 +43,7 @@ export default function SalesPage() {
       <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(18rem,0.72fr)] lg:grid-cols-[minmax(0,1.25fr)_minmax(20rem,0.72fr)] xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.7fr)]">
         <section className="space-y-4">
           <SalesMemberSearch
+            disabled={sales.registerMutationPending}
             filteredMembers={sales.filteredMembers}
             memberId={sales.memberId}
             memberRecentSalesError={sales.memberRecentSalesError}
@@ -62,6 +64,7 @@ export default function SalesPage() {
           <SalesProductControls
             availableHashTypes={sales.availableHashTypes}
             categories={sales.productCategories}
+            disabled={sales.registerMutationPending}
             productSearchRef={sales.productSearchRef}
             search={sales.search}
             selectedCategory={sales.selectedCategory}
@@ -73,6 +76,7 @@ export default function SalesPage() {
           />
 
           <SalesProductGrid
+            disabled={sales.registerMutationPending}
             products={sales.filteredProducts}
             onAddProduct={sales.addProduct}
           />
@@ -82,7 +86,7 @@ export default function SalesPage() {
           cartLines={sales.cartLines}
           cartTotals={sales.cartTotals}
           invalid={sales.invalid}
-          loading={sales.loading}
+          registerMutationPending={sales.registerMutationPending}
           visibleToday={sales.visibleToday}
           visibleTodayLoading={sales.memberStatusLoading}
           withdrawalFeedback={sales.withdrawalFeedback}

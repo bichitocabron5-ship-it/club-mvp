@@ -7,6 +7,11 @@ datasource db {
   provider = "postgresql"
 }
 
+enum SaleOperationType {
+  SINGLE
+  BULK
+}
+
 model Member {
   id                Int       @id @default(autoincrement())
   memberNumber      String?   @unique
@@ -27,6 +32,7 @@ model Member {
   commercialNotes   String?
 
   sales           Sale[]
+  saleOperations  SaleOperation[]
   contracts       MemberContract[]
   signingSessions SigningSession[]
   accessLogs      AccessLog[]
@@ -58,6 +64,7 @@ model AppUser {
   member                    Member?              @relation(fields: [memberId], references: [id])
   appliedSales              Sale[]               @relation("SaleAppliedByUser")
   cancelledSales            Sale[]               @relation("SaleCancelledByUser")
+  saleOperations            SaleOperation[]      @relation("SaleOperationOperator")
   auditLogs                 AuditLog[]
   createdInventoryCounts    InventoryCount[]     @relation("InventoryCountCreatedByUser")
   confirmedInventoryCounts  InventoryCount[]     @relation("InventoryCountConfirmedByUser")
@@ -193,6 +200,7 @@ model Sale {
   discountReason    String?
   discountSource    String    @default("NONE") // NONE | MEMBER_PROFILE | MANUAL
   appliedByUserId   Int?
+  saleOperationId   Int?
   cancelledAt       DateTime?
   cancelledByUserId Int?
   cancelReason      String?
@@ -202,10 +210,33 @@ model Sale {
   product         Product  @relation(fields: [productId], references: [id])
   appliedByUser   AppUser? @relation("SaleAppliedByUser", fields: [appliedByUserId], references: [id])
   cancelledByUser AppUser? @relation("SaleCancelledByUser", fields: [cancelledByUserId], references: [id])
+  saleOperation   SaleOperation? @relation(fields: [saleOperationId], references: [id], onDelete: SetNull)
 
   @@index([memberId, createdAt])
   @@index([productId, createdAt])
+  @@index([saleOperationId])
   @@index([createdAt])
+}
+
+model SaleOperation {
+  id             Int      @id @default(autoincrement())
+  operatorUserId Int
+  idempotencyKey String
+  operationType  SaleOperationType
+  requestFingerprint String
+  memberId       Int
+  status         String   @default("SUCCEEDED")
+  response       Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  operatorUser AppUser @relation("SaleOperationOperator", fields: [operatorUserId], references: [id])
+  member       Member  @relation(fields: [memberId], references: [id])
+  sales        Sale[]
+
+  @@unique([operatorUserId, idempotencyKey])
+  @@index([memberId, createdAt])
+  @@index([operatorUserId, createdAt])
 }
 
 model CashMove {

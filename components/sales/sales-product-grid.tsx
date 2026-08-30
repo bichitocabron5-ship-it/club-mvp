@@ -3,9 +3,11 @@ import type { AddProductOptions } from "@/lib/helpers/sales-cart";
 import type { ProductSummary } from "@/lib/types";
 
 export function SalesProductGrid({
+  disabled,
   products,
   onAddProduct,
 }: {
+  disabled: boolean;
   products: ProductSummary[];
   onAddProduct: (product: ProductSummary, options?: AddProductOptions) => boolean;
 }) {
@@ -22,6 +24,7 @@ export function SalesProductGrid({
       {products.map((product) => (
         <SalesProductCard
           key={product.id}
+          disabled={disabled}
           product={product}
           onAddProduct={onAddProduct}
         />

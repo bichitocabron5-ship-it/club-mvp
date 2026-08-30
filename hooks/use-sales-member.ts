@@ -13,6 +13,10 @@ import {
 } from "@/lib/helpers/sales-cart";
 import type { MemberSummary } from "@/lib/types";
 
+type MemberOperationalDataLoadOptions = {
+  reportLoadErrors?: boolean;
+};
+
 export function useSalesMember({
   members,
   onMemberLoadError,
@@ -39,6 +43,69 @@ export function useSalesMember({
   const currentMemberIdRef = useRef("");
   const memberStatusRequestIdRef = useRef(0);
   const memberRecentSalesRequestIdRef = useRef(0);
+
+  const loadMemberOperationalData = useCallback(
+    async (
+      selectedMemberId: string,
+      options: MemberOperationalDataLoadOptions = {}
+    ) => {
+      const normalizedMemberId = selectedMemberId.trim();
+
+      if (!normalizedMemberId) {
+        return;
+      }
+
+      if (currentMemberIdRef.current !== normalizedMemberId) {
+        return;
+      }
+
+      const requestId = memberStatusRequestIdRef.current;
+      setMemberStatusLoading(true);
+
+      try {
+        const [todayData, statusData] = await Promise.all([
+          fetchJson<TodayTotals>(`/api/members/${normalizedMemberId}/today`),
+          fetchJson<MemberOperationalStatus>(
+            `/api/members/${normalizedMemberId}/operational-status`
+          ),
+        ]);
+
+        if (
+          memberStatusRequestIdRef.current !== requestId ||
+          currentMemberIdRef.current !== normalizedMemberId
+        ) {
+          return;
+        }
+
+        setToday(todayData);
+        setMemberStatus(statusData);
+        setMemberStatusLoading(false);
+
+        if (options.reportLoadErrors) {
+          onMemberLoadSuccess();
+        }
+      } catch (err) {
+        if (
+          memberStatusRequestIdRef.current !== requestId ||
+          currentMemberIdRef.current !== normalizedMemberId
+        ) {
+          return;
+        }
+
+        if (options.reportLoadErrors) {
+          setToday(emptySalesToday);
+          setMemberStatus(null);
+          onMemberLoadError(
+            err instanceof Error ? err.message : "Error cargando socio"
+          );
+        }
+
+        setMemberStatusLoading(false);
+        throw err;
+      }
+    },
+    [onMemberLoadError, onMemberLoadSuccess]
+  );
 
   const loadMemberRecentSales = useCallback(async (selectedMemberId: string) => {
     const normalizedMemberId = selectedMemberId.trim();
@@ -109,46 +176,18 @@ export function useSalesMember({
       return;
     }
 
-    let cancelled = false;
-    const requestId = memberStatusRequestIdRef.current;
-
-    void Promise.all([
-      fetchJson<TodayTotals>(`/api/members/${selectedMemberId}/today`),
-      fetchJson<MemberOperationalStatus>(
-        `/api/members/${selectedMemberId}/operational-status`
-      ),
-    ])
-      .then(([todayData, statusData]) => {
-        if (
-          !cancelled &&
-          memberStatusRequestIdRef.current === requestId &&
-          currentMemberIdRef.current === selectedMemberId
-        ) {
-          setToday(todayData);
-          setMemberStatus(statusData);
-          setMemberStatusLoading(false);
-          onMemberLoadSuccess();
-        }
-      })
-      .catch((err) => {
-        if (
-          !cancelled &&
-          memberStatusRequestIdRef.current === requestId &&
-          currentMemberIdRef.current === selectedMemberId
-        ) {
-          setToday(emptySalesToday);
-          setMemberStatus(null);
-          setMemberStatusLoading(false);
-          onMemberLoadError(
-            err instanceof Error ? err.message : "Error cargando socio"
-          );
-        }
+    void Promise.resolve().then(() => {
+      void loadMemberOperationalData(selectedMemberId, {
+        reportLoadErrors: true,
+      }).catch(() => {
+        // Expected load errors are reported through onMemberLoadError.
       });
+    });
 
     return () => {
-      cancelled = true;
+      memberStatusRequestIdRef.current += 1;
     };
-  }, [memberId, onMemberLoadError, onMemberLoadSuccess]);
+  }, [loadMemberOperationalData, memberId]);
 
   const visibleToday = memberId ? today : emptySalesToday;
 
@@ -236,6 +275,7 @@ export function useSalesMember({
     today,
     visibleToday,
     handleClearMember,
+    loadMemberOperationalData,
     handleMemberChange,
     loadMemberRecentSales,
     setMemberId: setSelectedMemberId,

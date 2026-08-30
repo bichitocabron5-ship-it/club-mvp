@@ -1,8 +1,12 @@
 // app/api/sales/route.ts
-import { requireAuth, requireStaffOrAdmin } from "@/lib/auth-server";
+import { requireStaffOrAdmin } from "@/lib/auth-server";
 import { isClosureOpen } from "@/lib/day-closure";
 import { prisma } from "@/lib/prisma";
-import { createSaleTransaction } from "@/lib/sales-engine";
+import {
+  createSaleTransaction,
+  isIdempotencyConflictError,
+  SaleOperationType,
+} from "@/lib/sales-engine";
 import { getErrorMessage, getTodayRange } from "@/lib/sales";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -11,6 +15,7 @@ const saleSchema = z.object({
   memberId: z.number().int().positive(),
   productId: z.number().int().positive(),
   qty: z.number().positive(),
+  idempotencyKey: z.string().trim().uuid().optional(),
 });
 
 export async function GET() {
@@ -97,7 +102,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const auth = await requireAuth();
+  const auth = await requireStaffOrAdmin();
   if (!auth.ok) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
@@ -109,7 +114,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Datos invalidos" }, { status: 400 });
   }
 
-  const { memberId, productId, qty } = parsed.data;
+  const { idempotencyKey, memberId, productId, qty } = parsed.data;
   const appliedByUserId = Number(auth.session.user.id);
 
   if (Number.isNaN(appliedByUserId)) {
@@ -122,10 +127,16 @@ export async function POST(req: Request) {
       items: [{ productId, qty }],
       operatorUserId: appliedByUserId,
       operatorEmail: auth.session.user.email,
+      operationType: SaleOperationType.SINGLE,
+      idempotencyKey,
     });
 
     return NextResponse.json(result.sales[0]);
   } catch (error: unknown) {
+    if (isIdempotencyConflictError(error)) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+
     return NextResponse.json(
       { error: getErrorMessage(error, "Error en la venta") },
       { status: 400 }
