@@ -1101,7 +1101,7 @@ export function useSalesPage() {
   function handleRfidScannerKeyDownCapture(
     event: ReactKeyboardEvent<HTMLElement>
   ) {
-    if (submittingRef.current) {
+    if (submittingRef.current || registerMutationPending) {
       clearRfidScanBuffer();
 
       if (
@@ -1117,6 +1117,13 @@ export function useSalesPage() {
     }
 
     if (cancelDialogOpenRef.current) {
+      clearRfidScanBuffer();
+      return;
+    }
+
+    if (event.target === productSearchRef.current) {
+      // Product search and RFID are separate namespaces; focused product input
+      // owns numeric SKU/barcode strings even when the same string is an RFID.
       clearRfidScanBuffer();
       return;
     }
