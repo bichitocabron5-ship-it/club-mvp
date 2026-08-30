@@ -11,7 +11,7 @@ import { getTodayRange, roundCurrency } from "@/lib/sales";
 
 const cancelSaleSchema = z
   .object({
-    reason: z.string().trim().max(2000).optional().nullable(),
+    reason: z.string().trim().min(1).max(2000),
   })
   .strict();
 
@@ -84,11 +84,14 @@ export async function POST(
     const parsed = cancelSaleSchema.safeParse(body);
 
     if (!parsed.success) {
-      return NextResponse.json({ error: "Datos invalidos" }, { status: 400 });
+      return NextResponse.json(
+        { error: "El motivo es obligatorio para anular una retirada." },
+        { status: 400 }
+      );
     }
 
     const actorUserId = Number(auth.session.user.id);
-    const reason = parsed.data.reason?.trim() || null;
+    const reason = parsed.data.reason;
     const role = auth.session.user.role;
 
     const result = await prisma.$transaction(

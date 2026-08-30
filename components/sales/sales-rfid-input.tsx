@@ -1,6 +1,7 @@
 import type { FormEvent, RefObject } from "react";
 
 export function SalesRfidInput({
+  disabled,
   rfidError,
   rfidInput,
   rfidRef,
@@ -8,6 +9,7 @@ export function SalesRfidInput({
   onRfidInputChange,
   onSubmit,
 }: {
+  disabled: boolean;
   rfidError: string;
   rfidInput: string;
   rfidRef: RefObject<HTMLInputElement | null>;
@@ -23,20 +25,22 @@ export function SalesRfidInput({
         <button
           type="button"
           onClick={onFocusRfid}
-          className="app-button-secondary rounded-full px-3 py-2 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
+          disabled={disabled}
+          className="app-button-secondary rounded-full px-3 py-2 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Enfocar RFID
         </button>
       </div>
 
       <input
-        className="w-full rounded-2xl border border-black/10 bg-white/80 p-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
+        className="w-full rounded-2xl border border-black/10 bg-white/80 p-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-black/5 disabled:text-black/50"
         placeholder="Pasa la chapita por el lector..."
         value={rfidInput}
         onChange={(event) => onRfidInputChange(event.target.value)}
         autoComplete="off"
         ref={rfidRef}
         autoFocus
+        disabled={disabled}
       />
 
       {rfidError && (

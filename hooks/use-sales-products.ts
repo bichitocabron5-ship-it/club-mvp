@@ -29,9 +29,11 @@ function hasReasonableProductSearchMatch(
 }
 
 export function useSalesProducts({
+  disabled = false,
   products,
   onAddProduct,
 }: {
+  disabled?: boolean;
   products: ProductSummary[];
   onAddProduct: (
     product: ProductSummary,
@@ -99,6 +101,8 @@ export function useSalesProducts({
   }, [products, search, selectedCategory, selectedHashType]);
 
   function handleCategoryFilter(category: string) {
+    if (disabled) return;
+
     setSelectedCategory(category);
 
     if (category !== "ALL" && category !== "HASH") {
@@ -107,6 +111,8 @@ export function useSalesProducts({
   }
 
   function handleHashTypeFilter(hashType: ProductHashType | "ALL") {
+    if (disabled) return;
+
     if (
       hashType !== "ALL" &&
       selectedCategory !== "ALL" &&
@@ -123,6 +129,8 @@ export function useSalesProducts({
     if (event.nativeEvent.isComposing) return;
 
     event.preventDefault();
+
+    if (disabled) return;
 
     const query = normalizeProductSearchValue(event.currentTarget.value);
     if (!query) return;

@@ -3,6 +3,7 @@ import type { KeyboardEvent } from "react";
 import type { MemberSummary } from "@/lib/types";
 
 export function SalesMemberSearch({
+  disabled,
   filteredMembers,
   memberId,
   memberRecentSalesError,
@@ -14,6 +15,7 @@ export function SalesMemberSearch({
   onMemberSearchKeyDown,
   onMemberSearchChange,
 }: {
+  disabled: boolean;
   filteredMembers: MemberSummary[];
   memberId: string;
   memberRecentSalesError: string;
@@ -30,18 +32,20 @@ export function SalesMemberSearch({
       <label className="block text-sm font-medium">Socio</label>
 
       <input
-        className="w-full rounded-2xl border border-black/10 bg-white/80 p-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
+        className="w-full rounded-2xl border border-black/10 bg-white/80 p-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-black/5 disabled:text-black/50"
         placeholder="Buscar socio por nombre o DNI..."
         value={memberSearch}
         onChange={(event) => onMemberSearchChange(event.target.value)}
         onKeyDown={onMemberSearchKeyDown}
+        disabled={disabled}
       />
 
       <select
-        className="w-full rounded-2xl border border-black/10 bg-white/80 p-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
+        className="w-full rounded-2xl border border-black/10 bg-white/80 p-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-black/5 disabled:text-black/50"
         value={memberId}
         onChange={(event) => onMemberChange(event.target.value)}
         required
+        disabled={disabled}
       >
         <option value="">Selecciona socio</option>
         {filteredMembers.map((member) => (
@@ -75,7 +79,8 @@ export function SalesMemberSearch({
           <button
             type="button"
             onClick={onClearMember}
-            className="app-button-secondary shrink-0 rounded-full px-4 py-2 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
+            disabled={disabled}
+            className="app-button-secondary shrink-0 rounded-full px-4 py-2 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Cambiar socio
           </button>

@@ -27,6 +27,9 @@ const RFID_SCAN_MAX_KEY_GAP_MS = 50;
 const RFID_SCAN_DIGIT_PATTERN = /^\d$/;
 const WITHDRAWAL_SUCCESS_FEEDBACK_MS = 4000;
 const WITHDRAWAL_ERROR_FEEDBACK_MS = 12000;
+const WITHDRAWAL_SYNC_WARNING_FEEDBACK_MS = 12000;
+const AMBIGUOUS_WITHDRAWAL_ERROR_MESSAGE =
+  "No se pudo confirmar el registro. Reintenta sin modificar la retirada para comprobarla de forma segura.";
 
 type WithdrawalFeedback = {
   kind: "success" | "error";
@@ -42,10 +45,27 @@ type RfidScanBuffer = {
 };
 
 type CancelledSaleResponse = {
+  cancelledAt?: unknown;
+  cancelReason?: unknown;
   productId?: unknown;
   product?: {
     id?: unknown;
   } | null;
+};
+
+type WithdrawalRegistrationItem = {
+  productId: number;
+  qty: number;
+};
+
+type WithdrawalRegistrationPayload = {
+  memberId: number;
+  items: WithdrawalRegistrationItem[];
+};
+
+type PendingWithdrawalAttempt = {
+  idempotencyKey: string;
+  payloadSignature: string;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -72,6 +92,76 @@ function getCancelledSaleProductId(value: unknown) {
   if (!isRecord(product)) return null;
 
   return parsePositiveInteger(product.id);
+}
+
+function getOptionalString(value: unknown) {
+  return typeof value === "string" ? value : null;
+}
+
+function getCancelledSaleCancelledAt(value: unknown) {
+  if (!isRecord(value)) return null;
+
+  return getOptionalString(value.cancelledAt);
+}
+
+function getCancelledSaleReason(value: unknown) {
+  if (!isRecord(value)) return null;
+  if (value.cancelReason === null) return null;
+
+  return getOptionalString(value.cancelReason);
+}
+
+function normalizeWithdrawalItemsForAttempt(
+  items: WithdrawalRegistrationItem[]
+) {
+  const grouped = new Map<number, number>();
+
+  for (const item of items) {
+    grouped.set(item.productId, (grouped.get(item.productId) || 0) + item.qty);
+  }
+
+  return Array.from(grouped.entries())
+    .sort(([leftProductId], [rightProductId]) => leftProductId - rightProductId)
+    .map(([productId, qty]) => ({
+      productId,
+      qty,
+    }));
+}
+
+function getWithdrawalPayloadSignature(payload: WithdrawalRegistrationPayload) {
+  return JSON.stringify({
+    version: 1,
+    operationType: "BULK",
+    memberId: payload.memberId,
+    items: normalizeWithdrawalItemsForAttempt(payload.items),
+    manualDiscount: null,
+    note: null,
+  });
+}
+
+function createWithdrawalIdempotencyKey() {
+  const randomUUID = globalThis.crypto?.randomUUID;
+
+  if (typeof randomUUID !== "function") {
+    throw new Error(
+      "No se pudo preparar el registro seguro. Actualiza el navegador."
+    );
+  }
+
+  return randomUUID.call(globalThis.crypto);
+}
+
+function isConfirmedWithdrawalFailureStatus(status: number) {
+  return status >= 400 && status < 500 && status !== 408;
+}
+
+async function getRegistrationErrorMessage(res: Response, fallback: string) {
+  const err = (await res.json().catch(() => null)) as
+    | { error?: unknown }
+    | null;
+  const message = typeof err?.error === "string" ? err.error.trim() : "";
+
+  return message || fallback;
 }
 
 function getEditableScanTarget(
@@ -116,7 +206,7 @@ export function useSalesPage() {
   const [showRecentSales, setShowRecentSales] = useState(false);
   const [bootstrapError, setBootstrapError] = useState("");
   const [memberLoadError, setMemberLoadError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [registerMutationPending, setRegisterMutationPending] = useState(false);
   const [rfidInput, setRfidInput] = useState("");
   const [rfidError, setRfidError] = useState("");
   const [cancelingSaleId, setCancelingSaleId] = useState<number | null>(null);
@@ -130,10 +220,42 @@ export function useSalesPage() {
   const rfidSubmittingRef = useRef(false);
   const cancelingSaleRef = useRef(false);
   const rfidScanBufferRef = useRef<RfidScanBuffer | null>(null);
+  const cancelDialogOpenRef = useRef(false);
   const withdrawalFeedbackTimerRef = useRef<number | null>(null);
+  const pendingWithdrawalAttemptRef = useRef<PendingWithdrawalAttempt | null>(
+    null
+  );
   const mountedRef = useRef(true);
   const currentMemberIdRef = useRef("");
   const memberContextVersionRef = useRef(0);
+
+  // Idempotency lifecycle: no key creates a new attempt, ambiguous errors keep
+  // the key, confirmed server failures and success clear it, payload changes
+  // invalidate it before the next logical withdrawal.
+  const clearPendingWithdrawalAttempt = useCallback(() => {
+    pendingWithdrawalAttemptRef.current = null;
+  }, []);
+
+  const invalidatePendingWithdrawalAttempt = clearPendingWithdrawalAttempt;
+
+  const getWithdrawalIdempotencyKey = useCallback(
+    (payloadSignature: string) => {
+      const pendingAttempt = pendingWithdrawalAttemptRef.current;
+
+      if (pendingAttempt?.payloadSignature === payloadSignature) {
+        return pendingAttempt.idempotencyKey;
+      }
+
+      const nextAttempt = {
+        idempotencyKey: createWithdrawalIdempotencyKey(),
+        payloadSignature,
+      };
+
+      pendingWithdrawalAttemptRef.current = nextAttempt;
+      return nextAttempt.idempotencyKey;
+    },
+    []
+  );
 
   const clearWithdrawalFeedback = useCallback(() => {
     if (withdrawalFeedbackTimerRef.current !== null) {
@@ -169,6 +291,15 @@ export function useSalesPage() {
     },
     []
   );
+
+  const clearRfidScanBuffer = useCallback(() => {
+    rfidScanBufferRef.current = null;
+  }, []);
+
+  const setCancelDialogOpen = useCallback((isOpen: boolean) => {
+    cancelDialogOpenRef.current = isOpen;
+    clearRfidScanBuffer();
+  }, [clearRfidScanBuffer]);
 
   const focusRfidInput = useCallback(() => {
     rfidRef.current?.focus();
@@ -231,17 +362,27 @@ export function useSalesPage() {
     products,
     discountPercent: Number(member.memberStatus?.member.discountPercent || 0),
     focusRegisterButton,
+    registerMutationPending,
   });
 
   function handleAddProduct(
     product: ProductSummary,
     options?: AddProductOptions
   ) {
+    if (submittingRef.current) return false;
+
     clearWithdrawalFeedback();
-    return cart.addProduct(product, options);
+    const added = cart.addProduct(product, options);
+
+    if (added) {
+      invalidatePendingWithdrawalAttempt();
+    }
+
+    return added;
   }
 
   const productFilters = useSalesProducts({
+    disabled: registerMutationPending,
     products,
     onAddProduct: handleAddProduct,
   });
@@ -352,9 +493,12 @@ export function useSalesPage() {
     cartTotals.conversionProblems.length > 0 ||
     cartTotals.stockProblems.length > 0 ||
     member.memberStatusLoading ||
-    loading;
+    registerMutationPending;
 
   function handleMemberChange(nextMemberId: string) {
+    if (submittingRef.current) return;
+
+    invalidatePendingWithdrawalAttempt();
     clearWithdrawalFeedback();
     updateCurrentMemberContext(nextMemberId);
     member.handleMemberChange(nextMemberId);
@@ -362,6 +506,9 @@ export function useSalesPage() {
   }
 
   function handleNextMember() {
+    if (submittingRef.current) return;
+
+    invalidatePendingWithdrawalAttempt();
     clearWithdrawalFeedback();
     updateCurrentMemberContext("");
     member.handleClearMember();
@@ -374,6 +521,8 @@ export function useSalesPage() {
   }
 
   function handleMemberSearchChange(value: string) {
+    if (submittingRef.current) return;
+
     clearWithdrawalFeedback();
     member.setMemberSearch(value);
   }
@@ -383,6 +532,11 @@ export function useSalesPage() {
   ) {
     if (event.key !== "Enter" && event.code !== "NumpadEnter") return;
     if (event.nativeEvent.isComposing) return;
+
+    if (submittingRef.current) {
+      event.preventDefault();
+      return;
+    }
 
     const [uniqueMember] = member.filteredMembers;
 
@@ -404,43 +558,137 @@ export function useSalesPage() {
   }
 
   function handleRfidInputChange(value: string) {
+    if (submittingRef.current) {
+      clearRfidScanBuffer();
+      return;
+    }
+
     clearWithdrawalFeedback();
     setRfidInput(value);
   }
 
   function handleSearchChange(value: string) {
+    if (submittingRef.current) return;
+
     clearWithdrawalFeedback();
     productFilters.setSearch(value);
   }
 
   function handleCategoryFilter(category: string) {
+    if (submittingRef.current) return;
+
     clearWithdrawalFeedback();
     productFilters.handleCategoryFilter(category);
   }
 
   function handleHashTypeFilter(hashType: ProductHashType | "ALL") {
+    if (submittingRef.current) return;
+
     clearWithdrawalFeedback();
     productFilters.handleHashTypeFilter(hashType);
   }
 
   function handleRemoveProduct(productId: number) {
+    if (submittingRef.current) return;
+
+    invalidatePendingWithdrawalAttempt();
     clearWithdrawalFeedback();
     cart.removeProduct(productId);
   }
 
   function handleUpdateAmount(productId: number, value: string) {
+    if (submittingRef.current) return;
+
+    invalidatePendingWithdrawalAttempt();
     clearWithdrawalFeedback();
     cart.updateAmount(productId, value);
   }
 
   function handleUpdateInputMode(productId: number, inputMode: CartInputMode) {
+    if (submittingRef.current) return;
+
+    invalidatePendingWithdrawalAttempt();
     clearWithdrawalFeedback();
     cart.updateInputMode(productId, inputMode);
   }
 
   function handleUpdateQty(productId: number, value: string) {
+    if (submittingRef.current) return;
+
+    invalidatePendingWithdrawalAttempt();
     clearWithdrawalFeedback();
     cart.updateQty(productId, value);
+  }
+
+  function handleCartValueKeyDown(
+    productId: number,
+    event: ReactKeyboardEvent<HTMLInputElement>
+  ) {
+    if (
+      submittingRef.current &&
+      (event.key === "Enter" || event.code === "NumpadEnter")
+    ) {
+      event.preventDefault();
+      return;
+    }
+
+    cart.handleCartValueKeyDown(productId, event);
+  }
+
+  async function synchronizeAfterSuccessfulWithdrawal({
+    isWithdrawalContextCurrent,
+    selectedMemberId,
+    showFeedbackIfWithdrawalContextCurrent,
+  }: {
+    isWithdrawalContextCurrent: () => boolean;
+    selectedMemberId: string;
+    showFeedbackIfWithdrawalContextCurrent: (
+      feedback: WithdrawalFeedback,
+      visibleMs: number
+    ) => void;
+  }) {
+    let refreshFailed = false;
+
+    try {
+      const refreshedProducts = await fetchJson<ProductSummary[]>("/api/products");
+      setProducts(refreshedProducts);
+    } catch {
+      refreshFailed = true;
+    }
+
+    if (selectedMemberId && isWithdrawalContextCurrent()) {
+      try {
+        await member.loadMemberOperationalData(selectedMemberId, {
+          reportLoadErrors: false,
+        });
+      } catch {
+        refreshFailed = true;
+      }
+
+      try {
+        await member.loadMemberRecentSales(selectedMemberId);
+      } catch {
+        refreshFailed = true;
+      }
+    }
+
+    try {
+      await loadRecentSales();
+    } catch {
+      refreshFailed = true;
+    }
+
+    if (refreshFailed) {
+      showFeedbackIfWithdrawalContextCurrent(
+        {
+          kind: "success",
+          title: "Retirada registrada",
+          message:
+            "Retirada registrada, pero no se pudieron actualizar todos los datos. Pulsa Actualizar para sincronizar.",
+        },
+        WITHDRAWAL_SYNC_WARNING_FEEDBACK_MS
+      );
+    }
   }
 
   async function handleRegisterWithdrawal() {
@@ -463,7 +711,6 @@ export function useSalesPage() {
 
     if (invalid) return;
 
-    submittingRef.current = true;
     const selectedMemberId = member.memberId.trim();
     const selectedMemberContextVersion = memberContextVersionRef.current;
     const isWithdrawalContextCurrent = () =>
@@ -496,11 +743,35 @@ export function useSalesPage() {
         },
         WITHDRAWAL_ERROR_FEEDBACK_MS
       );
-      submittingRef.current = false;
       return;
     }
 
-    setLoading(true);
+    const registrationPayload: WithdrawalRegistrationPayload = {
+      memberId: Number(selectedMemberId),
+      items,
+    };
+    const payloadSignature =
+      getWithdrawalPayloadSignature(registrationPayload);
+    let idempotencyKey: string;
+
+    try {
+      idempotencyKey = getWithdrawalIdempotencyKey(payloadSignature);
+    } catch (err) {
+      clearPendingWithdrawalAttempt();
+      showFeedbackIfWithdrawalContextCurrent(
+        {
+          kind: "error",
+          title: "No se pudo registrar la retirada",
+          message:
+            err instanceof Error ? err.message : "Error al preparar retirada",
+        },
+        WITHDRAWAL_ERROR_FEEDBACK_MS
+      );
+      return;
+    }
+
+    submittingRef.current = true;
+    setRegisterMutationPending(true);
 
     try {
       const res = await fetch("/api/sales/bulk", {
@@ -509,24 +780,58 @@ export function useSalesPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          memberId: Number(selectedMemberId),
-          items,
+          ...registrationPayload,
+          idempotencyKey,
         }),
       });
 
       if (!res.ok) {
-        const err: { error?: string } = await res.json();
+        const message = await getRegistrationErrorMessage(
+          res,
+          "Error al registrar retirada"
+        );
+
+        if (isConfirmedWithdrawalFailureStatus(res.status)) {
+          clearPendingWithdrawalAttempt();
+          showFeedbackIfWithdrawalContextCurrent(
+            {
+              kind: "error",
+              title: "No se pudo registrar la retirada",
+              message,
+            },
+            WITHDRAWAL_ERROR_FEEDBACK_MS
+          );
+          return;
+        }
+
         showFeedbackIfWithdrawalContextCurrent(
           {
             kind: "error",
-            title: "No se pudo registrar la retirada",
-            message: err.error || "Error al registrar retirada",
+            title: "No se pudo confirmar el registro",
+            message: AMBIGUOUS_WITHDRAWAL_ERROR_MESSAGE,
           },
           WITHDRAWAL_ERROR_FEEDBACK_MS
         );
         return;
       }
 
+      clearPendingWithdrawalAttempt();
+    } catch {
+      showFeedbackIfWithdrawalContextCurrent(
+        {
+          kind: "error",
+          title: "No se pudo confirmar el registro",
+          message: AMBIGUOUS_WITHDRAWAL_ERROR_MESSAGE,
+        },
+        WITHDRAWAL_ERROR_FEEDBACK_MS
+      );
+      return;
+    } finally {
+      submittingRef.current = false;
+      setRegisterMutationPending(false);
+    }
+
+    try {
       showFeedbackIfWithdrawalContextCurrent(
         {
           kind: "success",
@@ -538,35 +843,25 @@ export function useSalesPage() {
 
       if (isWithdrawalContextCurrent()) {
         cart.clearCart();
-      }
-
-      const refreshedProducts = await fetchJson<ProductSummary[]>("/api/products");
-      setProducts(refreshedProducts);
-
-      const refreshedToday = await fetchJson<TodayTotals>(
-        `/api/members/${selectedMemberId}/today`
-      );
-      member.setTodayForMember(selectedMemberId, refreshedToday);
-      await member.loadMemberRecentSales(selectedMemberId);
-      await loadRecentSales();
-
-      if (isWithdrawalContextCurrent()) {
         setRfidInput("");
         focusProductSearchInput();
       }
-    } catch (err) {
+
+      await synchronizeAfterSuccessfulWithdrawal({
+        isWithdrawalContextCurrent,
+        selectedMemberId,
+        showFeedbackIfWithdrawalContextCurrent,
+      });
+    } catch {
       showFeedbackIfWithdrawalContextCurrent(
         {
-          kind: "error",
-          title: "No se pudo registrar la retirada",
+          kind: "success",
+          title: "Retirada registrada",
           message:
-            err instanceof Error ? err.message : "Error al registrar retirada",
+            "Retirada registrada, pero no se pudieron actualizar todos los datos. Pulsa Actualizar para sincronizar.",
         },
-        WITHDRAWAL_ERROR_FEEDBACK_MS
+        WITHDRAWAL_SYNC_WARNING_FEEDBACK_MS
       );
-    } finally {
-      submittingRef.current = false;
-      setLoading(false);
     }
   }
 
@@ -587,7 +882,7 @@ export function useSalesPage() {
       event.repeat ||
       event.currentTarget !== document.activeElement ||
       invalid ||
-      loading ||
+      registerMutationPending ||
       submittingRef.current
     ) {
       return;
@@ -624,6 +919,8 @@ export function useSalesPage() {
     setCancelingSaleId(sale.id);
     setRecentSalesError("");
 
+    let cancelledSale: CancelledSaleResponse | null = null;
+
     try {
       const res = await fetch(`/api/sales/${sale.id}/cancel`, {
         method: "POST",
@@ -642,51 +939,9 @@ export function useSalesPage() {
         throw new Error(err?.error || "No se pudo anular la retirada");
       }
 
-      const cancelledSale = (await res.json().catch(() => null)) as
+      cancelledSale = (await res.json().catch(() => null)) as
         | CancelledSaleResponse
         | null;
-      const cancelledProductId = getCancelledSaleProductId(cancelledSale);
-      const refreshedProducts = await fetchJson<ProductSummary[]>("/api/products");
-
-      if (isCancellationContextCurrent()) {
-        setProducts(refreshedProducts);
-      } else if (cancelledProductId !== null) {
-        const refreshedProduct = refreshedProducts.find(
-          (product) => product.id === cancelledProductId
-        );
-
-        if (refreshedProduct) {
-          setProducts((currentProducts) => {
-            let productWasUpdated = false;
-            const nextProducts = currentProducts.map((product) => {
-              if (product.id !== refreshedProduct.id) return product;
-
-              productWasUpdated = true;
-
-              if (product.stock === refreshedProduct.stock) {
-                return product;
-              }
-
-              return {
-                ...product,
-                stock: refreshedProduct.stock,
-              };
-            });
-
-            return productWasUpdated ? nextProducts : currentProducts;
-          });
-        }
-      }
-
-      if (selectedMemberId && isCancellationContextCurrent()) {
-        const refreshedToday = await fetchJson<TodayTotals>(
-          `/api/members/${selectedMemberId}/today`
-        );
-        member.setTodayForMember(selectedMemberId, refreshedToday);
-        await member.loadMemberRecentSales(selectedMemberId);
-      }
-
-      await loadRecentSales();
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Error anulando retirada";
@@ -696,11 +951,100 @@ export function useSalesPage() {
       cancelingSaleRef.current = false;
       setCancelingSaleId(null);
     }
+
+    const cancelledAt =
+      getCancelledSaleCancelledAt(cancelledSale) ?? new Date().toISOString();
+    const cancelReason =
+      getCancelledSaleReason(cancelledSale) ?? trimmedReason;
+    const cancelledProductId = getCancelledSaleProductId(cancelledSale);
+
+    setRecentSales((currentSales) =>
+      currentSales.map((currentSale) =>
+        currentSale.id === sale.id
+          ? {
+              ...currentSale,
+              cancelledAt,
+              cancelReason,
+              canCancel: false,
+            }
+          : currentSale
+      )
+    );
+
+    void refreshAfterSuccessfulCancellation();
+
+    async function refreshAfterSuccessfulCancellation() {
+      let refreshFailed = false;
+
+      try {
+        const refreshedProducts =
+          await fetchJson<ProductSummary[]>("/api/products");
+
+        if (isCancellationContextCurrent()) {
+          setProducts(refreshedProducts);
+        } else if (cancelledProductId !== null) {
+          const refreshedProduct = refreshedProducts.find(
+            (product) => product.id === cancelledProductId
+          );
+
+          if (refreshedProduct) {
+            setProducts((currentProducts) => {
+              let productWasUpdated = false;
+              const nextProducts = currentProducts.map((product) => {
+                if (product.id !== refreshedProduct.id) return product;
+
+                productWasUpdated = true;
+
+                if (product.stock === refreshedProduct.stock) {
+                  return product;
+                }
+
+                return {
+                  ...product,
+                  stock: refreshedProduct.stock,
+                };
+              });
+
+              return productWasUpdated ? nextProducts : currentProducts;
+            });
+          }
+        }
+      } catch {
+        refreshFailed = true;
+      }
+
+      if (selectedMemberId && isCancellationContextCurrent()) {
+        try {
+          const refreshedToday = await fetchJson<TodayTotals>(
+            `/api/members/${selectedMemberId}/today`
+          );
+          member.setTodayForMember(selectedMemberId, refreshedToday);
+          await member.loadMemberRecentSales(selectedMemberId);
+        } catch {
+          refreshFailed = true;
+        }
+      }
+
+      try {
+        await loadRecentSales();
+      } catch {
+        refreshFailed = true;
+      }
+
+      if (refreshFailed) {
+        setRecentSalesError(
+          "Anulacion completada, pero no se pudieron actualizar todos los datos. Pulsa Actualizar para sincronizar."
+        );
+      }
+    }
   }
 
   async function processRfidCode(rawCode: string) {
     const code = normalizeRfidCode(rawCode);
-    if (!code || rfidSubmittingRef.current) return;
+    if (!code || rfidSubmittingRef.current || submittingRef.current) {
+      clearRfidScanBuffer();
+      return;
+    }
 
     rfidSubmittingRef.current = true;
     clearWithdrawalFeedback();
@@ -708,6 +1052,11 @@ export function useSalesPage() {
 
     try {
       const res = await fetch(`/api/members/by-rfid/${encodeURIComponent(code)}`);
+
+      if (submittingRef.current) {
+        clearRfidScanBuffer();
+        return;
+      }
 
       if (!res.ok) {
         setRfidError("Chapita no asignada");
@@ -717,8 +1066,15 @@ export function useSalesPage() {
       }
 
       const selectedMember = (await res.json()) as MemberSummary;
+
+      if (submittingRef.current) {
+        clearRfidScanBuffer();
+        return;
+      }
+
       const nextMemberId = String(selectedMember.id);
 
+      invalidatePendingWithdrawalAttempt();
       updateCurrentMemberContext(nextMemberId);
       member.setMemberId(nextMemberId);
       member.setMemberSearch(selectedMember.fullName);
@@ -734,12 +1090,37 @@ export function useSalesPage() {
   async function handleRfidSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    if (submittingRef.current) {
+      clearRfidScanBuffer();
+      return;
+    }
+
     await processRfidCode(rfidInput);
   }
 
   function handleRfidScannerKeyDownCapture(
     event: ReactKeyboardEvent<HTMLElement>
   ) {
+    if (submittingRef.current) {
+      clearRfidScanBuffer();
+
+      if (
+        RFID_SCAN_DIGIT_PATTERN.test(event.key) ||
+        event.key === "Enter" ||
+        event.code === "NumpadEnter"
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+
+      return;
+    }
+
+    if (cancelDialogOpenRef.current) {
+      clearRfidScanBuffer();
+      return;
+    }
+
     if (
       event.defaultPrevented ||
       event.repeat ||
@@ -827,7 +1208,7 @@ export function useSalesPage() {
     filteredMembers: member.filteredMembers,
     filteredProducts: productFilters.filteredProducts,
     invalid,
-    loading,
+    registerMutationPending,
     memberId: member.memberId,
     memberRecentSalesError: member.memberRecentSalesError,
     memberRecentSalesLoading: member.memberRecentSalesLoading,
@@ -852,7 +1233,7 @@ export function useSalesPage() {
     withdrawalFeedback,
     addProduct: handleAddProduct,
     handleCancelRecentSale,
-    handleCartValueKeyDown: cart.handleCartValueKeyDown,
+    handleCartValueKeyDown,
     handleCategoryFilter,
     handleHashTypeFilter,
     handleMemberChange,
@@ -870,6 +1251,7 @@ export function useSalesPage() {
     setMemberSearch: handleMemberSearchChange,
     setRfidInput: handleRfidInputChange,
     setSearch: handleSearchChange,
+    setCancelDialogOpen,
     setShowRecentSales,
     updateAmount: handleUpdateAmount,
     updateInputMode: handleUpdateInputMode,

@@ -50,7 +50,7 @@ export function SalesCart({
   cartLines,
   cartTotals,
   invalid,
-  loading,
+  registerMutationPending,
   visibleToday,
   visibleTodayLoading,
   withdrawalFeedback,
@@ -68,7 +68,7 @@ export function SalesCart({
   cartLines: CartLine[];
   cartTotals: SalesCartTotals;
   invalid: boolean;
-  loading: boolean;
+  registerMutationPending: boolean;
   visibleToday: TodayTotals;
   visibleTodayLoading: boolean;
   withdrawalFeedback: SalesCartFeedback | null;
@@ -102,6 +102,7 @@ export function SalesCart({
           {cartLines.map((line) => (
             <SalesCartItem
               key={line.productId}
+              disabled={registerMutationPending}
               line={line}
               onCartValueKeyDown={onCartValueKeyDown}
               onCartValueInputRef={onCartValueInputRef}
@@ -201,7 +202,8 @@ export function SalesCart({
         <button
           type="button"
           onClick={onNextMember}
-          className="app-button-secondary mt-3 min-h-11 w-full rounded-2xl px-4 py-3 text-sm font-bold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
+          disabled={registerMutationPending}
+          className="app-button-secondary mt-3 min-h-11 w-full rounded-2xl px-4 py-3 text-sm font-bold outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Siguiente socio
         </button>
@@ -240,10 +242,10 @@ export function SalesCart({
           type="button"
           onClick={onRegisterWithdrawal}
           onKeyDown={onRegisterButtonKeyDown}
-          disabled={invalid || loading}
-          className="app-button-primary mt-3 min-h-14 w-full rounded-3xl px-4 py-3.5 text-lg font-black leading-tight shadow-lg outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:opacity-40 lg:text-xl"
+          disabled={invalid || registerMutationPending}
+          className="app-button-primary mt-3 min-h-14 w-full rounded-3xl px-4 py-3.5 text-lg font-black leading-tight shadow-lg outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40 lg:text-xl"
         >
-          {loading ? "Registrando..." : "COBRAR / REGISTRAR"}
+          {registerMutationPending ? "Registrando..." : "COBRAR / REGISTRAR"}
         </button>
       </div>
     </aside>
