@@ -50,8 +50,10 @@ export default function SalesPage() {
             memberRecentSalesLoading={sales.memberRecentSalesLoading}
             memberRecentSummary={sales.memberRecentSummary}
             memberSearch={sales.memberSearch}
+            selectedMember={sales.selectedMember}
             onClearMember={sales.handleNextMember}
             onMemberChange={sales.handleMemberChange}
+            onMemberSearchBlur={sales.syncMemberSearchToSelectedMember}
             onMemberSearchKeyDown={sales.handleMemberSearchKeyDown}
             onMemberSearchChange={sales.setMemberSearch}
           />

@@ -30,6 +30,13 @@ const WITHDRAWAL_ERROR_FEEDBACK_MS = 12000;
 const WITHDRAWAL_SYNC_WARNING_FEEDBACK_MS = 12000;
 const AMBIGUOUS_WITHDRAWAL_ERROR_MESSAGE =
   "No se pudo confirmar el registro. Reintenta sin modificar la retirada para comprobarla de forma segura.";
+const RFID_UNASSIGNED_ERROR_MESSAGE = "Chapita no asignada";
+const RFID_HTTP_ERROR_MESSAGE =
+  "No se pudo consultar la chapita. Inténtalo de nuevo.";
+const RFID_INVALID_RESPONSE_ERROR_MESSAGE =
+  "No se pudo consultar la chapita. Respuesta inválida del servidor.";
+const RFID_NETWORK_ERROR_MESSAGE =
+  "No se pudo leer la chapita. Comprueba la conexión e inténtalo de nuevo.";
 
 type WithdrawalFeedback = {
   kind: "success" | "error";
@@ -68,8 +75,83 @@ type PendingWithdrawalAttempt = {
   payloadSignature: string;
 };
 
+type RfidMemberLookupResponse = {
+  id: number | string;
+  fullName: string;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function isRfidMemberLookupResponse(
+  value: unknown
+): value is RfidMemberLookupResponse {
+  if (!isRecord(value)) return false;
+
+  return (
+    parsePositiveInteger(value.id) !== null &&
+    typeof value.fullName === "string" &&
+    value.fullName.trim().length > 0
+  );
+}
+
+async function readRfidJson(res: Response) {
+  const responseText = await res.text();
+
+  if (!responseText.trim()) {
+    return { ok: false as const, data: null };
+  }
+
+  try {
+    return { ok: true as const, data: JSON.parse(responseText) as unknown };
+  } catch {
+    return { ok: false as const, data: null };
+  }
+}
+
+function getSafeRfidApiErrorMessage(data: unknown) {
+  if (!isRecord(data) || typeof data.error !== "string") return "";
+
+  const message = data.error.trim();
+  const lowerMessage = message.toLowerCase();
+
+  if (
+    !message ||
+    message.length > 140 ||
+    lowerMessage.includes("stack") ||
+    lowerMessage.includes("trace") ||
+    lowerMessage.includes("prisma") ||
+    lowerMessage.includes("sql")
+  ) {
+    return "";
+  }
+
+  return message;
+}
+
+function getRfidHttpErrorMessage(status: number, data: unknown) {
+  const safeApiMessage = getSafeRfidApiErrorMessage(data);
+
+  if (status === 401 || status === 403) {
+    return safeApiMessage
+      ? `No se pudo consultar la chapita. ${safeApiMessage}`
+      : "No se pudo consultar la chapita. Revisa los permisos de la sesión.";
+  }
+
+  if (status === 429) {
+    return safeApiMessage
+      ? `No se pudo consultar la chapita. ${safeApiMessage}`
+      : "No se pudo consultar la chapita. Espera unos segundos e inténtalo de nuevo.";
+  }
+
+  if (status >= 500) {
+    return RFID_HTTP_ERROR_MESSAGE;
+  }
+
+  return safeApiMessage
+    ? `No se pudo consultar la chapita. ${safeApiMessage}`
+    : RFID_HTTP_ERROR_MESSAGE;
 }
 
 function parsePositiveInteger(value: unknown) {
@@ -218,6 +300,9 @@ export function useSalesPage() {
   const registerButtonRef = useRef<HTMLButtonElement | null>(null);
   const submittingRef = useRef(false);
   const rfidSubmittingRef = useRef(false);
+  const rfidSubmittingCodeRef = useRef("");
+  const rfidLookupRequestIdRef = useRef(0);
+  const cartContextVersionRef = useRef(0);
   const cancelingSaleRef = useRef(false);
   const rfidScanBufferRef = useRef<RfidScanBuffer | null>(null);
   const cancelDialogOpenRef = useRef(false);
@@ -294,6 +379,10 @@ export function useSalesPage() {
 
   const clearRfidScanBuffer = useCallback(() => {
     rfidScanBufferRef.current = null;
+  }, []);
+
+  const updateCartContext = useCallback(() => {
+    cartContextVersionRef.current += 1;
   }, []);
 
   const setCancelDialogOpen = useCallback((isOpen: boolean) => {
@@ -375,6 +464,7 @@ export function useSalesPage() {
     const added = cart.addProduct(product, options);
 
     if (added) {
+      updateCartContext();
       invalidatePendingWithdrawalAttempt();
     }
 
@@ -499,6 +589,7 @@ export function useSalesPage() {
     if (submittingRef.current) return;
 
     invalidatePendingWithdrawalAttempt();
+    updateCartContext();
     clearWithdrawalFeedback();
     updateCurrentMemberContext(nextMemberId);
     member.handleMemberChange(nextMemberId);
@@ -509,6 +600,7 @@ export function useSalesPage() {
     if (submittingRef.current) return;
 
     invalidatePendingWithdrawalAttempt();
+    updateCartContext();
     clearWithdrawalFeedback();
     updateCurrentMemberContext("");
     member.handleClearMember();
@@ -592,6 +684,7 @@ export function useSalesPage() {
     if (submittingRef.current) return;
 
     invalidatePendingWithdrawalAttempt();
+    updateCartContext();
     clearWithdrawalFeedback();
     cart.removeProduct(productId);
   }
@@ -600,6 +693,7 @@ export function useSalesPage() {
     if (submittingRef.current) return;
 
     invalidatePendingWithdrawalAttempt();
+    updateCartContext();
     clearWithdrawalFeedback();
     cart.updateAmount(productId, value);
   }
@@ -608,6 +702,7 @@ export function useSalesPage() {
     if (submittingRef.current) return;
 
     invalidatePendingWithdrawalAttempt();
+    updateCartContext();
     clearWithdrawalFeedback();
     cart.updateInputMode(productId, inputMode);
   }
@@ -616,6 +711,7 @@ export function useSalesPage() {
     if (submittingRef.current) return;
 
     invalidatePendingWithdrawalAttempt();
+    updateCartContext();
     clearWithdrawalFeedback();
     cart.updateQty(productId, value);
   }
@@ -713,6 +809,7 @@ export function useSalesPage() {
 
     const selectedMemberId = member.memberId.trim();
     const selectedMemberContextVersion = memberContextVersionRef.current;
+    member.syncMemberSearchToSelectedMember();
     const isWithdrawalContextCurrent = () =>
       currentMemberIdRef.current === selectedMemberId &&
       memberContextVersionRef.current === selectedMemberContextVersion;
@@ -770,6 +867,7 @@ export function useSalesPage() {
       return;
     }
 
+    updateCartContext();
     submittingRef.current = true;
     setRegisterMutationPending(true);
 
@@ -1041,38 +1139,88 @@ export function useSalesPage() {
 
   async function processRfidCode(rawCode: string) {
     const code = normalizeRfidCode(rawCode);
-    if (!code || rfidSubmittingRef.current || submittingRef.current) {
+    if (
+      !code ||
+      submittingRef.current ||
+      registerMutationPending ||
+      cancelDialogOpenRef.current
+    ) {
       clearRfidScanBuffer();
       return;
     }
 
+    if (rfidSubmittingRef.current && rfidSubmittingCodeRef.current === code) {
+      clearRfidScanBuffer();
+      return;
+    }
+
+    const requestId = rfidLookupRequestIdRef.current + 1;
+    const memberIdAtRequestStart = currentMemberIdRef.current;
+    const memberContextVersionAtRequestStart = memberContextVersionRef.current;
+    const cartContextVersionAtRequestStart = cartContextVersionRef.current;
+    const isRfidLookupCurrent = () =>
+      rfidLookupRequestIdRef.current === requestId &&
+      currentMemberIdRef.current === memberIdAtRequestStart &&
+      memberContextVersionRef.current === memberContextVersionAtRequestStart &&
+      cartContextVersionRef.current === cartContextVersionAtRequestStart &&
+      !submittingRef.current &&
+      !cancelDialogOpenRef.current;
+
+    rfidLookupRequestIdRef.current = requestId;
     rfidSubmittingRef.current = true;
+    rfidSubmittingCodeRef.current = code;
+    clearRfidScanBuffer();
     clearWithdrawalFeedback();
     setRfidError("");
 
     try {
       const res = await fetch(`/api/members/by-rfid/${encodeURIComponent(code)}`);
 
-      if (submittingRef.current) {
-        clearRfidScanBuffer();
+      if (!isRfidLookupCurrent()) {
+        return;
+      }
+
+      const rfidJson = await readRfidJson(res);
+
+      if (!isRfidLookupCurrent()) {
         return;
       }
 
       if (!res.ok) {
-        setRfidError("Chapita no asignada");
+        if (!isRfidLookupCurrent()) {
+          return;
+        }
+
+        setRfidError(
+          res.status === 404
+            ? RFID_UNASSIGNED_ERROR_MESSAGE
+            : getRfidHttpErrorMessage(
+                res.status,
+                rfidJson.ok ? rfidJson.data : null
+              )
+        );
         setRfidInput("");
         focusRfidInput();
         return;
       }
 
-      const selectedMember = (await res.json()) as MemberSummary;
+      if (!rfidJson.ok || !isRfidMemberLookupResponse(rfidJson.data)) {
+        if (!isRfidLookupCurrent()) {
+          return;
+        }
 
-      if (submittingRef.current) {
-        clearRfidScanBuffer();
+        setRfidError(RFID_INVALID_RESPONSE_ERROR_MESSAGE);
+        setRfidInput("");
+        focusRfidInput();
         return;
       }
 
+      const selectedMember = rfidJson.data;
       const nextMemberId = String(selectedMember.id);
+
+      if (!isRfidLookupCurrent()) {
+        return;
+      }
 
       invalidatePendingWithdrawalAttempt();
       updateCurrentMemberContext(nextMemberId);
@@ -1082,8 +1230,19 @@ export function useSalesPage() {
       setRfidInput("");
 
       focusProductSearchInput();
+    } catch {
+      if (!isRfidLookupCurrent()) {
+        return;
+      }
+
+      setRfidError(RFID_NETWORK_ERROR_MESSAGE);
+      setRfidInput("");
+      focusRfidInput();
     } finally {
-      rfidSubmittingRef.current = false;
+      if (rfidLookupRequestIdRef.current === requestId) {
+        rfidSubmittingRef.current = false;
+        rfidSubmittingCodeRef.current = "";
+      }
     }
   }
 
@@ -1223,6 +1382,7 @@ export function useSalesPage() {
     memberSearch: member.memberSearch,
     memberStatus: member.memberStatus,
     memberStatusLoading: member.memberStatusLoading,
+    selectedMember: member.selectedMember,
     productCategories: productFilters.productCategories,
     productSearchRef,
     recentSales,
@@ -1256,6 +1416,7 @@ export function useSalesPage() {
     removeProduct: handleRemoveProduct,
     setCartValueInputRef: cart.setCartValueInputRef,
     setMemberSearch: handleMemberSearchChange,
+    syncMemberSearchToSelectedMember: member.syncMemberSearchToSelectedMember,
     setRfidInput: handleRfidInputChange,
     setSearch: handleSearchChange,
     setCancelDialogOpen,

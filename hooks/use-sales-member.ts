@@ -44,6 +44,24 @@ export function useSalesMember({
   const memberStatusRequestIdRef = useRef(0);
   const memberRecentSalesRequestIdRef = useRef(0);
 
+  const getMemberForId = useCallback((selectedMemberId: string) => {
+    const normalizedMemberId = selectedMemberId.trim();
+    const statusMember = memberStatus?.member ?? null;
+
+    if (!normalizedMemberId) return null;
+
+    return (
+      members.find((member) => String(member.id) === normalizedMemberId) ??
+      (statusMember && String(statusMember.id) === normalizedMemberId
+        ? statusMember
+        : null)
+    );
+  }, [memberStatus, members]);
+
+  function getMemberSearchText(selectedMemberId: string) {
+    return getMemberForId(selectedMemberId)?.fullName ?? "";
+  }
+
   const loadMemberOperationalData = useCallback(
     async (
       selectedMemberId: string,
@@ -191,6 +209,11 @@ export function useSalesMember({
 
   const visibleToday = memberId ? today : emptySalesToday;
 
+  const selectedMember = useMemo(
+    () => getMemberForId(memberId),
+    [getMemberForId, memberId]
+  );
+
   const filteredMembers = useMemo(() => {
     const q = memberSearch.trim().toLowerCase();
 
@@ -240,6 +263,7 @@ export function useSalesMember({
 
   function handleMemberChange(nextMemberId: string) {
     setSelectedMemberId(nextMemberId);
+    setMemberSearch(getMemberSearchText(nextMemberId));
   }
 
   function handleClearMember() {
@@ -257,6 +281,12 @@ export function useSalesMember({
     rfidRef.current?.focus();
   }
 
+  function syncMemberSearchToSelectedMember() {
+    if (!memberId.trim()) return;
+
+    setMemberSearch(getMemberSearchText(memberId));
+  }
+
   function setTodayForMember(selectedMemberId: string, nextToday: TodayTotals) {
     if (selectedMemberId.trim() !== currentMemberIdRef.current) return;
 
@@ -272,6 +302,7 @@ export function useSalesMember({
     memberSearch,
     memberStatus,
     memberStatusLoading,
+    selectedMember,
     today,
     visibleToday,
     handleClearMember,
@@ -280,6 +311,7 @@ export function useSalesMember({
     loadMemberRecentSales,
     setMemberId: setSelectedMemberId,
     setMemberSearch,
+    syncMemberSearchToSelectedMember,
     setTodayForMember,
   };
 }
