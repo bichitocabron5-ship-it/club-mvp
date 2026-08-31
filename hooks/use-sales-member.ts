@@ -282,9 +282,11 @@ export function useSalesMember({
   }
 
   function syncMemberSearchToSelectedMember() {
-    if (!memberId.trim()) return;
+    const selectedMemberId = currentMemberIdRef.current;
 
-    setMemberSearch(getMemberSearchText(memberId));
+    if (!selectedMemberId) return;
+
+    setMemberSearch(getMemberSearchText(selectedMemberId));
   }
 
   function setTodayForMember(selectedMemberId: string, nextToday: TodayTotals) {
