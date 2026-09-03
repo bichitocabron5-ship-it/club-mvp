@@ -73,6 +73,7 @@ model AppUser {
   reopenedDayClosures       DayClosure[]         @relation("DayClosureReopenedByUser")
   createdCashMoves          CashMove[]           @relation("CashMoveCreatedByUser")
   cancelledExpenses         Expense[]            @relation("ExpenseCancelledByUser")
+  cancelledPurchases        Purchase[]           @relation("PurchaseCancelledByUser")
   createdOperationalTasks   OperationalTask[]    @relation("OperationalTaskCreatedByUser")
   completedOperationalTasks OperationalTask[]    @relation("OperationalTaskCompletedByUser")
   dashboardPreference       DashboardPreference?
@@ -248,11 +249,14 @@ model CashMove {
   sourceId        String?
   paymentMethod   String   @default("CASH") // CASH | CARD | TRANSFER | OTHER
   createdByUserId Int?
+  expenseId       Int?     @unique
   day             String?
   createdAt       DateTime @default(now())
 
   createdByUser AppUser? @relation("CashMoveCreatedByUser", fields: [createdByUserId], references: [id])
+  expense       Expense? @relation("ExpenseCashMove", fields: [expenseId], references: [id], onDelete: SetNull)
 
+  @@index([source, sourceId])
   @@index([day, createdAt])
   @@index([createdAt])
 }
@@ -304,8 +308,13 @@ model Expense {
   cancelledAt       DateTime?
   cancelledByUserId Int?
   cancelReason      String?
+  source            String    @default("MANUAL")
+  sourceId          String?
 
   cancelledByUser AppUser? @relation("ExpenseCancelledByUser", fields: [cancelledByUserId], references: [id])
+  cashMove        CashMove? @relation("ExpenseCashMove")
+
+  @@index([source, sourceId])
 }
 
 model OperationalTask {
@@ -403,16 +412,23 @@ model Purchase {
   supplierId Int
   supplier   Supplier @relation(fields: [supplierId], references: [id])
 
-  totalAmount Float
-  paidAmount  Float    @default(0)
-  status      String   @default("PENDING") // PENDING | PARTIAL | PAID
-  note        String?
-  createdAt   DateTime @default(now())
+  totalAmount       Float
+  paidAmount        Float     @default(0)
+  status            String    @default("PENDING") // PENDING | PARTIAL | PAID | CANCELLED
+  note              String?
+  createdAt         DateTime  @default(now())
+  cancelledAt       DateTime?
+  cancelledByUserId Int?
+  cancelReason      String?
+  updatedAt         DateTime  @updatedAt
 
-  items PurchaseItem[]
+  cancelledByUser AppUser?       @relation("PurchaseCancelledByUser", fields: [cancelledByUserId], references: [id])
+  items           PurchaseItem[]
 
   @@index([supplierId, createdAt])
   @@index([createdAt])
+  @@index([cancelledAt])
+  @@index([status, createdAt])
 }
 
 model PurchaseItem {
@@ -423,9 +439,15 @@ model PurchaseItem {
   productId Int
   product   Product @relation(fields: [productId], references: [id])
 
-  qty          Float
-  availableQty Float @default(0)
-  reserveQty   Float @default(0)
-  unitCost     Float
-  lineTotal    Float
+  qty                Float
+  availableQty       Float  @default(0)
+  reserveQty         Float  @default(0)
+  stockBefore        Float?
+  stockAfter         Float?
+  reserveStockBefore Float?
+  reserveStockAfter  Float?
+  averageCostBefore  Float?
+  averageCostAfter   Float?
+  unitCost           Float
+  lineTotal          Float
 }
