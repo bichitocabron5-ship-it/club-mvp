@@ -1,10 +1,14 @@
 // app/api/purchases/route.ts
+import { Prisma } from "@prisma/client";
 import { requireAdmin } from "@/lib/auth-server";
 import { createAuditLog } from "@/lib/audit";
 import { formatLocalDay } from "@/lib/cash-move";
 import { prisma } from "@/lib/prisma";
+import { roundCurrency } from "@/lib/sales";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+
+const MONEY_TOLERANCE = 0.000001;
 
 const purchaseSchema = z.object({
   supplierId: z.number().int().positive(),
@@ -58,15 +62,51 @@ export async function POST(req: Request) {
   }
 
   const { supplierId, items, note } = parsed.data;
-  const paidAmount = parsed.data.paidAmount ?? 0;
+  const paidAmount = roundCurrency(parsed.data.paidAmount ?? 0);
+  const seenProductIds = new Set<number>();
+  const hasDuplicateProduct = items.some((item) => {
+    if (seenProductIds.has(item.productId)) {
+      return true;
+    }
 
-  const totalAmount = items.reduce(
-    (acc, item) => acc + item.qty * item.unitCost,
-    0
+    seenProductIds.add(item.productId);
+    return false;
+  });
+
+  if (hasDuplicateProduct) {
+    return NextResponse.json(
+      { error: "No se puede repetir el mismo producto en una compra." },
+      { status: 400 }
+    );
+  }
+
+  const totalAmount = roundCurrency(
+    items.reduce((acc, item) => acc + item.qty * item.unitCost, 0)
   );
 
+  if (!Number.isFinite(paidAmount) || paidAmount < 0) {
+    return NextResponse.json(
+      { error: "El importe pagado no puede ser negativo." },
+      { status: 400 }
+    );
+  }
+
+  if (
+    !Number.isFinite(totalAmount) ||
+    paidAmount - totalAmount > MONEY_TOLERANCE
+  ) {
+    return NextResponse.json(
+      { error: "El importe pagado no puede superar el total de la compra." },
+      { status: 400 }
+    );
+  }
+
   const status =
-    paidAmount <= 0 ? "PENDING" : paidAmount >= totalAmount ? "PAID" : "PARTIAL";
+    paidAmount <= 0
+      ? "PENDING"
+      : totalAmount - paidAmount <= MONEY_TOLERANCE
+        ? "PAID"
+        : "PARTIAL";
   const actorUserId = Number(auth.session.user.id);
 
   try {
@@ -127,6 +167,12 @@ export async function POST(req: Request) {
             qty: item.qty,
             availableQty,
             reserveQty,
+            stockBefore: previousStock,
+            stockAfter: newStock,
+            reserveStockBefore: previousReserveStock,
+            reserveStockAfter: newReserveStock,
+            averageCostBefore: previousAverageCost,
+            averageCostAfter: newAverageCost,
             unitCost: item.unitCost,
             lineTotal,
           },
@@ -172,6 +218,8 @@ export async function POST(req: Request) {
             newStock,
             previousReserveStock,
             newReserveStock,
+            previousAverageCost,
+            newAverageCost,
           },
         });
       }
@@ -183,10 +231,12 @@ export async function POST(req: Request) {
             description: `Pago compra proveedor ${supplier.name}`,
             amount: paidAmount,
             paidMethod: "CASH",
+            source: "PURCHASE_PAYMENT",
+            sourceId: String(purchase.id),
           },
         });
 
-        await tx.cashMove.create({
+        const purchaseCashMove = await tx.cashMove.create({
           data: {
             type: "expense",
             amount: paidAmount,
@@ -195,6 +245,7 @@ export async function POST(req: Request) {
             sourceId: String(purchase.id),
             paymentMethod: "CASH",
             createdByUserId: Number.isInteger(actorUserId) ? actorUserId : null,
+            expenseId: purchaseExpense.id,
             day: formatLocalDay(),
           },
         });
@@ -210,13 +261,14 @@ export async function POST(req: Request) {
           metadata: {
             purchaseId: purchase.id,
             expenseId: purchaseExpense.id,
+            cashMoveId: purchaseCashMove.id,
             amount: paidAmount,
             paymentMethod: "CASH",
           },
         });
       }
 
-      return tx.purchase.findUnique({
+      const createdPurchase = await tx.purchase.findUnique({
         where: { id: purchase.id },
         include: {
           supplier: true,
@@ -227,31 +279,39 @@ export async function POST(req: Request) {
           },
         },
       });
-    });
 
-    if (result) {
-      await createAuditLog({
-        actorUserId,
-        actorEmail: auth.session.user.email,
-        action: "PURCHASE_CREATED",
-        entityType: "Purchase",
-        entityId: result.id,
-        summary: `Compra creada para proveedor ${result.supplier.name}`,
-        metadata: {
-          purchaseId: result.id,
-          supplierId,
-          totalAmount,
-          paidAmount,
-          items: result.items.map((item) => ({
-            productId: item.productId,
-            qty: Number(item.qty),
-            availableQty: Number(item.availableQty),
-            reserveQty: Number(item.reserveQty),
-            unitCost: Number(item.unitCost),
-          })),
+      if (!createdPurchase) {
+        throw new Error("Compra no encontrada");
+      }
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: Number.isInteger(actorUserId) ? actorUserId : null,
+          actorEmail: auth.session.user.email?.trim().toLowerCase() || null,
+          action: "PURCHASE_CREATED",
+          entityType: "Purchase",
+          entityId: String(purchase.id),
+          summary: `Compra creada para proveedor ${supplier.name}`,
+          metadata: {
+            purchaseId: purchase.id,
+            supplierId,
+            totalAmount,
+            paidAmount,
+            items: createdPurchase.items.map((item) => ({
+              productId: item.productId,
+              qty: Number(item.qty),
+              availableQty: Number(item.availableQty),
+              reserveQty: Number(item.reserveQty),
+              unitCost: Number(item.unitCost),
+            })),
+          } as Prisma.InputJsonValue,
         },
       });
-    }
+
+      return createdPurchase;
+    }, {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    });
 
     return NextResponse.json(result);
   } catch (err) {

@@ -31,6 +31,9 @@ type Purchase = {
   status: string;
   note: string | null;
   createdAt: string;
+  cancelledAt: string | null;
+  cancelledByUserId: number | null;
+  cancelReason: string | null;
   supplier: {
     name: string;
   };
@@ -71,6 +74,11 @@ export default function PurchasesPage() {
 
   const [items, setItems] = useState<PurchaseItemForm[]>([{ ...initialItem }]);
   const [paymentAmounts, setPaymentAmounts] = useState<Record<number, string>>({});
+  const [cancelDialogPurchase, setCancelDialogPurchase] =
+    useState<Purchase | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelError, setCancelError] = useState("");
+  const [cancelSubmitting, setCancelSubmitting] = useState(false);
 
   async function loadData() {
     const [suppliersRes, productsRes, purchasesRes] = await Promise.all([
@@ -184,6 +192,7 @@ export default function PurchasesPage() {
   }
 
   function statusLabel(status: string) {
+    if (status === "CANCELLED") return "Anulada";
     if (status === "PAID") return "Pagada";
     if (status === "PARTIAL") return "Parcial";
     if (status === "PENDING") return "Pendiente";
@@ -191,6 +200,10 @@ export default function PurchasesPage() {
   }
 
   function statusClass(status: string) {
+    if (status === "CANCELLED") {
+      return "border border-neutral-300 bg-neutral-100 text-neutral-700";
+    }
+
     if (status === "PAID") {
       return "border border-emerald-200 bg-emerald-50 text-emerald-700";
     }
@@ -204,6 +217,72 @@ export default function PurchasesPage() {
     }
 
     return "border border-black/10 bg-black/5 text-[#6d6860]";
+  }
+
+  function isPurchaseCancelled(purchase: Purchase) {
+    return Boolean(purchase.cancelledAt) || purchase.status === "CANCELLED";
+  }
+
+  function openCancelDialog(purchase: Purchase) {
+    setCancelDialogPurchase(purchase);
+    setCancelReason("");
+    setCancelError("");
+    setError("");
+    setSuccess("");
+  }
+
+  function closeCancelDialog() {
+    if (cancelSubmitting) return;
+
+    setCancelDialogPurchase(null);
+    setCancelReason("");
+    setCancelError("");
+  }
+
+  async function cancelPurchase() {
+    if (!cancelDialogPurchase) return;
+
+    const reason = cancelReason.trim();
+
+    if (reason.length < 5) {
+      setCancelError("El motivo es obligatorio y debe tener al menos 5 caracteres.");
+      return;
+    }
+
+    setCancelSubmitting(true);
+    setCancelError("");
+    setError("");
+    setSuccess("");
+
+    try {
+      const res = await fetch(`/api/purchases/${cancelDialogPurchase.id}/cancel`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          reason,
+        }),
+      });
+
+      if (!res.ok) {
+        const err: { error?: string } = await res.json().catch(() => ({}));
+        throw new Error(err.error || "No se ha podido anular la compra.");
+      }
+
+      setCancelDialogPurchase(null);
+      setCancelReason("");
+      await loadData();
+      setSuccess("Compra anulada correctamente.");
+    } catch (cancelErrorValue) {
+      setCancelError(
+        cancelErrorValue instanceof Error
+          ? cancelErrorValue.message
+          : "No se ha podido anular la compra."
+      );
+    } finally {
+      setCancelSubmitting(false);
+    }
   }
 
   async function payPurchase(purchaseId: number) {
@@ -713,11 +792,16 @@ export default function PurchasesPage() {
                   const total = Number(purchase.totalAmount);
                   const paid = Number(purchase.paidAmount);
                   const pending = Math.max(0, total - paid);
+                  const cancelled = isPurchaseCancelled(purchase);
 
                   return (
                     <article
                       key={purchase.id}
-                      className="overflow-hidden rounded-[1.75rem] border border-black/8 bg-white/88"
+                      className={`overflow-hidden rounded-[1.75rem] border ${
+                        cancelled
+                          ? "border-neutral-200 bg-neutral-50/85"
+                          : "border-black/8 bg-white/88"
+                      }`}
                     >
                       <div className="border-b border-black/7 p-4 sm:p-5">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -727,9 +811,17 @@ export default function PurchasesPage() {
                             </span>
 
                             <div className="min-w-0">
-                              <h3 className="break-words text-lg font-black text-[#201f1d]">
-                                {purchase.supplier.name}
-                              </h3>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h3 className="break-words text-lg font-black text-[#201f1d]">
+                                  {purchase.supplier.name}
+                                </h3>
+
+                                {cancelled ? (
+                                  <span className="rounded-full border border-neutral-300 bg-white px-3 py-1 text-xs font-black text-neutral-700">
+                                    ANULADA
+                                  </span>
+                                ) : null}
+                              </div>
 
                               <div className="mt-1 text-sm app-muted">
                                 {new Date(purchase.createdAt).toLocaleString("es-ES")}
@@ -740,20 +832,73 @@ export default function PurchasesPage() {
                                   {purchase.note}
                                 </div>
                               ) : null}
+
+                              {cancelled ? (
+                                <div className="mt-2 rounded-[1.25rem] border border-neutral-200 bg-white/80 px-4 py-3 text-sm leading-6 text-neutral-700">
+                                  <div className="text-[0.65rem] font-black uppercase tracking-[0.1em] text-neutral-500">
+                                    Registro anulado
+                                  </div>
+
+                                  <div className="mt-1 font-semibold">
+                                    {purchase.cancelReason || "Sin motivo registrado"}
+                                  </div>
+
+                                  {purchase.cancelledAt ? (
+                                    <div className="mt-1 text-xs text-neutral-500">
+                                      {new Date(purchase.cancelledAt).toLocaleString("es-ES")}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              ) : null}
                             </div>
                           </div>
 
-                          <span
-                            className={`w-fit rounded-full px-3 py-1 text-xs font-bold ${statusClass(
-                              purchase.status,
-                            )}`}
-                          >
-                            {statusLabel(purchase.status)}
-                          </span>
+                          <div className="flex shrink-0 flex-wrap items-center gap-2">
+                            <span
+                              className={`w-fit rounded-full px-3 py-1 text-xs font-bold ${statusClass(
+                                cancelled ? "CANCELLED" : purchase.status,
+                              )}`}
+                            >
+                              {statusLabel(cancelled ? "CANCELLED" : purchase.status)}
+                            </span>
+
+                            {!cancelled ? (
+                              <button
+                                type="button"
+                                onClick={() => openCancelDialog(purchase)}
+                                className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-bold text-red-700 hover:bg-red-100"
+                              >
+                                Anular compra
+                              </button>
+                            ) : null}
+                          </div>
                         </div>
                       </div>
 
                       <div className="space-y-4 p-4 sm:p-5">
+                        {cancelled ? (
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="rounded-2xl border border-neutral-200 bg-white/75 p-4">
+                              <div className="text-[0.68rem] font-black uppercase tracking-[0.1em] text-neutral-500">
+                                Total original
+                              </div>
+
+                              <div className="mt-1 text-xl font-black text-neutral-800">
+                                {total.toFixed(2)} €
+                              </div>
+                            </div>
+
+                            <div className="rounded-2xl border border-neutral-200 bg-white/75 p-4">
+                              <div className="text-[0.68rem] font-black uppercase tracking-[0.1em] text-neutral-500">
+                                Pagos antes de anular
+                              </div>
+
+                              <div className="mt-1 text-xl font-black text-neutral-800">
+                                {paid.toFixed(2)} €
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
                         <div className="grid gap-3 sm:grid-cols-3">
                           <div className="rounded-2xl bg-[#f7f4ee] p-4">
                             <div className="text-[0.68rem] font-black uppercase tracking-[0.1em] app-muted">
@@ -788,17 +933,16 @@ export default function PurchasesPage() {
 
                             <div
                               className={`mt-1 text-xl font-black ${
-                                pending > 0
-                                  ? "text-red-700"
-                                  : "text-emerald-700"
+                                pending > 0 ? "text-red-700" : "text-emerald-700"
                               }`}
                             >
                               {pending.toFixed(2)} €
                             </div>
                           </div>
                         </div>
+                        )}
 
-                        {purchase.status !== "PAID" ? (
+                        {!cancelled && purchase.status !== "PAID" ? (
                           <div className="overflow-hidden rounded-[1.5rem] border border-amber-200 bg-amber-50/70">
                             <div className="border-b border-amber-200 px-4 py-3">
                               <div className="font-black text-amber-950">
@@ -924,6 +1068,103 @@ export default function PurchasesPage() {
           </div>
         </section>
       </div>
+
+      {cancelDialogPurchase ? (
+        <div
+          role="presentation"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cancel-purchase-title"
+            className="w-full max-w-lg overflow-hidden rounded-[1.75rem] border border-red-200 bg-white shadow-[0_24px_80px_rgba(0,0,0,0.22)]"
+          >
+            <div className="border-b border-red-100 bg-red-50 px-5 py-5">
+              <div className="mb-2 flex items-center gap-2">
+                <span className="h-[2px] w-6 rounded-full bg-red-600" />
+
+                <span className="text-[0.65rem] font-black uppercase tracking-[0.2em] text-red-700">
+                  Anulacion segura
+                </span>
+              </div>
+
+              <h2
+                id="cancel-purchase-title"
+                className="text-xl font-black text-red-950"
+              >
+                Anular compra #{cancelDialogPurchase.id}
+              </h2>
+
+              <p className="mt-2 text-sm leading-6 text-red-900">
+                La anulacion revertira stock y pagos cuando sea seguro. No se
+                eliminara el registro.
+              </p>
+            </div>
+
+            <div className="space-y-4 p-5">
+              <div className="rounded-[1.25rem] border border-black/8 bg-[#f7f4ee]/70 p-4">
+                <div className="text-[0.65rem] font-black uppercase tracking-[0.1em] app-muted">
+                  Compra
+                </div>
+
+                <div className="mt-1 font-black text-[#201f1d]">
+                  {cancelDialogPurchase.supplier.name}
+                </div>
+
+                <div className="mt-1 text-sm app-muted">
+                  Total {Number(cancelDialogPurchase.totalAmount).toFixed(2)} EUR
+                  · pagado {Number(cancelDialogPurchase.paidAmount).toFixed(2)} EUR
+                </div>
+              </div>
+
+              {cancelError ? (
+                <div
+                  role="alert"
+                  className="rounded-[1.25rem] border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700"
+                >
+                  {cancelError}
+                </div>
+              ) : null}
+
+              <label className="block text-sm font-bold text-[#201f1d]">
+                Motivo
+
+                <textarea
+                  className="mt-2 min-h-28 w-full rounded-xl border border-black/10 bg-white px-4 py-3 outline-none placeholder:text-black/35 focus:border-red-400 focus:ring-4 focus:ring-red-100"
+                  placeholder="Motivo obligatorio"
+                  value={cancelReason}
+                  onChange={(event) => {
+                    setCancelReason(event.target.value);
+                    setCancelError("");
+                  }}
+                  disabled={cancelSubmitting}
+                />
+              </label>
+
+              <div className="flex flex-col-reverse gap-3 border-t border-black/7 pt-4 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={closeCancelDialog}
+                  disabled={cancelSubmitting}
+                  className="app-button-secondary inline-flex items-center justify-center rounded-xl px-4 py-3 font-bold disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Mantener compra
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => void cancelPurchase()}
+                  disabled={cancelSubmitting}
+                  className="inline-flex items-center justify-center rounded-xl bg-red-700 px-4 py-3 font-bold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {cancelSubmitting ? "Anulando..." : "Anular compra"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

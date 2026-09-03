@@ -32,6 +32,8 @@ type ExpenseLabelInput = {
 type ExpensePurchaseInput = {
   category: string;
   description: string;
+  source?: string | null;
+  sourceId?: string | null;
 };
 
 type CashMoveDayInput = {
@@ -65,6 +67,13 @@ export async function assertExpenseDayIsOpen(
 }
 
 export function isPurchaseManagedExpense(expense: ExpensePurchaseInput) {
+  if (
+    expense.source?.trim().toUpperCase() === "PURCHASE_PAYMENT" &&
+    expense.sourceId?.trim()
+  ) {
+    return true;
+  }
+
   const category = expense.category.trim().toUpperCase();
   const description = expense.description.trim().toLowerCase();
 

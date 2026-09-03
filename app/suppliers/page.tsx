@@ -14,31 +14,75 @@ type Supplier = {
   createdAt: string;
 };
 
+type SupplierForm = {
+  name: string;
+  phone: string;
+  email: string;
+  notes: string;
+};
+
+const emptySupplierForm: SupplierForm = {
+  name: "",
+  phone: "",
+  email: "",
+  notes: "",
+};
+
+function toSupplierForm(supplier: Supplier): SupplierForm {
+  return {
+    name: supplier.name,
+    phone: supplier.phone ?? "",
+    email: supplier.email ?? "",
+    notes: supplier.notes ?? "",
+  };
+}
+
+async function readApiError(res: Response, fallback: string) {
+  const data = (await res.json().catch(() => null)) as { error?: string } | null;
+  return data?.error || fallback;
+}
+
 export default function SuppliersPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
 
-  const [form, setForm] = useState({
-    name: "",
-    phone: "",
-    email: "",
-    notes: "",
-  });
+  const [form, setForm] = useState<SupplierForm>(emptySupplierForm);
+  const [editForm, setEditForm] =
+    useState<SupplierForm>(emptySupplierForm);
 
   async function loadSuppliers() {
     const res = await fetch("/api/suppliers");
+
+    if (!res.ok) {
+      throw new Error(await readApiError(res, "Error cargando proveedores"));
+    }
+
     const data: Supplier[] = await res.json();
     setSuppliers(data);
   }
 
   useEffect(() => {
+    let cancelled = false;
     const timeout = setTimeout(() => {
-      void loadSuppliers();
+      void loadSuppliers().catch((loadError) => {
+        if (!cancelled) {
+          setError(
+            loadError instanceof Error
+              ? loadError.message
+              : "Error cargando proveedores"
+          );
+        }
+      });
     }, 0);
 
-    return () => clearTimeout(timeout);
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -46,7 +90,7 @@ export default function SuppliersPage() {
 
     setError("");
     setSuccess("");
-    setSaving(true);
+    setSavingKey("create");
 
     try {
       const res = await fetch("/api/suppliers", {
@@ -58,21 +102,155 @@ export default function SuppliersPage() {
       });
 
       if (!res.ok) {
-        setError("No se ha podido crear el proveedor.");
-        return;
+        throw new Error(
+          await readApiError(res, "No se ha podido crear el proveedor.")
+        );
       }
 
-      setForm({
-        name: "",
-        phone: "",
-        email: "",
-        notes: "",
-      });
-
+      setForm(emptySupplierForm);
       await loadSuppliers();
       setSuccess("Proveedor creado correctamente.");
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : "No se ha podido crear el proveedor."
+      );
     } finally {
-      setSaving(false);
+      setSavingKey(null);
+    }
+  }
+
+  function startEditing(supplier: Supplier) {
+    setEditingId(supplier.id);
+    setDeleteConfirmId(null);
+    setEditForm(toSupplierForm(supplier));
+    setError("");
+    setSuccess("");
+  }
+
+  function cancelEditing() {
+    setEditingId(null);
+    setEditForm(emptySupplierForm);
+  }
+
+  async function handleEditSubmit(e: React.FormEvent, supplier: Supplier) {
+    e.preventDefault();
+
+    setError("");
+    setSuccess("");
+    setSavingKey(`edit-${supplier.id}`);
+
+    try {
+      const res = await fetch(`/api/suppliers/${supplier.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: editForm.name,
+          phone: editForm.phone.trim() || null,
+          email: editForm.email.trim() || null,
+          notes: editForm.notes.trim() || null,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(
+          await readApiError(res, "Error actualizando proveedor")
+        );
+      }
+
+      setEditingId(null);
+      setEditForm(emptySupplierForm);
+      await loadSuppliers();
+      setSuccess("Proveedor actualizado correctamente.");
+    } catch (editError) {
+      setError(
+        editError instanceof Error
+          ? editError.message
+          : "Error actualizando proveedor"
+      );
+    } finally {
+      setSavingKey(null);
+    }
+  }
+
+  async function toggleSupplierStatus(supplier: Supplier) {
+    const nextActive = !supplier.active;
+
+    setError("");
+    setSuccess("");
+    setSavingKey(`status-${supplier.id}`);
+
+    try {
+      const res = await fetch(`/api/suppliers/${supplier.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          active: nextActive,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(
+          await readApiError(res, "Error actualizando estado del proveedor")
+        );
+      }
+
+      await loadSuppliers();
+      setSuccess(
+        nextActive ? "Proveedor activado." : "Proveedor desactivado."
+      );
+    } catch (statusError) {
+      setError(
+        statusError instanceof Error
+          ? statusError.message
+          : "Error actualizando estado del proveedor"
+      );
+    } finally {
+      setSavingKey(null);
+    }
+  }
+
+  function requestDelete(supplier: Supplier) {
+    setDeleteConfirmId(supplier.id);
+    setEditingId(null);
+    setError("");
+    setSuccess("");
+  }
+
+  function cancelDelete() {
+    setDeleteConfirmId(null);
+  }
+
+  async function deleteSupplier(supplier: Supplier) {
+    setError("");
+    setSuccess("");
+    setSavingKey(`delete-${supplier.id}`);
+
+    try {
+      const res = await fetch(`/api/suppliers/${supplier.id}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) {
+        throw new Error(await readApiError(res, "Error eliminando proveedor"));
+      }
+
+      setDeleteConfirmId(null);
+      await loadSuppliers();
+      setSuccess("Proveedor eliminado.");
+    } catch (deleteError) {
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : "Error eliminando proveedor"
+      );
+    } finally {
+      setSavingKey(null);
     }
   }
 
@@ -205,10 +383,10 @@ export default function SuppliersPage() {
           <div className="md:col-span-2">
             <button
               type="submit"
-              disabled={saving}
+              disabled={savingKey !== null}
               className="app-button-primary inline-flex w-full items-center justify-center rounded-xl px-5 py-3.5 font-bold disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
             >
-              {saving ? "Creando proveedor..." : "Crear proveedor"}
+              {savingKey === "create" ? "Creando proveedor..." : "Crear proveedor"}
             </button>
           </div>
         </form>
@@ -254,7 +432,11 @@ export default function SuppliersPage() {
             </div>
           ) : (
             <div className="grid gap-3 lg:grid-cols-2">
-              {suppliers.map((supplier, index) => (
+              {suppliers.map((supplier, index) => {
+                const isEditing = editingId === supplier.id;
+                const isDeleteConfirmOpen = deleteConfirmId === supplier.id;
+
+                return (
                 <article
                   key={supplier.id}
                   className="overflow-hidden rounded-[1.5rem] border border-black/8 bg-white/88 transition-all hover:border-[#b4a78d]/40 hover:shadow-[0_8px_24px_rgba(22,20,18,0.05)]"
@@ -322,9 +504,215 @@ export default function SuppliersPage() {
                         </div>
                       </div>
                     ) : null}
+
+                    {isEditing ? (
+                      <form
+                        onSubmit={(event) =>
+                          void handleEditSubmit(event, supplier)
+                        }
+                        className="mt-4 overflow-hidden rounded-[1.5rem] border border-[#b4a78d]/30 bg-[#f7f4ee]/70"
+                      >
+                        <div className="border-b border-[#b4a78d]/20 px-4 py-4">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <div className="mb-1 flex items-center gap-2">
+                                <span className="h-[2px] w-5 rounded-full bg-[#a7282d]" />
+
+                                <span className="text-[0.62rem] font-black uppercase tracking-[0.18em] text-[#a7282d]">
+                                  Edicion
+                                </span>
+                              </div>
+
+                              <h4 className="font-black text-[#201f1d]">
+                                Modificar proveedor
+                              </h4>
+                            </div>
+
+                            <span className="rounded-full border border-[#b4a78d]/30 bg-white/70 px-3 py-1 text-xs font-bold text-[#645b4c]">
+                              #{supplier.id}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="grid gap-4 p-4 sm:grid-cols-2">
+                          <label className="block text-sm font-bold text-[#201f1d] sm:col-span-2">
+                            Nombre del proveedor
+
+                            <input
+                              className="mt-2 w-full rounded-xl border border-black/10 bg-white px-4 py-3 outline-none placeholder:text-black/35 focus:border-[#a7282d]/40 focus:ring-4 focus:ring-[#a7282d]/8 disabled:opacity-60"
+                              placeholder="Nombre del proveedor"
+                              value={editForm.name}
+                              onChange={(e) =>
+                                setEditForm({
+                                  ...editForm,
+                                  name: e.target.value,
+                                })
+                              }
+                              disabled={savingKey !== null}
+                              required
+                            />
+                          </label>
+
+                          <label className="block text-sm font-bold text-[#201f1d]">
+                            Telefono
+
+                            <input
+                              className="mt-2 w-full rounded-xl border border-black/10 bg-white px-4 py-3 outline-none placeholder:text-black/35 focus:border-[#a7282d]/40 focus:ring-4 focus:ring-[#a7282d]/8 disabled:opacity-60"
+                              placeholder="Telefono"
+                              value={editForm.phone}
+                              onChange={(e) =>
+                                setEditForm({
+                                  ...editForm,
+                                  phone: e.target.value,
+                                })
+                              }
+                              disabled={savingKey !== null}
+                            />
+                          </label>
+
+                          <label className="block text-sm font-bold text-[#201f1d]">
+                            Correo electronico
+
+                            <input
+                              className="mt-2 w-full rounded-xl border border-black/10 bg-white px-4 py-3 outline-none placeholder:text-black/35 focus:border-[#a7282d]/40 focus:ring-4 focus:ring-[#a7282d]/8 disabled:opacity-60"
+                              type="email"
+                              placeholder="correo@proveedor.com"
+                              value={editForm.email}
+                              onChange={(e) =>
+                                setEditForm({
+                                  ...editForm,
+                                  email: e.target.value,
+                                })
+                              }
+                              disabled={savingKey !== null}
+                            />
+                          </label>
+
+                          <label className="block text-sm font-bold text-[#201f1d] sm:col-span-2">
+                            Notas
+
+                            <textarea
+                              className="mt-2 min-h-24 w-full rounded-xl border border-black/10 bg-white px-4 py-3 outline-none placeholder:text-black/35 focus:border-[#a7282d]/40 focus:ring-4 focus:ring-[#a7282d]/8 disabled:opacity-60"
+                              placeholder="Condiciones, persona de contacto, observaciones..."
+                              value={editForm.notes}
+                              onChange={(e) =>
+                                setEditForm({
+                                  ...editForm,
+                                  notes: e.target.value,
+                                })
+                              }
+                              disabled={savingKey !== null}
+                            />
+                          </label>
+                        </div>
+
+                        <div className="flex flex-col-reverse gap-2 border-t border-[#b4a78d]/20 bg-white/50 px-4 py-4 sm:flex-row sm:items-center sm:justify-end">
+                          <button
+                            type="button"
+                            className="app-button-secondary inline-flex w-full items-center justify-center rounded-xl px-4 py-2.5 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                            onClick={cancelEditing}
+                            disabled={savingKey !== null}
+                          >
+                            Cancelar edicion
+                          </button>
+
+                          <button
+                            type="submit"
+                            className="app-button-primary inline-flex w-full items-center justify-center rounded-xl px-5 py-2.5 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                            disabled={savingKey !== null}
+                          >
+                            {savingKey === `edit-${supplier.id}`
+                              ? "Guardando cambios..."
+                              : "Guardar cambios"}
+                          </button>
+                        </div>
+                      </form>
+                    ) : null}
+
+                    {isDeleteConfirmOpen ? (
+                      <div className="mt-4 rounded-[1.25rem] border border-red-200 bg-red-50 px-4 py-3">
+                        <div className="text-sm font-black text-red-800">
+                          Eliminar proveedor
+                        </div>
+
+                        <p className="mt-1 text-sm font-medium text-red-700">
+                          Esta accion solo se completara si no tiene compras registradas.
+                        </p>
+
+                        <div className="mt-3 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
+                          <button
+                            type="button"
+                            className="inline-flex w-full items-center justify-center rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-bold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                            onClick={cancelDelete}
+                            disabled={savingKey !== null}
+                          >
+                            Cancelar
+                          </button>
+
+                          <button
+                            type="button"
+                            className="inline-flex w-full items-center justify-center rounded-xl bg-red-700 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                            onClick={() => void deleteSupplier(supplier)}
+                            disabled={savingKey !== null}
+                          >
+                            {savingKey === `delete-${supplier.id}`
+                              ? "Eliminando..."
+                              : "Confirmar eliminacion"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      <button
+                        type="button"
+                        onClick={() => startEditing(supplier)}
+                        className={`inline-flex w-full items-center justify-center rounded-xl border px-3.5 py-2.5 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                          isEditing
+                            ? "border-[#a7282d]/20 bg-[#a7282d]/8 text-[#861f23]"
+                            : "border-black/10 bg-white text-[#201f1d] hover:border-[#b4a78d]/50 hover:bg-[#f7f4ee]"
+                        }`}
+                        disabled={savingKey !== null}
+                      >
+                        {isEditing ? "Editando" : "Editar"}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => void toggleSupplierStatus(supplier)}
+                        className={`inline-flex w-full items-center justify-center rounded-xl border px-3.5 py-2.5 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                          supplier.active
+                            ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                            : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                        }`}
+                        disabled={savingKey !== null}
+                      >
+                        {savingKey === `status-${supplier.id}`
+                          ? supplier.active
+                            ? "Desactivando..."
+                            : "Activando..."
+                          : supplier.active
+                            ? "Desactivar"
+                            : "Activar"}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => requestDelete(supplier)}
+                        className={`inline-flex w-full items-center justify-center rounded-xl border px-3.5 py-2.5 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                          isDeleteConfirmOpen
+                            ? "border-red-300 bg-red-100 text-red-800"
+                            : "border-red-200 bg-white text-red-700 hover:bg-red-50"
+                        }`}
+                        disabled={savingKey !== null}
+                      >
+                        Eliminar
+                      </button>
+                    </div>
                   </div>
                 </article>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
