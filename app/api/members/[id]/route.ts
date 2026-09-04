@@ -1,6 +1,9 @@
 import { requireStaffOrAdmin } from "@/lib/auth-server";
 import { createAuditLog } from "@/lib/audit";
-import { normalizeMemberIdentity } from "@/lib/member-identity";
+import {
+  MEMBER_IDENTITY_MAX_INPUT_LENGTH,
+  normalizeMemberIdentity,
+} from "@/lib/member-identity";
 import {
   isUniqueConstraintError,
   normalizeMemberNumber,
@@ -31,7 +34,7 @@ const adminOnlyFields = [
 const memberUpdateSchema = z.object({
   memberNumber: z.string().trim().optional().nullable(),
   fullName: z.string().trim().min(1).optional(),
-  dni: z.string().optional(),
+  dni: z.string().max(MEMBER_IDENTITY_MAX_INPUT_LENGTH).optional(),
   phone: z.string().trim().optional().nullable(),
   email: z.string().trim().optional().nullable(),
   expiresAt: z.string().optional().nullable(),

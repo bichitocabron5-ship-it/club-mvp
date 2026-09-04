@@ -7,7 +7,10 @@ IMMUTABLE
 AS $function$
   SELECT translate(
     translate(
-      value,
+      btrim(
+        value,
+        chr(9) || chr(10) || chr(13) || ' ' || chr(160) || chr(8199) || chr(8239)
+      ),
       ' ' || chr(160) || '.-',
       ''
     ),

@@ -1,7 +1,10 @@
 // app/api/members/route.ts
 import { requireAuth, requireStaffOrAdmin } from "@/lib/auth-server";
 import { createAuditLog } from "@/lib/audit";
-import { normalizeMemberIdentity } from "@/lib/member-identity";
+import {
+  MEMBER_IDENTITY_MAX_INPUT_LENGTH,
+  normalizeMemberIdentity,
+} from "@/lib/member-identity";
 import {
   getNextMemberNumber,
   isUniqueConstraintError,
@@ -16,7 +19,7 @@ import { z } from "zod";
 const memberSchema = z.object({
   memberNumber: z.string().trim().optional().nullable().or(z.literal("")),
   fullName: z.string().trim().min(1),
-  dni: z.string(),
+  dni: z.string().max(MEMBER_IDENTITY_MAX_INPUT_LENGTH),
   phone: z.string().trim().optional().or(z.literal("")),
   email: z.string().trim().optional().or(z.literal("")),
   active: z.coerce.boolean().optional(),

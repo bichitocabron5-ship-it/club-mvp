@@ -1,6 +1,9 @@
 import { ensureSignedContractPdf } from "@/lib/contract-pdf";
 import { findActiveContractTemplate } from "@/lib/contract-templates";
-import { normalizeMemberIdentity } from "@/lib/member-identity";
+import {
+  MEMBER_IDENTITY_MAX_INPUT_LENGTH,
+  normalizeMemberIdentity,
+} from "@/lib/member-identity";
 import { isUniqueConstraintError } from "@/lib/member-number";
 import { prisma } from "@/lib/prisma";
 import {
@@ -83,7 +86,7 @@ const signPayloadSchema = z
     form: z
       .object({
         fullName: optionalText(120),
-        dni: z.string().optional(),
+        dni: z.string().max(MEMBER_IDENTITY_MAX_INPUT_LENGTH).optional(),
         address: optionalText(240),
         birthPlace: optionalText(120),
         birthDate: optionalText(10),
