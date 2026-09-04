@@ -9,6 +9,7 @@ const globalForPrisma = globalThis as unknown as {
 
 const adapter = new PrismaPg({
   connectionString: getDatabaseUrl(),
+  connectionTimeoutMillis: 30_000,
   // Supabase session poolers have low per-project connection caps in production.
   // Keep the per-instance pool small to avoid exhausting the shared limit.
   max: 3,
