@@ -36,7 +36,9 @@ cp .env.example .env
 
 Variables obligatorias para ejecución normal:
 
-- `DATABASE_URL`: conexión PostgreSQL para Prisma.
+- `DATABASE_URL`: conexión PostgreSQL para Prisma CLI y runtime. En Supabase
+  Session Pooler (`aws-[REGION].pooler.supabase.com:5432`) debe incluir
+  `sslmode=require` y `connect_timeout=30`.
 - `AUTH_SECRET`: secreto JWT/NextAuth.
 - `NEXTAUTH_URL`: URL base de la aplicación.
 - `SUPABASE_URL`: URL del proyecto Supabase.
@@ -58,6 +60,24 @@ npm run start      # Servidor de producción tras build
 > Nota: `next typegen` es necesario antes de `tsc --noEmit` porque Next 16 genera tipos globales para rutas, páginas, layouts y route handlers.
 
 ## Base de datos
+
+club-mvp mantiene una sola variable de conexión:
+
+- `DATABASE_URL`: usada por Prisma CLI (`prisma.config.ts`) y por runtime
+  (`@prisma/adapter-pg` en `lib/prisma.ts`).
+
+Para Supabase Session Pooler en puerto `5432`, guarda la URL con:
+
+```text
+?schema=public&sslmode=require&connect_timeout=30
+```
+
+El código completa `sslmode=require` y `connect_timeout=30` cuando detecta un
+host `*.pooler.supabase.com`, por lo que una terminal nueva puede ejecutar
+Prisma sin modificar temporalmente `$env:DATABASE_URL`. Las URLs locales como
+`localhost` no se modifican. No se usa `DIRECT_URL` porque Prisma 7 lee la URL
+de migraciones desde `prisma.config.ts`, y la conexión directa de Supabase puede
+depender de IPv6.
 
 Generar Prisma Client:
 

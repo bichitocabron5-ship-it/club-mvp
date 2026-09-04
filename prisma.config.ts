@@ -2,6 +2,7 @@
 // npm install --save-dev prisma dotenv
 import "dotenv/config";
 import { defineConfig, env } from "prisma/config";
+import { withSupabasePoolerConnectionParams } from "./lib/database-url";
 
 export default defineConfig({
   schema: "prisma/schema.prisma",
@@ -9,6 +10,6 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    url: env("DATABASE_URL"), // ← directa
+    url: withSupabasePoolerConnectionParams(env("DATABASE_URL")),
   },
 });
