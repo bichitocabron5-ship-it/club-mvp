@@ -2,6 +2,7 @@
 "use client";
 
 import type { MemberSummary } from "@/lib/types";
+import { normalizeMemberIdentity } from "@/lib/member-identity";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/ui/page-header";
@@ -69,10 +70,13 @@ export default function MembersPage() {
 
   const filteredMembers = members.filter((m) => {
     const query = search.toLowerCase();
+    const identityQuery = normalizeMemberIdentity(search);
 
     const matchesSearch =
       m.fullName.toLowerCase().includes(query) ||
-      m.dni.toLowerCase().includes(query) ||
+      (identityQuery
+        ? normalizeMemberIdentity(m.dni).includes(identityQuery)
+        : false) ||
       String(m.memberNumber ?? "").toLowerCase().includes(query);
 
     const now = new Date();

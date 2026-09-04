@@ -215,7 +215,7 @@ export default function MemberDetail() {
     const payload: Record<string, string | number> = {
       memberNumber: editForm.memberNumber.trim(),
       fullName: editForm.fullName.trim(),
-      dni: editForm.dni.trim(),
+      dni: editForm.dni,
       phone: editForm.phone.trim(),
       email: editForm.email.trim(),
       expiresAt: editForm.expiresAt,

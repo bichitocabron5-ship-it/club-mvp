@@ -1,6 +1,10 @@
 import { requireStaffOrAdmin } from "@/lib/auth-server";
 import { createAuditLog } from "@/lib/audit";
 import {
+  MEMBER_IDENTITY_MAX_INPUT_LENGTH,
+  normalizeMemberIdentity,
+} from "@/lib/member-identity";
+import {
   isUniqueConstraintError,
   normalizeMemberNumber,
   validateMemberNumber,
@@ -30,7 +34,7 @@ const adminOnlyFields = [
 const memberUpdateSchema = z.object({
   memberNumber: z.string().trim().optional().nullable(),
   fullName: z.string().trim().min(1).optional(),
-  dni: z.string().trim().min(1).optional(),
+  dni: z.string().max(MEMBER_IDENTITY_MAX_INPUT_LENGTH).optional(),
   phone: z.string().trim().optional().nullable(),
   email: z.string().trim().optional().nullable(),
   expiresAt: z.string().optional().nullable(),
@@ -80,6 +84,8 @@ export async function PATCH(
   const data = parsed.data;
   const normalizedMemberNumber = normalizeMemberNumber(data.memberNumber);
   const validatedMemberNumber = validateMemberNumber(normalizedMemberNumber);
+  const normalizedDni =
+    data.dni === undefined ? undefined : normalizeMemberIdentity(data.dni);
   const normalizedExpiresAt = normalizeDateOnly(data.expiresAt);
   const normalizedRfidCode =
     data.rfidCode === undefined || data.rfidCode === null
@@ -92,6 +98,13 @@ export async function PATCH(
 
   if (normalizedExpiresAt === "INVALID") {
     return NextResponse.json({ error: "Fecha invalida" }, { status: 400 });
+  }
+
+  if (data.dni !== undefined && !normalizedDni) {
+    return NextResponse.json(
+      { error: "Documento de identidad invalido" },
+      { status: 400 }
+    );
   }
 
   if (data.rfidCode !== undefined && !normalizedRfidCode) {
@@ -173,7 +186,7 @@ export async function PATCH(
             ? validatedMemberNumber.value
             : undefined,
         fullName: data.fullName,
-        dni: data.dni,
+        dni: normalizedDni,
         phone: data.phone === "" ? null : data.phone,
         email: data.email === "" ? null : data.email,
         expiresAt:
@@ -294,6 +307,13 @@ export async function PATCH(
       return NextResponse.json(
         { error: "El numero de socio ya existe." },
         { status: 400 }
+      );
+    }
+
+    if (isUniqueConstraintError(error, "dni")) {
+      return NextResponse.json(
+        { error: "No se pudo actualizar. El DNI ya existe." },
+        { status: 409 }
       );
     }
 

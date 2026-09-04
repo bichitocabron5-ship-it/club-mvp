@@ -2,6 +2,10 @@
 import { requireAuth, requireStaffOrAdmin } from "@/lib/auth-server";
 import { createAuditLog } from "@/lib/audit";
 import {
+  MEMBER_IDENTITY_MAX_INPUT_LENGTH,
+  normalizeMemberIdentity,
+} from "@/lib/member-identity";
+import {
   getNextMemberNumber,
   isUniqueConstraintError,
   normalizeMemberNumber,
@@ -15,7 +19,7 @@ import { z } from "zod";
 const memberSchema = z.object({
   memberNumber: z.string().trim().optional().nullable().or(z.literal("")),
   fullName: z.string().trim().min(1),
-  dni: z.string().trim().min(1),
+  dni: z.string().max(MEMBER_IDENTITY_MAX_INPUT_LENGTH),
   phone: z.string().trim().optional().or(z.literal("")),
   email: z.string().trim().optional().or(z.literal("")),
   active: z.coerce.boolean().optional(),
@@ -75,6 +79,7 @@ export async function POST(req: Request) {
 
   const normalizedMemberNumber = normalizeMemberNumber(parsed.data.memberNumber);
   const validatedMemberNumber = validateMemberNumber(normalizedMemberNumber);
+  const normalizedDni = normalizeMemberIdentity(parsed.data.dni);
   const normalizedRfidCode =
     parsed.data.rfidCode === undefined || parsed.data.rfidCode === null
       ? undefined
@@ -82,6 +87,13 @@ export async function POST(req: Request) {
 
   if (!validatedMemberNumber.ok) {
     return NextResponse.json({ error: validatedMemberNumber.error }, { status: 400 });
+  }
+
+  if (!normalizedDni) {
+    return NextResponse.json(
+      { error: "Documento de identidad invalido" },
+      { status: 400 }
+    );
   }
 
   if (parsed.data.rfidCode !== undefined && !normalizedRfidCode) {
@@ -128,7 +140,7 @@ export async function POST(req: Request) {
   const baseData = {
     memberNumber: validatedMemberNumber.value ?? undefined,
     fullName: parsed.data.fullName,
-    dni: parsed.data.dni,
+    dni: normalizedDni,
     phone: parsed.data.phone || null,
     email: parsed.data.email || null,
     active: isAdmin ? (parsed.data.active ?? true) : true,
@@ -204,7 +216,7 @@ export async function POST(req: Request) {
         if (isUniqueConstraintError(error, "dni")) {
           return NextResponse.json(
             { error: "No se pudo crear. El DNI ya existe." },
-            { status: 400 }
+            { status: 409 }
           );
         }
 
@@ -227,7 +239,7 @@ export async function POST(req: Request) {
     if (isUniqueConstraintError(error, "dni")) {
       return NextResponse.json(
         { error: "No se pudo crear. El DNI ya existe." },
-        { status: 400 }
+        { status: 409 }
       );
     }
 
