@@ -11,6 +11,7 @@ import {
   type MemberRecentSalesResponse,
   type TodayTotals,
 } from "@/lib/helpers/sales-cart";
+import { normalizeMemberIdentity } from "@/lib/member-identity";
 import type { MemberSummary } from "@/lib/types";
 
 type MemberOperationalDataLoadOptions = {
@@ -216,13 +217,16 @@ export function useSalesMember({
 
   const filteredMembers = useMemo(() => {
     const q = memberSearch.trim().toLowerCase();
+    const identityQuery = normalizeMemberIdentity(memberSearch);
 
     if (!q) return members;
 
     return members.filter((member) => {
       return (
         member.fullName.toLowerCase().includes(q) ||
-        String(member.dni || "").toLowerCase().includes(q)
+        (identityQuery
+          ? normalizeMemberIdentity(String(member.dni || "")).includes(identityQuery)
+          : false)
       );
     });
   }, [members, memberSearch]);

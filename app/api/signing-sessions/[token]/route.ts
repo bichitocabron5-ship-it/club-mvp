@@ -1,5 +1,7 @@
 import { ensureSignedContractPdf } from "@/lib/contract-pdf";
 import { findActiveContractTemplate } from "@/lib/contract-templates";
+import { normalizeMemberIdentity } from "@/lib/member-identity";
+import { isUniqueConstraintError } from "@/lib/member-number";
 import { prisma } from "@/lib/prisma";
 import {
   checkRateLimit,
@@ -81,7 +83,7 @@ const signPayloadSchema = z
     form: z
       .object({
         fullName: optionalText(120),
-        dni: optionalText(40),
+        dni: z.string().optional(),
         address: optionalText(240),
         birthPlace: optionalText(120),
         birthDate: optionalText(10),
@@ -364,13 +366,19 @@ export async function POST(
   const hasAddress = hasOwnFormField(form, "address");
   const hasBirthPlace = hasOwnFormField(form, "birthPlace");
   const hasBirthDate = hasOwnFormField(form, "birthDate");
+  const hasDni = hasOwnFormField(form, "dni");
   const hasConsumptionGrams = hasOwnFormField(form, "consumptionGrams");
   const birthDate = hasBirthDate ? parseBirthDate(form.birthDate) : null;
   const consumptionGrams = hasConsumptionGrams
     ? parseConsumptionGrams(form.consumptionGrams)
     : null;
+  const submittedDni = hasDni ? normalizeMemberIdentity(form.dni ?? "") : null;
 
   if (birthDate === "INVALID" || consumptionGrams === "INVALID") {
+    return invalidSigningPayload(400);
+  }
+
+  if (hasDni && !submittedDni) {
     return invalidSigningPayload(400);
   }
 
@@ -380,7 +388,8 @@ export async function POST(
   });
 
   const mergedFullName = trimToNull(form.fullName) || existingSession.member.fullName;
-  const mergedDni = trimToNull(form.dni) || existingSession.member.dni;
+  const mergedDni =
+    submittedDni ?? normalizeMemberIdentity(existingSession.member.dni);
   const mergedPhone = trimToNull(form.phone) || existingSession.member.phone || null;
   const mergedEmail = trimToNull(form.email) || existingSession.member.email || null;
   const mergedAddress = hasAddress
@@ -395,6 +404,10 @@ export async function POST(
   const mergedConsumptionGrams = hasConsumptionGrams
     ? consumptionGrams
     : previousContract?.consumptionGrams ?? null;
+
+  if (!mergedDni) {
+    return invalidSigningPayload(400);
+  }
 
   let session: { contractId: number };
 
@@ -467,6 +480,10 @@ export async function POST(
       error.message === SIGNING_SESSION_NOT_PENDING_ERROR
     ) {
       return publicSigningError(409);
+    }
+
+    if (isUniqueConstraintError(error, "dni")) {
+      return invalidSigningPayload(409);
     }
 
     if (!isSigningSessionContractUniqueError(error)) {
