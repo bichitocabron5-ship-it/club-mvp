@@ -1,12 +1,14 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
+import { getDatabaseUrl } from "@/lib/database-url";
+
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
 const adapter = new PrismaPg({
-  connectionString: process.env.DATABASE_URL!,
+  connectionString: getDatabaseUrl(),
   // Supabase session poolers have low per-project connection caps in production.
   // Keep the per-instance pool small to avoid exhausting the shared limit.
   max: 3,
