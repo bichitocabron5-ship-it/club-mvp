@@ -9,7 +9,14 @@ const globalForPrisma = globalThis as unknown as {
 
 function getRuntimeDatabaseUrl() {
   const connectionString = getDatabaseUrl();
-  const url = new URL(connectionString);
+
+  let url: URL;
+
+  try {
+    url = new URL(connectionString);
+  } catch {
+    return connectionString;
+  }
 
   if (url.hostname.toLowerCase().endsWith(".pooler.supabase.com")) {
     // node-postgres currently treats sslmode=require as verify-full unless
