@@ -277,6 +277,7 @@ function AccessMemberCard({ scan }: { scan: LastAccessScan }) {
 export default function AccessPage() {
   const [rfidInput, setRfidInput] = useState("");
   const [error, setError] = useState("");
+  const [refreshWarning, setRefreshWarning] = useState("");
   const [lastScan, setLastScan] = useState<LastAccessScan | null>(null);
   const [screenStatus, setScreenStatus] = useState<ScreenStatus>("IDLE");
   const [processing, setProcessing] = useState(false);
@@ -296,10 +297,12 @@ export default function AccessPage() {
 
   async function loadCurrent() {
     const res = await fetch("/api/access/current", { cache: "no-store" });
-    if (!res.ok) return;
+    if (!res.ok) return false;
 
     const data: AccessCurrentResponse = await res.json();
     setCurrent(data);
+    setRefreshWarning("");
+    return true;
   }
 
   useEffect(() => {
@@ -327,6 +330,7 @@ export default function AccessPage() {
     let scannedMember: AccessMemberSnapshot | null = null;
 
     setError("");
+    setRefreshWarning("");
     setAutoCheckoutMessage("");
     setLastScan(null);
     setLastReadCode(code);
@@ -418,9 +422,10 @@ export default function AccessPage() {
       setScreenStatus("OK");
 
       // A failed occupancy refresh must not overwrite a confirmed access.
-      await loadCurrent().catch(() => {
-        setError("Acceso confirmado. No se pudo actualizar la ocupación; comprueba el estado antes de repetir.");
-      });
+      const refreshed = await loadCurrent().catch(() => false);
+      if (!refreshed) {
+        setRefreshWarning("Acceso confirmado. No se pudo actualizar la ocupación; comprueba el estado antes de repetir.");
+      }
     } catch {
       setLastScan(null);
       setError("No se pudo confirmar el resultado del acceso. Comprueba el estado antes de repetir la lectura.");
@@ -487,7 +492,17 @@ export default function AccessPage() {
       />
 
       {lastScan ? (
-        <AccessMemberCard scan={lastScan} />
+        <>
+          <AccessMemberCard scan={lastScan} />
+          {lastScan.status === "OK" && refreshWarning ? (
+            <div
+              role="status"
+              className="mb-6 rounded-[1.25rem] border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900"
+            >
+              {refreshWarning}
+            </div>
+          ) : null}
+        </>
       ) : screenStatus === "DENIED" || screenStatus === "UNKNOWN" ? (
         <section className="mb-6 overflow-hidden rounded-[2rem] border border-red-200 bg-white/88">
           <div className="border-b border-red-200 bg-red-50 px-5 py-6 text-center sm:px-6 sm:py-8">
