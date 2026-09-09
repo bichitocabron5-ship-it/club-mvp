@@ -39,6 +39,7 @@ const memberUpdateSchema = z.object({
   email: z.string().trim().optional().nullable(),
   expiresAt: z.string().optional().nullable(),
   rfidCode: z.string().optional().nullable(),
+  expectedRfidCode: z.string().optional(),
   commercialProfile: z.string().trim().min(1).optional(),
   discountPercent: z.number().min(0).max(100).optional(),
   commercialNotes: z.string().trim().optional().nullable(),
@@ -69,10 +70,15 @@ export async function PATCH(
 
   const { id } = await params;
   const memberId = Number(id);
-  const body = await req.json();
-
-  if (!memberId || Number.isNaN(memberId)) {
+  if (!Number.isSafeInteger(memberId) || memberId <= 0) {
     return NextResponse.json({ error: "ID invalido" }, { status: 400 });
+  }
+
+  let body;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "JSON invalido" }, { status: 400 });
   }
 
   const parsed = memberUpdateSchema.safeParse(body);
@@ -82,6 +88,56 @@ export async function PATCH(
   }
 
   const data = parsed.data;
+  if (data.rfidCode === null) {
+    const expectedRfidCode = normalizeRfidCode(data.expectedRfidCode ?? "");
+    if (
+      !expectedRfidCode ||
+      Object.keys(body).some((key) => key !== "rfidCode" && key !== "expectedRfidCode")
+    ) {
+      return NextResponse.json(
+        { error: "Desasignar requiere expectedRfidCode valido y no admite otros cambios" },
+        { status: 400 }
+      );
+    }
+
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        // The predicate is checked by the UPDATE, not by an earlier snapshot.
+        const updated = await tx.member.updateMany({
+          where: { id: memberId, rfidCode: expectedRfidCode },
+          data: { rfidCode: null },
+        });
+        const member = await tx.member.findUnique({ where: { id: memberId } });
+        if (!member) return { status: 404, body: { error: "Socio no encontrado" } };
+        if (updated.count === 0) {
+          return member.rfidCode === null
+            ? { status: 200, body: member }
+            : { status: 409, body: { error: "La RFID del socio cambio desde la confirmacion" } };
+        }
+
+        // Do not use the best-effort helper here: failure must roll back the update.
+        const actorUserId = Number(auth.session.user.id);
+        await tx.auditLog.create({
+          data: {
+            actorUserId: Number.isSafeInteger(actorUserId) && actorUserId > 0 ? actorUserId : null,
+            actorEmail: auth.session.user.email?.trim().toLowerCase() || null,
+            action: "MEMBER_RFID_UPDATED",
+            entityType: "Member",
+            entityId: String(member.id),
+            summary: `RFID desasignada para socio #${member.id}`,
+            metadata: { operation: "UNASSIGN", hadRfid: true, hasRfid: false },
+          },
+        });
+        return { status: 200, body: member };
+      });
+      return NextResponse.json(result.body, { status: result.status });
+    } catch {
+      return NextResponse.json(
+        { error: "No se pudo desasignar la RFID" },
+        { status: 500 }
+      );
+    }
+  }
   const normalizedMemberNumber = normalizeMemberNumber(data.memberNumber);
   const validatedMemberNumber = validateMemberNumber(normalizedMemberNumber);
   const normalizedDni =

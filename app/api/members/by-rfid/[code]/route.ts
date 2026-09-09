@@ -5,13 +5,15 @@ import { normalizeRfidCode } from "@/lib/rfid";
 import { resolveStorageUrlForResponse } from "@/lib/storage";
 import { NextResponse } from "next/server";
 
+const headers = { "Cache-Control": "private, no-store" };
+
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ code: string }> }
 ) {
   const auth = await requireStaffOrAdmin();
   if (!auth.ok) {
-    return NextResponse.json({ error: auth.error }, { status: auth.status });
+    return NextResponse.json({ error: auth.error }, { status: auth.status, headers });
   }
 
   const { code } = await params;
@@ -19,7 +21,7 @@ export async function GET(
   const includePhoto = new URL(req.url).searchParams.get("includePhoto") === "1";
 
   if (!cleanCode) {
-    return NextResponse.json({ error: "Codigo RFID invalido" }, { status: 400 });
+    return NextResponse.json({ error: "Codigo RFID invalido" }, { status: 400, headers });
   }
 
   const member = await prisma.member.findUnique({
@@ -51,7 +53,7 @@ export async function GET(
   });
 
   if (!member) {
-    return NextResponse.json({ error: "Chapita no asignada" }, { status: 404 });
+    return NextResponse.json({ error: "Chapita no asignada" }, { status: 404, headers });
   }
 
   const lastAccess = member.accessLogs[0] ?? null;
@@ -79,5 +81,5 @@ export async function GET(
           createdAt: lastAccess.createdAt.toISOString(),
         }
       : null,
-  });
+  }, { headers });
 }

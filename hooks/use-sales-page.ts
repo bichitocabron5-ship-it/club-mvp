@@ -1174,7 +1174,9 @@ export function useSalesPage() {
     setRfidError("");
 
     try {
-      const res = await fetch(`/api/members/by-rfid/${encodeURIComponent(code)}`);
+      const res = await fetch(`/api/members/by-rfid/${encodeURIComponent(code)}`, {
+        cache: "no-store",
+      });
 
       if (!isRfidLookupCurrent()) {
         return;
