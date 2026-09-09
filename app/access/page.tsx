@@ -11,19 +11,20 @@ import type {
 import { useEffect, useRef, useState } from "react";
 import { PageHeader } from "@/components/ui/page-header";
 
-type ScreenStatus = "OK" | "DENIED" | "IDLE";
+type ScreenStatus = "OK" | "DENIED" | "IDLE" | "UNKNOWN";
 
 type LastAccessScan = {
   member: AccessMemberSnapshot;
   action: AccessAction | "";
   message: string;
   error: string;
-  status: Exclude<ScreenStatus, "IDLE">;
+  status: "OK" | "DENIED";
   readCode: string;
   scannedAt: string;
 };
 
 type AccessErrorResponse = {
+  code?: string;
   error?: string;
   member?: AccessMemberSnapshot;
 };
@@ -354,13 +355,35 @@ export default function AccessPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ memberId: scannedMember.id }),
+        body: JSON.stringify({ memberId: scannedMember.id, rfidCode: code }),
       });
       const payload = (await accessRes.json().catch(() => null)) as
         | (Partial<AccessToggleResponse> & AccessErrorResponse)
         | null;
 
       if (!accessRes.ok) {
+        if (accessRes.status === 409 && payload?.code === "RFID_ASSIGNMENT_CHANGED") {
+          setLastScan(null);
+          setLastReadCode("");
+          setError("La chapita ya no está asignada a este socio. No se ha registrado ningún acceso. Vuelve a escanear.");
+          setScreenStatus("DENIED");
+          return;
+        }
+
+        const rejectionStatus: Record<string, number> = {
+          INVALID_PAYLOAD: 400,
+          UNAUTHORIZED: 401,
+          FORBIDDEN: 403,
+          MEMBER_NOT_FOUND: 404,
+          MEMBER_INACTIVE: 409,
+          CONTRACT_REQUIRED: 409,
+          MEMBERSHIP_EXPIRED: 409,
+          ACCESS_CONFLICT: 409,
+        };
+        if (!payload?.code || rejectionStatus[payload.code] !== accessRes.status) {
+          throw new Error("Resultado de acceso desconocido");
+        }
+
         const deniedMember = payload?.member ?? scannedMember;
         const errorMessage =
           payload?.error || getMemberWarnings(deniedMember)[0] || "Acceso denegado";
@@ -394,27 +417,14 @@ export default function AccessPage() {
       });
       setScreenStatus("OK");
 
-      await loadCurrent();
-    } catch (scanError) {
-      const message =
-        scanError instanceof Error
-          ? scanError.message
-          : "Error registrando acceso";
-
-      if (scannedMember) {
-        setLastScan({
-          member: scannedMember,
-          action: "",
-          message: "Acceso denegado",
-          error: message,
-          status: "DENIED",
-          readCode: code,
-          scannedAt: new Date().toISOString(),
-        });
-      }
-
-      setError(message);
-      setScreenStatus("DENIED");
+      // A failed occupancy refresh must not overwrite a confirmed access.
+      await loadCurrent().catch(() => {
+        setError("Acceso confirmado. No se pudo actualizar la ocupación; comprueba el estado antes de repetir.");
+      });
+    } catch {
+      setLastScan(null);
+      setError("No se pudo confirmar el resultado del acceso. Comprueba el estado antes de repetir la lectura.");
+      setScreenStatus("UNKNOWN");
     } finally {
       setRfidInput("");
       setProcessing(false);
@@ -478,7 +488,7 @@ export default function AccessPage() {
 
       {lastScan ? (
         <AccessMemberCard scan={lastScan} />
-      ) : screenStatus === "DENIED" ? (
+      ) : screenStatus === "DENIED" || screenStatus === "UNKNOWN" ? (
         <section className="mb-6 overflow-hidden rounded-[2rem] border border-red-200 bg-white/88">
           <div className="border-b border-red-200 bg-red-50 px-5 py-6 text-center sm:px-6 sm:py-8">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-red-100 text-2xl font-black text-red-700">
@@ -490,7 +500,7 @@ export default function AccessPage() {
             </div>
 
             <h2 className="mt-2 text-3xl font-black tracking-[-0.04em] text-red-800 sm:text-4xl">
-              ACCESO DENEGADO
+              {screenStatus === "UNKNOWN" ? "RESULTADO SIN CONFIRMAR" : "ACCESO DENEGADO"}
             </h2>
 
             <p className="mx-auto mt-2 max-w-2xl text-base font-semibold leading-7 text-red-700 sm:text-lg">
@@ -502,12 +512,15 @@ export default function AccessPage() {
             <div className="flex flex-col gap-4 rounded-[1.5rem] border border-red-100 bg-red-50/45 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <div className="font-black text-[#201f1d]">
-                  No se ha registrado ningún acceso
+                  {screenStatus === "UNKNOWN"
+                    ? "El acceso puede haberse registrado"
+                    : "No se ha registrado ningún acceso"}
                 </div>
 
                 <p className="mt-1 text-sm leading-6 app-muted">
-                  Comprueba la chapita o el estado del socio y vuelve a realizar la
-                  lectura.
+                  {screenStatus === "UNKNOWN"
+                    ? "Comprueba el estado del socio antes de repetir la lectura."
+                    : "Comprueba la chapita o el estado del socio y vuelve a realizar la lectura."}
                 </p>
               </div>
 
