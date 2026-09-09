@@ -15,6 +15,20 @@ import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { PageHeader } from "@/components/ui/page-header";
 
+function mergeMemberHistory(
+  current: MemberHistoryData | null,
+  incoming: MemberHistoryData,
+  preserveRfid: boolean
+) {
+  if (!preserveRfid || !current || current.member.id !== incoming.member.id) {
+    return incoming;
+  }
+  return {
+    ...incoming,
+    member: { ...incoming.member, rfidCode: current.member.rfidCode },
+  };
+}
+
 export default function MemberDetail() {
   const params = useParams<{ id: string }>();
   const id = params.id;
@@ -31,6 +45,10 @@ export default function MemberDetail() {
   const [rfidMessage, setRfidMessage] = useState("");
   const [rfidInput, setRfidInput] = useState("");
   const [rfidProcessing, setRfidProcessing] = useState(false);
+  const [rfidUnassigning, setRfidUnassigning] = useState(false);
+  const [rfidError, setRfidError] = useState("");
+  const rfidMutationRef = useRef(false);
+  const rfidVersionRef = useRef(0);
   const [savingContractId, setSavingContractId] = useState<number | null>(null);
   const rfidRef = useRef<HTMLInputElement | null>(null);
 
@@ -54,6 +72,7 @@ export default function MemberDetail() {
   async function refreshMember() {
     if (!id) return;
 
+    const rfidVersion = rfidVersionRef.current;
     const historyRes = await fetch(`/api/members/${id}/history`, {
       cache: "no-store",
     });
@@ -63,7 +82,9 @@ export default function MemberDetail() {
     }
 
     const historyData: MemberHistoryData = await historyRes.json();
-    setData(historyData);
+    setData((current) => mergeMemberHistory(
+      current, historyData, rfidVersionRef.current !== rfidVersion
+    ));
 
     const contractsRes = await fetch(`/api/members/${id}/contracts`, {
       cache: "no-store",
@@ -125,6 +146,7 @@ export default function MemberDetail() {
     if (!id) return;
 
     let cancelled = false;
+    const rfidVersion = rfidVersionRef.current;
 
     void Promise.all([
       fetch(`/api/members/${id}/contracts`, { cache: "no-store" }),
@@ -137,11 +159,13 @@ export default function MemberDetail() {
 
       if (!cancelled) {
         setContracts(contractsData);
-        setData(historyData);
+        setData((current) => mergeMemberHistory(
+          current, historyData, rfidVersionRef.current !== rfidVersion
+        ));
         setAccessLogs(accessData);
 
         if (historyData.member) {
-          setEditForm({
+          setEditForm((current) => rfidVersionRef.current !== rfidVersion ? current : ({
             memberNumber: historyData.member.memberNumber
               ? String(historyData.member.memberNumber)
               : "",
@@ -156,7 +180,7 @@ export default function MemberDetail() {
             commercialProfile: historyData.member.commercialProfile || "STANDARD",
             discountPercent: String(historyData.member.discountPercent ?? 0),
             commercialNotes: historyData.member.commercialNotes || "",
-          });
+          }));
         }
       }
     });
@@ -204,11 +228,14 @@ export default function MemberDetail() {
       return;
     }
 
+    const rfidVersion = rfidVersionRef.current;
     const historyRes = await fetch(`/api/members/${id}/history`, {
       cache: "no-store",
     });
     const historyData: MemberHistoryData = await historyRes.json();
-    setData(historyData);
+    setData((current) => mergeMemberHistory(
+      current, historyData, rfidVersionRef.current !== rfidVersion
+    ));
   }
 
   async function saveMember() {
@@ -220,11 +247,6 @@ export default function MemberDetail() {
       email: editForm.email.trim(),
       expiresAt: editForm.expiresAt,
     };
-
-    const normalizedRfidCode = normalizeRfidCode(editForm.rfidCode);
-    if (normalizedRfidCode) {
-      payload.rfidCode = normalizedRfidCode;
-    }
 
     if (isAdmin) {
       payload.commercialProfile = editForm.commercialProfile;
@@ -253,12 +275,15 @@ export default function MemberDetail() {
 
   async function saveScannedRfid(code: string) {
     const cleanCode = normalizeRfidCode(code);
-    if (!cleanCode || rfidProcessing) {
+    if (!cleanCode || rfidMutationRef.current) {
       focusRfidInput();
       return;
     }
 
+    rfidMutationRef.current = true;
     setRfidProcessing(true);
+    setRfidError("");
+    setRfidMessage("");
 
     try {
       const res = await fetch(`/api/members/${id}`, {
@@ -273,17 +298,80 @@ export default function MemberDetail() {
 
       if (!res.ok) {
         const err = await res.json();
-        alert(err.error || "Error asignando RFID");
+        setRfidError(err.error || "Error asignando RFID");
         return;
       }
 
-      setEditForm((current) => ({ ...current, rfidCode: cleanCode }));
+      const updated: { rfidCode: string } = await res.json();
+      syncRfid(updated.rfidCode);
       setAssigningRfid(false);
       setRfidInput("");
       setRfidMessage(`Chapita asignada correctamente: ${cleanCode}`);
+    } catch {
+      setRfidError("No se pudo asignar la RFID. Reintenta.");
     } finally {
+      rfidMutationRef.current = false;
       setRfidProcessing(false);
       focusRfidInput();
+    }
+  }
+
+  function syncRfid(rfidCode: string | null) {
+    // Confirmed writes (and the authoritative 409 refresh) supersede older reads.
+    // Failed mutations do not advance the version or suppress valid refreshes.
+    rfidVersionRef.current += 1;
+    setData((current) => current
+      ? { ...current, member: { ...current.member, rfidCode } }
+      : current);
+    setEditForm((current) => ({ ...current, rfidCode: rfidCode ?? "" }));
+  }
+
+  async function unassignRfid() {
+    const member = data?.member;
+    if (!member?.rfidCode || rfidMutationRef.current) return;
+    const expectedRfidCode = member.rfidCode;
+    if (!window.confirm(
+      `¿Desasignar la RFID ${expectedRfidCode} de ${member.fullName} (socio #${member.memberNumber ?? member.id})?`
+    )) return;
+
+    rfidMutationRef.current = true;
+    setRfidUnassigning(true);
+    setRfidError("");
+    setRfidMessage("");
+    try {
+      const res = await fetch(`/api/members/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rfidCode: null, expectedRfidCode }),
+      });
+      if (res.status === 409) {
+        setRfidError("La RFID del socio cambió desde la confirmación. Revisa el valor actual y confirma de nuevo.");
+        try {
+          const refreshed = await fetch(`/api/members/${id}/history`, { cache: "no-store" });
+          if (!refreshed.ok) throw new Error("Refresh failed");
+          const history: MemberHistoryData = await refreshed.json();
+          syncRfid(history.member.rfidCode);
+          setAssigningRfid(false);
+          setRfidInput("");
+        } catch {
+          setRfidError("La RFID cambió y no se pudo refrescar. Reabre la ficha para comprobar el valor actual.");
+        }
+        return;
+      }
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        setRfidError(err?.error || "No se pudo desasignar la RFID.");
+        return;
+      }
+      syncRfid(null);
+      setAssigningRfid(false);
+      setRfidInput("");
+      setRfidMessage("RFID desasignada correctamente.");
+    } catch {
+      setRfidError("No se pudo confirmar la desasignación. Comprueba la conexión y reintenta.");
+    } finally {
+      rfidMutationRef.current = false;
+      setRfidUnassigning(false);
     }
   }
 
@@ -845,7 +933,7 @@ export default function MemberDetail() {
                         </p>
                       </div>
 
-                      {editForm.rfidCode ? (
+                      {data.member.rfidCode ? (
                         <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">
                           RFID ASIGNADO
                         </span>
@@ -868,6 +956,7 @@ export default function MemberDetail() {
 
                       <input
                         id="member-rfid-code"
+                        disabled={rfidProcessing || rfidUnassigning}
                         className="w-full rounded-xl border border-black/10 bg-white px-4 py-3 font-mono outline-none focus:border-[#a7282d]/40 focus:ring-4 focus:ring-[#a7282d]/8"
                         placeholder="Código de la chapita"
                         value={editForm.rfidCode}
@@ -884,13 +973,35 @@ export default function MemberDetail() {
                           Puedes escribir o pegar manualmente el identificador.
                         </p>
 
-                        {editForm.rfidCode ? (
+                        {data.member.rfidCode ? (
                           <span className="font-mono text-xs font-bold tracking-[0.08em] text-[#645b4c]">
-                            {normalizeRfidCode(editForm.rfidCode)}
+                            RFID actual: {data.member.rfidCode}
                           </span>
                         ) : null}
                       </div>
                     </div>
+
+                    <button
+                      type="button"
+                      disabled={rfidProcessing || rfidUnassigning || !normalizeRfidCode(editForm.rfidCode)}
+                      onClick={() => void saveScannedRfid(editForm.rfidCode)}
+                      className="app-button-secondary rounded-xl px-4 py-3 font-bold disabled:opacity-50"
+                    >
+                      Guardar RFID
+                    </button>
+
+                    {rfidError && <p role="alert" className="text-sm text-red-700">{rfidError}</p>}
+
+                    {data.member.rfidCode && (session?.user?.role === "ADMIN" || session?.user?.role === "STAFF") && (
+                      <button
+                        type="button"
+                        disabled={rfidProcessing || rfidUnassigning}
+                        onClick={() => void unassignRfid()}
+                        className="app-button-secondary rounded-xl px-4 py-3 font-bold text-red-700 disabled:opacity-50"
+                      >
+                        {rfidUnassigning ? "Desasignando..." : "Desasignar RFID"}
+                      </button>
+                    )}
 
                     {rfidMessage && (
                       <div
@@ -920,6 +1031,7 @@ export default function MemberDetail() {
 
                     <button
                       type="button"
+                      disabled={rfidProcessing || rfidUnassigning}
                       onClick={() => {
                         setAssigningRfid(true);
                         setRfidInput("");
@@ -927,7 +1039,7 @@ export default function MemberDetail() {
                       }}
                       className="inline-flex w-full items-center justify-center rounded-xl bg-[#0b0b0c] px-4 py-3 font-bold text-white transition hover:bg-[#171719] sm:w-auto"
                     >
-                      {editForm.rfidCode ? "Cambiar chapita RFID" : "Asignar chapita RFID"}
+                      {data.member.rfidCode ? "Cambiar chapita RFID" : "Asignar chapita RFID"}
                     </button>
 
                     {assigningRfid && (
@@ -963,7 +1075,7 @@ export default function MemberDetail() {
                           placeholder="Esperando código RFID..."
                           value={rfidInput}
                           onChange={(e) => setRfidInput(e.target.value)}
-                          disabled={rfidProcessing}
+                          disabled={rfidProcessing || rfidUnassigning}
                         />
 
                         <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
@@ -973,6 +1085,7 @@ export default function MemberDetail() {
 
                           <button
                             type="button"
+                            disabled={rfidProcessing || rfidUnassigning}
                             onClick={() => {
                               setAssigningRfid(false);
                               setRfidInput("");
