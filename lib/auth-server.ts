@@ -2,6 +2,7 @@
 import type { Session } from "next-auth";
 import { getServerSession } from "next-auth";
 import { authConfig } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
 type AuthSuccess = {
   ok: true;
@@ -29,9 +30,40 @@ export async function requireAuth(): Promise<AuthResult> {
     };
   }
 
+  // The verified session supplies identity; persisted state supplies authority.
+  const sessionUserId = session.user.id;
+  const userId = Number(sessionUserId);
+  if (
+    typeof sessionUserId !== "string" ||
+    !/^[1-9]\d*$/.test(sessionUserId) ||
+    !Number.isSafeInteger(userId) ||
+    userId > 2_147_483_647
+  ) {
+    return { ok: false, status: 401, error: "UNAUTHORIZED" };
+  }
+
+  // Do not cache across requests: deactivation and role changes apply next call.
+  const user = await prisma.appUser.findUnique({
+    where: { id: userId },
+    select: { id: true, active: true, role: true, name: true, email: true },
+  });
+
+  if (!user || user.active !== true) {
+    return { ok: false, status: 401, error: "UNAUTHORIZED" };
+  }
+
   return {
     ok: true,
-    session,
+    session: {
+      ...session,
+      user: {
+        ...session.user,
+        id: String(user.id),
+        role: user.role,
+        name: user.name,
+        email: user.email,
+      },
+    },
   };
 }
 
