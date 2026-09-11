@@ -4,15 +4,18 @@ import { isClosureOpen } from "@/lib/day-closure";
 import { prisma } from "@/lib/prisma";
 import {
   createSaleTransaction,
+  RfidAssignmentChangedError,
+  SaleValidationError,
   isIdempotencyConflictError,
   SaleOperationType,
 } from "@/lib/sales-engine";
-import { getErrorMessage, getTodayRange } from "@/lib/sales";
+import { getTodayRange } from "@/lib/sales";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
 const saleSchema = z.object({
   memberId: z.number().int().positive(),
+  expectedRfidCode: z.string().min(1).optional(),
   productId: z.number().int().positive(),
   qty: z.number().positive(),
   idempotencyKey: z.string().trim().uuid().optional(),
@@ -107,11 +110,28 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  const body = await req.json();
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) {
+      return NextResponse.json(
+        { error: "No se pudo confirmar el resultado de la venta.", code: "SALE_RESULT_UNCONFIRMED" },
+        { status: 500 }
+      );
+    }
+    return NextResponse.json(
+      { error: "Datos invalidos", code: "SALE_VALIDATION_ERROR" },
+      { status: 400 }
+    );
+  }
   const parsed = saleSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Datos invalidos" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Datos invalidos", code: "SALE_VALIDATION_ERROR" },
+      { status: 400 }
+    );
   }
 
   const { idempotencyKey, memberId, productId, qty } = parsed.data;
@@ -124,6 +144,7 @@ export async function POST(req: Request) {
   try {
     const result = await createSaleTransaction({
       memberId,
+      expectedRfidCode: parsed.data.expectedRfidCode,
       items: [{ productId, qty }],
       operatorUserId: appliedByUserId,
       operatorEmail: auth.session.user.email,
@@ -133,13 +154,29 @@ export async function POST(req: Request) {
 
     return NextResponse.json(result.sales[0]);
   } catch (error: unknown) {
+    if (error instanceof RfidAssignmentChangedError) {
+      return NextResponse.json(
+        { error: error.message, code: "RFID_ASSIGNMENT_CHANGED" },
+        { status: 409 }
+      );
+    }
     if (isIdempotencyConflictError(error)) {
-      return NextResponse.json({ error: error.message }, { status: 409 });
+      return NextResponse.json(
+        { error: error.message, code: "IDEMPOTENCY_CONFLICT" },
+        { status: 409 }
+      );
+    }
+
+    if (error instanceof SaleValidationError) {
+      return NextResponse.json(
+        { error: error.message, code: "SALE_VALIDATION_ERROR" },
+        { status: 400 }
+      );
     }
 
     return NextResponse.json(
-      { error: getErrorMessage(error, "Error en la venta") },
-      { status: 400 }
+      { error: "No se pudo confirmar el resultado de la venta.", code: "SALE_RESULT_UNCONFIRMED" },
+      { status: 500 }
     );
   }
 }

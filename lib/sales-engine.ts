@@ -7,6 +7,7 @@ import { getClubSettings } from "@/lib/club-settings";
 import { formatLocalDay } from "@/lib/cash-move";
 import { isClosureOpen } from "@/lib/day-closure";
 import { prisma } from "@/lib/prisma";
+import { normalizeRfidCode } from "@/lib/rfid";
 import {
   getDailyTotals,
   getMemberSalePricing,
@@ -23,6 +24,17 @@ const IDEMPOTENCY_KEY_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export { SaleOperationType };
+
+// Only explicit input/business rejections may be reported as definitive 400s.
+// Infrastructure and corrupt/unavailable replay data remain unexpected errors.
+export class SaleValidationError extends Error {}
+
+export class RfidAssignmentChangedError extends Error {
+  constructor() {
+    super("La identificación RFID ya no es válida. Identifica de nuevo al socio.");
+    this.name = "RfidAssignmentChangedError";
+  }
+}
 
 export class IdempotencyConflictError extends Error {
   constructor(message = "Clave de idempotencia reutilizada de forma invalida") {
@@ -44,6 +56,7 @@ type SaleEngineItemInput = {
 
 type CreateSaleTransactionInput = {
   memberId: number;
+  expectedRfidCode?: string;
   items: SaleEngineItemInput[];
   operatorUserId: number;
   operatorEmail?: string | null;
@@ -144,7 +157,7 @@ type PreparedLine = {
 
 function assertPositiveNumber(value: number, fallback: string) {
   if (!Number.isFinite(value) || value <= 0) {
-    throw new Error(fallback);
+    throw new SaleValidationError(fallback);
   }
 }
 
@@ -153,7 +166,7 @@ function normalizeSaleOperationType(value: SaleOperationType) {
     value !== SaleOperationType.SINGLE &&
     value !== SaleOperationType.BULK
   ) {
-    throw new Error("Tipo de operacion de venta invalido");
+    throw new SaleValidationError("Tipo de operacion de venta invalido");
   }
 
   return value;
@@ -164,7 +177,7 @@ function assertSaleOperationShape(
   items: SaleEngineItemInput[]
 ) {
   if (operationType === SaleOperationType.SINGLE && items.length !== 1) {
-    throw new Error("La venta individual debe incluir un unico producto");
+    throw new SaleValidationError("La venta individual debe incluir un unico producto");
   }
 }
 
@@ -174,7 +187,7 @@ function normalizeIdempotencyKey(value: string | null | undefined) {
   if (!key) return null;
 
   if (!IDEMPOTENCY_KEY_PATTERN.test(key)) {
-    throw new Error("Clave de idempotencia invalida");
+    throw new SaleValidationError("Clave de idempotencia invalida");
   }
 
   return key.toLowerCase();
@@ -203,12 +216,14 @@ function normalizeOptionalNoteForFingerprint(value: string | null | undefined) {
 
 function createSaleRequestFingerprint({
   memberId,
+  expectedRfidCode,
   items,
   operationType,
   manualDiscount,
   note,
 }: {
   memberId: number;
+  expectedRfidCode?: string;
   items: SaleEngineItemInput[];
   operationType: SaleOperationType;
   manualDiscount?: number | null;
@@ -224,6 +239,8 @@ function createSaleRequestFingerprint({
         ? null
         : normalizeDiscountPercent(manualDiscount),
     note: normalizeOptionalNoteForFingerprint(note),
+    // Keep existing manual-operation fingerprints compatible.
+    ...(expectedRfidCode === undefined ? {} : { expectedRfidCode }),
   };
 
   return createHash("sha256")
@@ -399,11 +416,23 @@ function isSaleOperationIdempotencyUniqueConflict(
 }
 
 function shouldAttemptIdempotencyReplay(error: unknown) {
+  // Raw SELECT FOR UPDATE failures can carry SQLSTATE inside adapter metadata,
+  // rather than P2034. A retry must still recover a previously committed sale.
+  if (isTransactionConflict(error)) return true;
   if (!isPrismaKnownRequestError(error)) return false;
 
-  if (error.code === "P2034") return true;
-
   return isSaleOperationIdempotencyUniqueConflict(error);
+}
+
+function isTransactionConflict(error: unknown, depth = 0): boolean {
+  if (!isRecord(error) || depth > 4) return false;
+  if (
+    error.code === "P2034" || error.code === "40001" || error.code === "40P01" ||
+    error.originalCode === "40001" || error.originalCode === "40P01"
+  ) return true;
+  return [error.meta, error.cause, error.driverAdapterError].some(cause =>
+    isTransactionConflict(cause, depth + 1)
+  );
 }
 
 async function loadSuccessfulSaleOperationReplay({
@@ -489,19 +518,19 @@ async function getSaleMemberStatusTx(
   });
 
   if (!member) {
-    throw new Error("Socio no encontrado");
+    throw new SaleValidationError("Socio no encontrado");
   }
 
   if (!member.active) {
-    throw new Error("Socio no activo");
+    throw new SaleValidationError("Socio no activo");
   }
 
   if (member.expiresAt && member.expiresAt < new Date()) {
-    throw new Error("Membresía caducada");
+    throw new SaleValidationError("Membresía caducada");
   }
 
   if (!contract) {
-    throw new Error("El socio no ha firmado el contrato");
+    throw new SaleValidationError("El socio no ha firmado el contrato");
   }
 
   return {
@@ -554,6 +583,7 @@ function getLinePricing(
 
 export async function createSaleTransaction({
   memberId,
+  expectedRfidCode,
   items,
   operatorUserId,
   operatorEmail,
@@ -562,27 +592,35 @@ export async function createSaleTransaction({
   manualDiscount,
   note,
 }: CreateSaleTransactionInput) {
+  const normalizedRfid = expectedRfidCode === undefined
+    ? undefined
+    : typeof expectedRfidCode === "string" ? normalizeRfidCode(expectedRfidCode) : "";
+  if (normalizedRfid === "") throw new SaleValidationError("Precondición RFID inválida");
+
   if (!Number.isInteger(memberId) || memberId <= 0) {
-    throw new Error("Socio invalido");
+    throw new SaleValidationError("Socio invalido");
   }
 
   if (!Number.isInteger(operatorUserId) || operatorUserId <= 0) {
-    throw new Error("Usuario invalido");
+    throw new SaleValidationError("Usuario invalido");
   }
 
   if (!Array.isArray(items) || items.length === 0) {
-    throw new Error("La venta debe incluir al menos un producto");
+    throw new SaleValidationError("La venta debe incluir al menos un producto");
   }
 
   for (const item of items) {
     if (!Number.isInteger(item.productId) || item.productId <= 0) {
-      throw new Error("Producto invalido");
+      throw new SaleValidationError("Producto invalido");
     }
 
     assertPositiveNumber(item.qty, "Cantidad invalida");
   }
 
   if (manualDiscount !== undefined && manualDiscount !== null) {
+    if (!Number.isFinite(manualDiscount) || manualDiscount < 0 || manualDiscount > 100) {
+      throw new SaleValidationError("Porcentaje de descuento invalido");
+    }
     normalizeDiscountPercent(manualDiscount);
   }
 
@@ -595,6 +633,7 @@ export async function createSaleTransaction({
         idempotencyKey: normalizedIdempotencyKey,
         requestFingerprint: createSaleRequestFingerprint({
           memberId,
+          expectedRfidCode: normalizedRfid,
           items,
           operationType: normalizedOperationType,
           manualDiscount,
@@ -604,9 +643,27 @@ export async function createSaleTransaction({
     : null;
   let result: SaleTransactionResult;
 
+  // A committed result is historical: do not revalidate today's member/RFID
+  // state or acquire its lock. Failure to read it must remain an uncertain result.
+  if (idempotencyContext) {
+    const replay = await loadSuccessfulSaleOperationReplay({
+      ...idempotencyContext,
+      operatorUserId,
+      operationType: normalizedOperationType,
+    });
+    if (replay) return replay;
+  }
+
   try {
     result = await prisma.$transaction(
       async (tx) => {
+        // Lock before SaleOperation's FK takes a key-share lock: concurrent RFID
+        // sales must not both acquire key-share and then try to upgrade it.
+        const identity = normalizedRfid === undefined ? undefined : (
+          await tx.$queryRaw<{ rfidCode: string | null }[]>`
+            SELECT "rfidCode" FROM "Member" WHERE "id" = ${memberId} FOR UPDATE
+          `
+        )[0];
         const saleOperation = idempotencyContext
           ? await tx.saleOperation.create({
               data: {
@@ -623,6 +680,13 @@ export async function createSaleTransaction({
             })
           : null;
 
+        // Insert the idempotency key before rejecting stale evidence so a retry
+        // of an already committed sale still returns its saved result.
+        // All assignment UPDATEs conflict with the lock held until commit.
+        if (normalizedRfid !== undefined && identity?.rfidCode !== normalizedRfid) {
+          throw new RfidAssignmentChangedError();
+        }
+
         const { start, day } = getTodayRange();
         const { start: monthStart, end: monthEnd } = getMonthRange();
 
@@ -631,7 +695,7 @@ export async function createSaleTransaction({
         });
 
         if (isClosureOpen(todayClosed)) {
-          throw new Error(
+          throw new SaleValidationError(
             "El dia esta cerrado. No se pueden registrar mas retiradas."
           );
         }
@@ -671,7 +735,7 @@ export async function createSaleTransaction({
         });
 
         if (products.length !== groupedItems.length) {
-          throw new Error("Algun producto no existe");
+          throw new SaleValidationError("Algun producto no existe");
         }
 
         const productMap = new Map<number, ProductRecord>(
@@ -722,11 +786,11 @@ export async function createSaleTransaction({
           const product = productMap.get(item.productId);
 
           if (!product) {
-            throw new Error("Producto invalido");
+            throw new SaleValidationError("Producto invalido");
           }
 
           if (!product.active) {
-            throw new Error(`Producto inactivo: ${product.name}`);
+            throw new SaleValidationError(`Producto inactivo: ${product.name}`);
           }
 
           const unit = normalizeUnit(product.unit);
@@ -736,13 +800,13 @@ export async function createSaleTransaction({
           }
 
           if (unit === "UD" && !Number.isInteger(item.qty)) {
-            throw new Error(
+            throw new SaleValidationError(
               `El producto ${product.name} requiere unidades enteras`
             );
           }
 
           if (product.stock < item.qty) {
-            throw new Error(`Stock insuficiente: ${product.name}`);
+            throw new SaleValidationError(`Stock insuficiente: ${product.name}`);
           }
 
           if (unit === "G") {
@@ -780,13 +844,13 @@ export async function createSaleTransaction({
         }
 
         if (todayG + cartG > settings.dailyLimitG) {
-          throw new Error(
+          throw new SaleValidationError(
             `Limite diario de gramos superado (${settings.dailyLimitG} g)`
           );
         }
 
         if (todayUD + cartUD > settings.dailyLimitUd) {
-          throw new Error(
+          throw new SaleValidationError(
             `Limite diario de unidades superado (${settings.dailyLimitUd} ud)`
           );
         }
@@ -795,7 +859,7 @@ export async function createSaleTransaction({
           member.monthlyLimitG !== null &&
           monthG + cartG > member.monthlyLimitG
         ) {
-          throw new Error(
+          throw new SaleValidationError(
             `Limite mensual de gramos superado (${member.monthlyLimitG} g)`
           );
         }
@@ -833,7 +897,7 @@ export async function createSaleTransaction({
           });
 
           if (updated.count === 0) {
-            throw new Error(`Stock insuficiente: ${line.product.name}`);
+            throw new SaleValidationError(`Stock insuficiente: ${line.product.name}`);
           }
 
           const sale = await tx.sale.create({

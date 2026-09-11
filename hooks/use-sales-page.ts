@@ -29,7 +29,7 @@ const WITHDRAWAL_SUCCESS_FEEDBACK_MS = 4000;
 const WITHDRAWAL_ERROR_FEEDBACK_MS = 12000;
 const WITHDRAWAL_SYNC_WARNING_FEEDBACK_MS = 12000;
 const AMBIGUOUS_WITHDRAWAL_ERROR_MESSAGE =
-  "No se pudo confirmar el registro. Reintenta sin modificar la retirada para comprobarla de forma segura.";
+  "Resultado sin confirmar. No repitas la venta como una operación nueva. Vuelve a intentarlo sin modificar la retirada para comprobar el resultado.";
 const RFID_UNASSIGNED_ERROR_MESSAGE = "Chapita no asignada";
 const RFID_HTTP_ERROR_MESSAGE =
   "No se pudo consultar la chapita. Inténtalo de nuevo.";
@@ -67,6 +67,7 @@ type WithdrawalRegistrationItem = {
 
 type WithdrawalRegistrationPayload = {
   memberId: number;
+  expectedRfidCode?: string;
   items: WithdrawalRegistrationItem[];
 };
 
@@ -218,6 +219,9 @@ function getWithdrawalPayloadSignature(payload: WithdrawalRegistrationPayload) {
     items: normalizeWithdrawalItemsForAttempt(payload.items),
     manualDiscount: null,
     note: null,
+    ...(payload.expectedRfidCode === undefined
+      ? {}
+      : { expectedRfidCode: payload.expectedRfidCode }),
   });
 }
 
@@ -233,17 +237,18 @@ function createWithdrawalIdempotencyKey() {
   return randomUUID.call(globalThis.crypto);
 }
 
-function isConfirmedWithdrawalFailureStatus(status: number) {
-  return status >= 400 && status < 500 && status !== 408;
+function isConfirmedWithdrawalFailure(status: number, payload: unknown) {
+  if (!isRecord(payload)) return false;
+  return (
+    status === 400 && payload.code === "SALE_VALIDATION_ERROR"
+  );
 }
 
-async function getRegistrationErrorMessage(res: Response, fallback: string) {
-  const err = (await res.json().catch(() => null)) as
-    | { error?: unknown }
-    | null;
-  const message = typeof err?.error === "string" ? err.error.trim() : "";
-
-  return message || fallback;
+function isConfirmedWithdrawalResponse(payload: unknown, memberId: number) {
+  return isRecord(payload) && Array.isArray(payload.sales) && payload.sales.length > 0 &&
+    payload.sales.every(sale =>
+      isRecord(sale) && parsePositiveInteger(sale.id) !== null && sale.memberId === memberId
+    ) && typeof payload.totalAmount === "number" && Number.isFinite(payload.totalAmount);
 }
 
 function getEditableScanTarget(
@@ -289,6 +294,8 @@ export function useSalesPage() {
   const [bootstrapError, setBootstrapError] = useState("");
   const [memberLoadError, setMemberLoadError] = useState("");
   const [registerMutationPending, setRegisterMutationPending] = useState(false);
+  const [idempotencyConflict, setIdempotencyConflict] = useState(false);
+  const idempotencyConflictRef = useRef(false);
   const [rfidInput, setRfidInput] = useState("");
   const [rfidError, setRfidError] = useState("");
   const [cancelingSaleId, setCancelingSaleId] = useState<number | null>(null);
@@ -312,14 +319,28 @@ export function useSalesPage() {
   );
   const mountedRef = useRef(true);
   const currentMemberIdRef = useRef("");
+  // Evidence belongs to this selection, never to the cached Member record.
+  const selectionRef = useRef<
+    | { source: "MANUAL"; memberId: string }
+    | { source: "RFID"; memberId: string; code: string }
+    | null
+  >(null);
   const memberContextVersionRef = useRef(0);
 
   // Idempotency lifecycle: no key creates a new attempt, ambiguous errors keep
   // the key, confirmed server failures and success clear it, payload changes
   // invalidate it before the next logical withdrawal.
   const clearPendingWithdrawalAttempt = useCallback(() => {
+    // Incidental edits cannot release a conflicted key. Only an explicit reset can.
+    if (idempotencyConflictRef.current) return;
     pendingWithdrawalAttemptRef.current = null;
   }, []);
+
+  function resetIdempotencyConflict() {
+    idempotencyConflictRef.current = false;
+    setIdempotencyConflict(false);
+    clearPendingWithdrawalAttempt();
+  }
 
   const invalidatePendingWithdrawalAttempt = clearPendingWithdrawalAttempt;
 
@@ -574,6 +595,7 @@ export function useSalesPage() {
   );
 
   const invalid =
+    idempotencyConflict ||
     !member.memberId ||
     !member.memberStatus?.canWithdraw ||
     cart.cart.length === 0 ||
@@ -588,6 +610,11 @@ export function useSalesPage() {
   function handleMemberChange(nextMemberId: string) {
     if (submittingRef.current) return;
 
+    cancelRfidLookup();
+    selectionRef.current = nextMemberId.trim()
+      ? { source: "MANUAL", memberId: nextMemberId.trim() }
+      : null;
+    setRfidError("");
     invalidatePendingWithdrawalAttempt();
     updateCartContext();
     clearWithdrawalFeedback();
@@ -599,6 +626,9 @@ export function useSalesPage() {
   function handleNextMember() {
     if (submittingRef.current) return;
 
+    resetIdempotencyConflict();
+    cancelRfidLookup();
+    selectionRef.current = null;
     invalidatePendingWithdrawalAttempt();
     updateCartContext();
     clearWithdrawalFeedback();
@@ -641,7 +671,7 @@ export function useSalesPage() {
     const nextMemberId = String(uniqueMember.id);
     member.setMemberSearch(uniqueMember.fullName);
 
-    if (nextMemberId === member.memberId.trim()) {
+    if (nextMemberId === member.memberId.trim() && selectionRef.current?.source === "MANUAL") {
       focusProductSearchInput();
       return;
     }
@@ -788,7 +818,15 @@ export function useSalesPage() {
   }
 
   async function handleRegisterWithdrawal() {
-    if (submittingRef.current) return;
+    if (submittingRef.current || idempotencyConflictRef.current) return;
+    // Refs close the same-event gap before React renders the cleared selection.
+    const selection = selectionRef.current;
+    if (
+      !selection ||
+      rfidSubmittingRef.current ||
+      selection.memberId !== member.memberId.trim() ||
+      currentMemberIdRef.current !== selection.memberId
+    ) return;
 
     clearWithdrawalFeedback();
 
@@ -846,6 +884,7 @@ export function useSalesPage() {
     const registrationPayload: WithdrawalRegistrationPayload = {
       memberId: Number(selectedMemberId),
       items,
+      ...(selection.source === "RFID" ? { expectedRfidCode: selection.code } : {}),
     };
     const payloadSignature =
       getWithdrawalPayloadSignature(registrationPayload);
@@ -883,13 +922,34 @@ export function useSalesPage() {
         }),
       });
 
+      const responsePayload: unknown = await res.json().catch(() => null);
       if (!res.ok) {
-        const message = await getRegistrationErrorMessage(
-          res,
-          "Error al registrar retirada"
-        );
-
-        if (isConfirmedWithdrawalFailureStatus(res.status)) {
+        if (
+          res.status === 409 &&
+          isRecord(responsePayload) &&
+          responsePayload.code === "RFID_ASSIGNMENT_CHANGED"
+        ) {
+          clearPendingWithdrawalAttempt();
+          if (isWithdrawalContextCurrent()) {
+            clearIdentifiedMember();
+            setRfidError("La chapita ha cambiado o fue desasignada. Identifica de nuevo al socio.");
+            focusRfidInput();
+          }
+          return;
+        }
+        if (
+          res.status === 409 && isRecord(responsePayload) &&
+          responsePayload.code === "IDEMPOTENCY_CONFLICT"
+        ) {
+          // Synchronous guard also blocks callbacks captured before this render.
+          idempotencyConflictRef.current = true;
+          setIdempotencyConflict(true);
+          return;
+        }
+        if (isConfirmedWithdrawalFailure(res.status, responsePayload)) {
+          const message = isRecord(responsePayload) && typeof responsePayload.error === "string"
+            ? responsePayload.error
+            : "No se pudo registrar la retirada";
           clearPendingWithdrawalAttempt();
           showFeedbackIfWithdrawalContextCurrent(
             {
@@ -913,6 +973,11 @@ export function useSalesPage() {
         return;
       }
 
+      // A proxy/transport may return HTML, empty JSON or an unrelated 2xx body.
+      // Without the sale confirmation, keep the key and the original operation.
+      if (!isConfirmedWithdrawalResponse(responsePayload, registrationPayload.memberId)) {
+        throw new Error("Resultado de venta sin confirmar");
+      }
       clearPendingWithdrawalAttempt();
     } catch {
       showFeedbackIfWithdrawalContextCurrent(
@@ -1137,6 +1202,24 @@ export function useSalesPage() {
     }
   }
 
+  function cancelRfidLookup() {
+    rfidLookupRequestIdRef.current += 1;
+    rfidSubmittingRef.current = false;
+    rfidSubmittingCodeRef.current = "";
+  }
+
+  function clearIdentifiedMember() {
+    // A new identification abandons the entire previous member/cart intention.
+    resetIdempotencyConflict();
+    selectionRef.current = null;
+    invalidatePendingWithdrawalAttempt();
+    updateCurrentMemberContext("");
+    updateCartContext();
+    member.handleClearMember();
+    cart.clearCart();
+    setMemberLoadError("");
+  }
+
   async function processRfidCode(rawCode: string) {
     const code = normalizeRfidCode(rawCode);
     if (
@@ -1154,6 +1237,8 @@ export function useSalesPage() {
       return;
     }
 
+    // Invalidate synchronously, before fetching or capturing the new context.
+    clearIdentifiedMember();
     const requestId = rfidLookupRequestIdRef.current + 1;
     const memberIdAtRequestStart = currentMemberIdRef.current;
     const memberContextVersionAtRequestStart = memberContextVersionRef.current;
@@ -1172,10 +1257,12 @@ export function useSalesPage() {
     clearRfidScanBuffer();
     clearWithdrawalFeedback();
     setRfidError("");
+    setRfidInput("");
 
     try {
       const res = await fetch(`/api/members/by-rfid/${encodeURIComponent(code)}`, {
         cache: "no-store",
+        signal: AbortSignal.timeout(15_000),
       });
 
       if (!isRfidLookupCurrent()) {
@@ -1225,6 +1312,7 @@ export function useSalesPage() {
       }
 
       invalidatePendingWithdrawalAttempt();
+      selectionRef.current = { source: "RFID", memberId: nextMemberId, code };
       updateCurrentMemberContext(nextMemberId);
       member.setMemberId(nextMemberId);
       member.setMemberSearch(selectedMember.fullName);
@@ -1244,6 +1332,9 @@ export function useSalesPage() {
       if (rfidLookupRequestIdRef.current === requestId) {
         rfidSubmittingRef.current = false;
         rfidSubmittingCodeRef.current = "";
+        if (!selectionRef.current && !isRfidLookupCurrent()) {
+          setRfidError("La identificación se descartó al cambiar el contexto. Lee de nuevo la chapita.");
+        }
       }
     }
   }
@@ -1399,7 +1490,11 @@ export function useSalesPage() {
     selectedHashType: productFilters.selectedHashType,
     showRecentSales,
     visibleToday: member.visibleToday,
-    withdrawalFeedback,
+    withdrawalFeedback: idempotencyConflict ? {
+      kind: "error" as const,
+      title: "Retirada bloqueada por conflicto",
+      message: "Esta retirada entra en conflicto con una operación anterior. Revisa los datos. Pulsa «Siguiente socio» para descartar este intento, o identifica de nuevo mediante RFID; ambas acciones vacían la retirada. No se enviará otra venta hasta que vuelvas a registrarla.",
+    } : withdrawalFeedback,
     addProduct: handleAddProduct,
     handleCancelRecentSale,
     handleCartValueKeyDown,

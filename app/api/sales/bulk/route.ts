@@ -1,15 +1,17 @@
 import { requireStaffOrAdmin } from "@/lib/auth-server";
 import {
   createSaleTransaction,
+  RfidAssignmentChangedError,
+  SaleValidationError,
   isIdempotencyConflictError,
   SaleOperationType,
 } from "@/lib/sales-engine";
-import { getErrorMessage } from "@/lib/sales";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
 const bulkSaleSchema = z.object({
   memberId: z.number().int().positive(),
+  expectedRfidCode: z.string().min(1).optional(),
   idempotencyKey: z.string().trim().uuid().optional(),
   items: z
     .array(
@@ -27,11 +29,28 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  const body = await req.json();
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) {
+      return NextResponse.json(
+        { error: "No se pudo confirmar el resultado de la venta.", code: "SALE_RESULT_UNCONFIRMED" },
+        { status: 500 }
+      );
+    }
+    return NextResponse.json(
+      { error: "Datos invalidos", code: "SALE_VALIDATION_ERROR" },
+      { status: 400 }
+    );
+  }
   const parsed = bulkSaleSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Datos invalidos" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Datos invalidos", code: "SALE_VALIDATION_ERROR" },
+      { status: 400 }
+    );
   }
 
   const { idempotencyKey, memberId, items } = parsed.data;
@@ -44,6 +63,7 @@ export async function POST(req: Request) {
   try {
     const result = await createSaleTransaction({
       memberId,
+      expectedRfidCode: parsed.data.expectedRfidCode,
       items,
       operatorUserId: appliedByUserId,
       operatorEmail: auth.session.user.email,
@@ -57,13 +77,29 @@ export async function POST(req: Request) {
       originalAmount: result.originalAmount,
     });
   } catch (error: unknown) {
+    if (error instanceof RfidAssignmentChangedError) {
+      return NextResponse.json(
+        { error: error.message, code: "RFID_ASSIGNMENT_CHANGED" },
+        { status: 409 }
+      );
+    }
     if (isIdempotencyConflictError(error)) {
-      return NextResponse.json({ error: error.message }, { status: 409 });
+      return NextResponse.json(
+        { error: error.message, code: "IDEMPOTENCY_CONFLICT" },
+        { status: 409 }
+      );
+    }
+
+    if (error instanceof SaleValidationError) {
+      return NextResponse.json(
+        { error: error.message, code: "SALE_VALIDATION_ERROR" },
+        { status: 400 }
+      );
     }
 
     return NextResponse.json(
-      { error: getErrorMessage(error, "Error al registrar retirada") },
-      { status: 400 }
+      { error: "No se pudo confirmar el resultado de la venta.", code: "SALE_RESULT_UNCONFIRMED" },
+      { status: 500 }
     );
   }
 }
