@@ -41,6 +41,9 @@ function isInternalSigningSessionData(
 }
 
 export default function NewMemberPage() {
+  const rfidMutationRef = useRef(false);
+  const rfidBlockedRef = useRef(false);
+  const [rfidBlocked, setRfidBlocked] = useState(false);
   const rfidRef = useRef<HTMLInputElement | null>(null);
 
   const [createdMember, setCreatedMember] = useState<CreatedMember | null>(null);
@@ -103,7 +106,9 @@ export default function NewMemberPage() {
     if (!createdMember) return;
 
     const cleanCode = normalizeRfidCode(code);
-    if (!cleanCode || rfidProcessing) return;
+    if (!cleanCode || rfidMutationRef.current || rfidBlockedRef.current) return;
+
+    rfidMutationRef.current = true;
 
     setRfidProcessing(true);
     setError("");
@@ -116,9 +121,23 @@ export default function NewMemberPage() {
         },
         body: JSON.stringify({
           rfidCode: cleanCode,
+          expectedRfidCode: null,
         }),
       });
 
+      if (res.status === 409) {
+        rfidBlockedRef.current = true;
+        setRfidBlocked(true);
+        setAssigningRfid(false);
+        setRfidInput("");
+        setRfidMessage("");
+        setError("No se pudo confirmar la RFID. Abre el expediente y realiza una nueva decision sobre el estado actual.");
+        const refreshed = await fetch(`/api/members/${createdMember.id}/history`, { cache: "no-store" });
+        if (!refreshed.ok) throw new Error("Refresh failed");
+        const history: { member: CreatedMember } = await refreshed.json();
+        setCreatedMember(history.member);
+        return;
+      }
       if (!res.ok) {
         const err = await res.json();
         setError(err.error || "Error asignando RFID");
@@ -130,7 +149,10 @@ export default function NewMemberPage() {
       setAssigningRfid(false);
       setRfidInput("");
       setRfidMessage(`Chapita asignada correctamente: ${updated.rfidCode}`);
+    } catch {
+      setError("No se pudo confirmar el estado RFID. Abre el expediente para comprobarlo.");
     } finally {
+      rfidMutationRef.current = false;
       setRfidProcessing(false);
       focusRfidInput();
     }
@@ -231,6 +253,11 @@ export default function NewMemberPage() {
 
           <div className="mt-1 text-sm font-semibold text-red-700">
             {error}
+            {rfidBlocked && createdMember && (
+              <Link href={`/members/${createdMember.id}`} className="mt-2 block underline">
+                Abrir expediente para revisar RFID
+              </Link>
+            )}
           </div>
         </div>
       ) : null}
@@ -689,7 +716,9 @@ export default function NewMemberPage() {
 
                       <button
                         type="button"
+                        disabled={rfidBlocked || rfidProcessing}
                         onClick={() => {
+                          if (rfidBlockedRef.current) return;
                           setAssigningRfid(true);
                           setRfidInput("");
                           focusRfidInput();
@@ -742,7 +771,7 @@ export default function NewMemberPage() {
                           placeholder="Esperando código RFID..."
                           value={rfidInput}
                           onChange={(e) => setRfidInput(e.target.value)}
-                          disabled={rfidProcessing}
+                          disabled={rfidBlocked || rfidProcessing}
                         />
 
                         <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -756,7 +785,7 @@ export default function NewMemberPage() {
                               setAssigningRfid(false);
                               setRfidInput("");
                             }}
-                            disabled={rfidProcessing}
+                            disabled={rfidBlocked || rfidProcessing}
                             className="app-button-secondary inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-bold disabled:opacity-50"
                           >
                             Cancelar

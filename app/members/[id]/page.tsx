@@ -31,7 +31,10 @@ function mergeMemberHistory(
 
 export default function MemberDetail() {
   const params = useParams<{ id: string }>();
-  const id = params.id;
+  return <MemberDetailContent key={params.id} id={params.id} />;
+}
+
+function MemberDetailContent({ id }: { id: string }) {
   const { data: session, status } = useSession();
   const isAdmin = session?.user?.role === "ADMIN";
   const canUploadPhoto =
@@ -49,6 +52,10 @@ export default function MemberDetail() {
   const [rfidError, setRfidError] = useState("");
   const rfidMutationRef = useRef(false);
   const rfidVersionRef = useRef(0);
+  const historyRequestRef = useRef(0);
+  const rfidBaseRef = useRef<string | null | undefined>(undefined);
+  const rfidBlockedRef = useRef(false);
+  const [rfidBlocked, setRfidBlocked] = useState(false);
   const [savingContractId, setSavingContractId] = useState<number | null>(null);
   const rfidRef = useRef<HTMLInputElement | null>(null);
 
@@ -72,6 +79,7 @@ export default function MemberDetail() {
   async function refreshMember() {
     if (!id) return;
 
+    const requestVersion = ++historyRequestRef.current;
     const rfidVersion = rfidVersionRef.current;
     const historyRes = await fetch(`/api/members/${id}/history`, {
       cache: "no-store",
@@ -82,6 +90,7 @@ export default function MemberDetail() {
     }
 
     const historyData: MemberHistoryData = await historyRes.json();
+    if (requestVersion !== historyRequestRef.current) return;
     setData((current) => mergeMemberHistory(
       current, historyData, rfidVersionRef.current !== rfidVersion
     ));
@@ -146,6 +155,7 @@ export default function MemberDetail() {
     if (!id) return;
 
     let cancelled = false;
+    const requestVersion = ++historyRequestRef.current;
     const rfidVersion = rfidVersionRef.current;
 
     void Promise.all([
@@ -157,7 +167,7 @@ export default function MemberDetail() {
       const historyData: MemberHistoryData = await historyRes.json();
       const accessData: AccessLogRecord[] = await accessRes.json();
 
-      if (!cancelled) {
+      if (!cancelled && requestVersion === historyRequestRef.current) {
         setContracts(contractsData);
         setData((current) => mergeMemberHistory(
           current, historyData, rfidVersionRef.current !== rfidVersion
@@ -228,11 +238,13 @@ export default function MemberDetail() {
       return;
     }
 
+    const requestVersion = ++historyRequestRef.current;
     const rfidVersion = rfidVersionRef.current;
     const historyRes = await fetch(`/api/members/${id}/history`, {
       cache: "no-store",
     });
     const historyData: MemberHistoryData = await historyRes.json();
+    if (requestVersion !== historyRequestRef.current) return;
     setData((current) => mergeMemberHistory(
       current, historyData, rfidVersionRef.current !== rfidVersion
     ));
@@ -275,12 +287,14 @@ export default function MemberDetail() {
 
   async function saveScannedRfid(code: string) {
     const cleanCode = normalizeRfidCode(code);
-    if (!cleanCode || rfidMutationRef.current) {
+    if (!cleanCode || rfidMutationRef.current || rfidBlockedRef.current) {
       focusRfidInput();
       return;
     }
 
+    const expectedRfidCode = rfidBaseRef.current === undefined ? data?.member.rfidCode ?? null : rfidBaseRef.current;
     rfidMutationRef.current = true;
+    rfidVersionRef.current += 1;
     setRfidProcessing(true);
     setRfidError("");
     setRfidMessage("");
@@ -293,9 +307,14 @@ export default function MemberDetail() {
         },
         body: JSON.stringify({
           rfidCode: cleanCode,
+          expectedRfidCode,
         }),
       });
 
+      if (res.status === 409) {
+        await recoverRfidConflict();
+        return;
+      }
       if (!res.ok) {
         const err = await res.json();
         setRfidError(err.error || "Error asignando RFID");
@@ -316,9 +335,33 @@ export default function MemberDetail() {
     }
   }
 
+  async function recoverRfidConflict() {
+    rfidBlockedRef.current = true;
+    setRfidBlocked(true);
+    rfidBaseRef.current = undefined;
+    setAssigningRfid(false);
+    setRfidInput("");
+    setEditForm((current) => ({ ...current, rfidCode: "" }));
+    setRfidError("No se pudo confirmar la RFID. Revisa el estado actualizado y realiza una nueva accion.");
+    rfidVersionRef.current += 1;
+    const requestVersion = ++historyRequestRef.current;
+    try {
+      const res = await fetch(`/api/members/${id}/history`, { cache: "no-store" });
+      if (!res.ok) throw new Error("Refresh failed");
+      const history: MemberHistoryData = await res.json();
+      if (requestVersion !== historyRequestRef.current) throw new Error("Refresh superseded");
+      syncRfid(history.member.rfidCode);
+      rfidBlockedRef.current = false;
+      setRfidBlocked(false);
+    } catch {
+      setRfidError("No se pudo recuperar un estado RFID fiable. Reabre la ficha antes de decidir de nuevo.");
+    }
+  }
+
   function syncRfid(rfidCode: string | null) {
+    rfidBaseRef.current = undefined;
     // Confirmed writes (and the authoritative 409 refresh) supersede older reads.
-    // Failed mutations do not advance the version or suppress valid refreshes.
+    // Each confirmed result supersedes reads started while the write was pending.
     rfidVersionRef.current += 1;
     setData((current) => current
       ? { ...current, member: { ...current.member, rfidCode } }
@@ -328,7 +371,7 @@ export default function MemberDetail() {
 
   async function unassignRfid() {
     const member = data?.member;
-    if (!member?.rfidCode || rfidMutationRef.current) return;
+    if (!member?.rfidCode || rfidMutationRef.current || rfidBlockedRef.current) return;
     const expectedRfidCode = member.rfidCode;
     if (!window.confirm(
       `¿Desasignar la RFID ${expectedRfidCode} de ${member.fullName} (socio #${member.memberNumber ?? member.id})?`
@@ -345,17 +388,7 @@ export default function MemberDetail() {
         body: JSON.stringify({ rfidCode: null, expectedRfidCode }),
       });
       if (res.status === 409) {
-        setRfidError("La RFID del socio cambió desde la confirmación. Revisa el valor actual y confirma de nuevo.");
-        try {
-          const refreshed = await fetch(`/api/members/${id}/history`, { cache: "no-store" });
-          if (!refreshed.ok) throw new Error("Refresh failed");
-          const history: MemberHistoryData = await refreshed.json();
-          syncRfid(history.member.rfidCode);
-          setAssigningRfid(false);
-          setRfidInput("");
-        } catch {
-          setRfidError("La RFID cambió y no se pudo refrescar. Reabre la ficha para comprobar el valor actual.");
-        }
+        await recoverRfidConflict();
         return;
       }
       if (!res.ok) {
@@ -956,16 +989,17 @@ export default function MemberDetail() {
 
                       <input
                         id="member-rfid-code"
-                        disabled={rfidProcessing || rfidUnassigning}
+                        disabled={rfidBlocked || rfidProcessing || rfidUnassigning}
                         className="w-full rounded-xl border border-black/10 bg-white px-4 py-3 font-mono outline-none focus:border-[#a7282d]/40 focus:ring-4 focus:ring-[#a7282d]/8"
                         placeholder="Código de la chapita"
                         value={editForm.rfidCode}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          if (rfidBaseRef.current === undefined) rfidBaseRef.current = data.member.rfidCode;
                           setEditForm({
                             ...editForm,
                             rfidCode: e.target.value,
-                          })
-                        }
+                          });
+                        }}
                       />
 
                       <div className="mt-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -983,7 +1017,7 @@ export default function MemberDetail() {
 
                     <button
                       type="button"
-                      disabled={rfidProcessing || rfidUnassigning || !normalizeRfidCode(editForm.rfidCode)}
+                      disabled={rfidBlocked || rfidProcessing || rfidUnassigning || !normalizeRfidCode(editForm.rfidCode)}
                       onClick={() => void saveScannedRfid(editForm.rfidCode)}
                       className="app-button-secondary rounded-xl px-4 py-3 font-bold disabled:opacity-50"
                     >
@@ -995,7 +1029,7 @@ export default function MemberDetail() {
                     {data.member.rfidCode && (session?.user?.role === "ADMIN" || session?.user?.role === "STAFF") && (
                       <button
                         type="button"
-                        disabled={rfidProcessing || rfidUnassigning}
+                        disabled={rfidBlocked || rfidProcessing || rfidUnassigning}
                         onClick={() => void unassignRfid()}
                         className="app-button-secondary rounded-xl px-4 py-3 font-bold text-red-700 disabled:opacity-50"
                       >
@@ -1031,8 +1065,9 @@ export default function MemberDetail() {
 
                     <button
                       type="button"
-                      disabled={rfidProcessing || rfidUnassigning}
+                      disabled={rfidBlocked || rfidProcessing || rfidUnassigning}
                       onClick={() => {
+                        rfidBaseRef.current = data.member.rfidCode;
                         setAssigningRfid(true);
                         setRfidInput("");
                         focusRfidInput();
@@ -1075,7 +1110,7 @@ export default function MemberDetail() {
                           placeholder="Esperando código RFID..."
                           value={rfidInput}
                           onChange={(e) => setRfidInput(e.target.value)}
-                          disabled={rfidProcessing || rfidUnassigning}
+                          disabled={rfidBlocked || rfidProcessing || rfidUnassigning}
                         />
 
                         <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
@@ -1085,7 +1120,7 @@ export default function MemberDetail() {
 
                           <button
                             type="button"
-                            disabled={rfidProcessing || rfidUnassigning}
+                            disabled={rfidBlocked || rfidProcessing || rfidUnassigning}
                             onClick={() => {
                               setAssigningRfid(false);
                               setRfidInput("");
