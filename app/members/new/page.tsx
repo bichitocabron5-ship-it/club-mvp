@@ -23,6 +23,20 @@ type CreatedMember = {
   rfidCode: string | null;
 };
 
+function isCreatedMember(value: unknown): value is CreatedMember {
+  if (!value || typeof value !== "object") return false;
+  const member = value as Partial<CreatedMember>;
+  return typeof member.id === "number" && Number.isSafeInteger(member.id) && member.id > 0 &&
+    typeof member.fullName === "string" && typeof member.dni === "string" &&
+    typeof member.active === "boolean" &&
+    (member.memberNumber === undefined || member.memberNumber === null ||
+      typeof member.memberNumber === "string" || typeof member.memberNumber === "number") &&
+    (member.phone === null || typeof member.phone === "string") &&
+    (member.email === null || typeof member.email === "string") &&
+    (member.expiresAt === null || (typeof member.expiresAt === "string" && !Number.isNaN(new Date(member.expiresAt).getTime()))) &&
+    (member.rfidCode === null || typeof member.rfidCode === "string");
+}
+
 function isInternalSigningSessionData(
   value: unknown
 ): value is InternalSigningSessionData {
@@ -41,6 +55,7 @@ function isInternalSigningSessionData(
 }
 
 export default function NewMemberPage() {
+  const createPendingRef = useRef(false);
   const rfidMutationRef = useRef(false);
   const rfidBlockedRef = useRef(false);
   const [rfidBlocked, setRfidBlocked] = useState(false);
@@ -73,33 +88,38 @@ export default function NewMemberPage() {
 
   async function createMember(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (createPendingRef.current || createdMember) return;
+    createPendingRef.current = true;
     setLoading(true);
     setError("");
-
-    const res = await fetch("/api/members", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        fullName: form.fullName,
-        dni: form.dni,
-        phone: form.phone,
-        email: form.email,
-        expiresAt: form.expiresAt || null,
-      }),
-    });
-
-    setLoading(false);
-
-    if (!res.ok) {
-      const err = await res.json();
-      setError(err.error || "Error creando socio");
-      return;
+    try {
+      const res = await fetch("/api/members", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          fullName: form.fullName,
+          dni: form.dni,
+          phone: form.phone,
+          email: form.email,
+          expiresAt: form.expiresAt || null,
+        }),
+      });
+      const member: unknown = await res.json();
+      if (!res.ok && member && typeof member === "object" &&
+          "error" in member && typeof member.error === "string" && member.error.trim()) {
+        setError(member.error);
+        return;
+      }
+      if (!res.ok || !isCreatedMember(member)) throw new Error("Unconfirmed create response");
+      setCreatedMember(member);
+    } catch {
+      setError("Resultado sin confirmar. Comprueba si el socio se creo antes de volver a intentarlo.");
+    } finally {
+      setLoading(false);
+      createPendingRef.current = false;
     }
-
-    const member: CreatedMember = await res.json();
-    setCreatedMember(member);
   }
 
   async function assignRfid(code: string) {
