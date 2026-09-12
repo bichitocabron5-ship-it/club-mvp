@@ -38,12 +38,12 @@ const memberUpdateSchema = z.object({
   phone: z.string().trim().optional().nullable(),
   email: z.string().trim().optional().nullable(),
   expiresAt: z.string().optional().nullable(),
-  rfidCode: z.string().optional().nullable(),
-  expectedRfidCode: z.string().optional(),
   commercialProfile: z.string().trim().min(1).optional(),
   discountPercent: z.number().min(0).max(100).optional(),
   commercialNotes: z.string().trim().optional().nullable(),
 });
+
+class RfidAlreadyAssignedError extends Error {}
 
 function trimToNull(value: string | null | undefined) {
   const trimmed = value?.trim();
@@ -78,44 +78,43 @@ export async function PATCH(
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "JSON invalido" }, { status: 400 });
+    return NextResponse.json({ code: "INVALID_PAYLOAD", error: "JSON invalido" }, { status: 400 });
   }
 
-  const parsed = memberUpdateSchema.safeParse(body);
-
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Datos invalidos" }, { status: 400 });
-  }
-
-  const data = parsed.data;
-  if (data.rfidCode === null) {
-    const expectedRfidCode = normalizeRfidCode(data.expectedRfidCode ?? "");
-    if (
-      !expectedRfidCode ||
-      Object.keys(body).some((key) => key !== "rfidCode" && key !== "expectedRfidCode")
-    ) {
-      return NextResponse.json(
-        { error: "Desasignar requiere expectedRfidCode valido y no admite otros cambios" },
-        { status: 400 }
-      );
+  // Inspect the original JSON before Zod can strip unknown editable fields.
+  if (body && typeof body === "object" &&
+      ("rfidCode" in body || "expectedRfidCode" in body)) {
+    const parsedRfid = z.object({
+      rfidCode: z.string().nullable(),
+      expectedRfidCode: z.string().nullable(),
+    }).strict().safeParse(body);
+    if (!parsedRfid.success) {
+      return NextResponse.json({ code: "INVALID_PAYLOAD", error: "RFID requiere destino y precondicion, sin otros campos" }, { status: 400 });
     }
-
+    const destination = parsedRfid.data.rfidCode === null ? null : normalizeRfidCode(parsedRfid.data.rfidCode);
+    const expected = parsedRfid.data.expectedRfidCode === null ? null : normalizeRfidCode(parsedRfid.data.expectedRfidCode);
+    if (destination === "" || expected === "") {
+      return NextResponse.json({ code: "INVALID_PAYLOAD", error: "Codigo RFID invalido" }, { status: 400 });
+    }
     try {
       const result = await prisma.$transaction(async (tx) => {
-        // The predicate is checked by the UPDATE, not by an earlier snapshot.
-        const updated = await tx.member.updateMany({
-          where: { id: memberId, rfidCode: expectedRfidCode },
-          data: { rfidCode: null },
+        // Exact no-ops do not write. All transitions use the expected-state predicate.
+        const updated = expected === destination ? { count: 0 } : await tx.member.updateMany({
+          where: { id: memberId, rfidCode: expected },
+          data: { rfidCode: destination },
+        }).catch((error: unknown) => {
+          // Only a unique error from this Member write can mean duplicate RFID.
+          if (isUniqueConstraintError(error, "rfidCode")) throw new RfidAlreadyAssignedError();
+          throw error;
         });
         const member = await tx.member.findUnique({ where: { id: memberId } });
-        if (!member) return { status: 404, body: { error: "Socio no encontrado" } };
+        if (!member) return { status: 404, body: { code: "MEMBER_NOT_FOUND", error: "Socio no encontrado" } };
         if (updated.count === 0) {
-          return member.rfidCode === null
+          return (member.rfidCode === expected && expected === destination) ||
+            (member.rfidCode === null && destination === null)
             ? { status: 200, body: member }
-            : { status: 409, body: { error: "La RFID del socio cambio desde la confirmacion" } };
+            : { status: 409, body: { code: "RFID_EXPECTATION_FAILED", error: "La RFID del socio cambio desde la confirmacion" } };
         }
-
-        // Do not use the best-effort helper here: failure must roll back the update.
         const actorUserId = Number(auth.session.user.id);
         await tx.auditLog.create({
           data: {
@@ -124,30 +123,34 @@ export async function PATCH(
             action: "MEMBER_RFID_UPDATED",
             entityType: "Member",
             entityId: String(member.id),
-            summary: `RFID desasignada para socio #${member.id}`,
-            metadata: { operation: "UNASSIGN", hadRfid: true, hasRfid: false },
+            summary: `RFID actualizado para socio #${member.id}`,
+            metadata: {
+              operation: destination === null ? "UNASSIGN" : expected === null ? "ASSIGN" : "CHANGE",
+              hadRfid: expected !== null,
+              hasRfid: destination !== null,
+            },
           },
         });
         return { status: 200, body: member };
       });
       return NextResponse.json(result.body, { status: result.status });
-    } catch {
-      return NextResponse.json(
-        { error: "No se pudo desasignar la RFID" },
-        { status: 500 }
-      );
+    } catch (error) {
+      if (error instanceof RfidAlreadyAssignedError) {
+        return NextResponse.json({ code: "RFID_ALREADY_ASSIGNED", error: "Esta chapita ya esta asignada a otro socio" }, { status: 409 });
+      }
+      return NextResponse.json({ error: "No se pudo actualizar la RFID" }, { status: 500 });
     }
   }
+  const parsed = memberUpdateSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Datos invalidos" }, { status: 400 });
+  }
+  const data = parsed.data;
   const normalizedMemberNumber = normalizeMemberNumber(data.memberNumber);
   const validatedMemberNumber = validateMemberNumber(normalizedMemberNumber);
   const normalizedDni =
     data.dni === undefined ? undefined : normalizeMemberIdentity(data.dni);
   const normalizedExpiresAt = normalizeDateOnly(data.expiresAt);
-  const normalizedRfidCode =
-    data.rfidCode === undefined || data.rfidCode === null
-      ? undefined
-      : normalizeRfidCode(data.rfidCode);
-
   if (!validatedMemberNumber.ok) {
     return NextResponse.json({ error: validatedMemberNumber.error }, { status: 400 });
   }
@@ -161,10 +164,6 @@ export async function PATCH(
       { error: "Documento de identidad invalido" },
       { status: 400 }
     );
-  }
-
-  if (data.rfidCode !== undefined && !normalizedRfidCode) {
-    return NextResponse.json({ error: "Codigo RFID invalido" }, { status: 400 });
   }
 
   const existingMember = await prisma.member.findUnique({
@@ -238,7 +237,7 @@ export async function PATCH(
       where: { id: memberId },
       data: {
         memberNumber:
-          validatedMemberNumber.value !== undefined
+          data.memberNumber !== undefined
             ? validatedMemberNumber.value
             : undefined,
         fullName: data.fullName,
@@ -251,7 +250,6 @@ export async function PATCH(
             : normalizedExpiresAt === null
               ? null
               : new Date(normalizedExpiresAt),
-        rfidCode: normalizedRfidCode,
         commercialProfile: isAdmin ? data.commercialProfile : undefined,
         discountPercent: isAdmin ? data.discountPercent : undefined,
         commercialNotes: isAdmin
@@ -296,10 +294,6 @@ export async function PATCH(
     ) {
       changedFields.push("commercialNotes");
     }
-    if (trimToNull(member.rfidCode) !== trimToNull(existingMember.rfidCode)) {
-      changedFields.push("rfidCode");
-    }
-
     if (changedFields.length > 0) {
       const actorUserId = Number(auth.session.user.id);
       const actorEmail = auth.session.user.email;
@@ -337,21 +331,6 @@ export async function PATCH(
             commercialProfile: member.commercialProfile,
             discountPercent: Number(member.discountPercent),
             notesUpdated: changedFields.includes("commercialNotes"),
-          },
-        });
-      }
-
-      if (changedFields.includes("rfidCode")) {
-        await createAuditLog({
-          actorUserId,
-          actorEmail,
-          action: "MEMBER_RFID_UPDATED",
-          entityType: "Member",
-          entityId: member.id,
-          summary: `RFID actualizado para socio #${member.memberNumber ?? member.id}`,
-          metadata: {
-            hadRfid: Boolean(existingMember.rfidCode),
-            hasRfid: Boolean(member.rfidCode),
           },
         });
       }
