@@ -4,7 +4,7 @@
 import type { MemberSummary } from "@/lib/types";
 import { normalizeMemberIdentity } from "@/lib/member-identity";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PageHeader } from "@/components/ui/page-header";
 
 type MemberForm = {
@@ -26,6 +26,9 @@ const initialForm: MemberForm = {
 };
 
 export default function MembersPage() {
+  const createPendingRef = useRef(false);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState("");
   const [members, setMembers] = useState<MemberSummary[]>([]);
   const [form, setForm] = useState<MemberForm>(initialForm);
   const [search, setSearch] = useState("");
@@ -33,7 +36,9 @@ export default function MembersPage() {
 
   async function loadMembers() {
     const res = await fetch("/api/members");
+    if (!res.ok) throw new Error("List refresh failed");
     const data: MemberSummary[] = await res.json();
+    if (!Array.isArray(data)) throw new Error("Invalid list response");
     setMembers(data);
   }
 
@@ -55,17 +60,40 @@ export default function MembersPage() {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-
-    await fetch("/api/members", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(form),
-    });
-
-    setForm(initialForm);
-    await loadMembers();
+    if (createPendingRef.current) return;
+    createPendingRef.current = true;
+    setCreating(true);
+    setCreateError("");
+    try {
+      const res = await fetch("/api/members", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const data: unknown = await res.json();
+      if (!res.ok && data && typeof data === "object" &&
+          "error" in data && typeof data.error === "string" && data.error.trim()) {
+        setCreateError(data.error);
+        return;
+      }
+      if (!res.ok || !data || typeof data !== "object" ||
+          !("id" in data) || typeof data.id !== "number" || !Number.isSafeInteger(data.id) || data.id <= 0 ||
+          !("fullName" in data) || typeof data.fullName !== "string" ||
+          !("dni" in data) || typeof data.dni !== "string") {
+        throw new Error("Unconfirmed create response");
+      }
+      setForm(initialForm);
+      try {
+        await loadMembers();
+      } catch {
+        setCreateError("Socio creado. No se pudo actualizar el listado; recarga la pagina para verlo.");
+      }
+    } catch {
+      setCreateError("Resultado sin confirmar. Comprueba si el socio se creo antes de volver a intentarlo.");
+    } finally {
+      createPendingRef.current = false;
+      setCreating(false);
+    }
   }
 
   const filteredMembers = members.filter((m) => {
@@ -226,6 +254,7 @@ export default function MembersPage() {
           onSubmit={handleSubmit}
           className="grid gap-4 p-5 sm:p-6 lg:grid-cols-2 xl:grid-cols-4"
         >
+          {createError && <p role="alert" className="text-sm font-semibold text-red-700 lg:col-span-2 xl:col-span-4">{createError}</p>}
           <label className="block text-sm font-bold text-[#201f1d] xl:col-span-2">
             Nombre completo
 
@@ -319,9 +348,10 @@ export default function MembersPage() {
           <div className="flex items-end lg:col-span-2 xl:col-span-2">
             <button
               type="submit"
+              disabled={creating}
               className="app-button-primary inline-flex w-full items-center justify-center rounded-xl px-5 py-3.5 font-bold sm:w-auto"
             >
-              Crear socio
+              {creating ? "Creando socio..." : "Crear socio"}
             </button>
           </div>
         </form>
