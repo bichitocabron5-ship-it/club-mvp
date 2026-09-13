@@ -4,7 +4,6 @@ import {
   MEMBER_IDENTITY_MAX_INPUT_LENGTH,
   normalizeMemberIdentity,
 } from "@/lib/member-identity";
-import { isUniqueConstraintError } from "@/lib/member-number";
 import { prisma } from "@/lib/prisma";
 import {
   checkRateLimit,
@@ -32,6 +31,8 @@ const SIGNATURE_BASE64_MAX_CHARS = Math.ceil(SIGNATURE_IMAGE_MAX_BYTES / 3) * 4;
 const PUBLIC_SIGNING_ERROR = "La sesion de firma no esta disponible";
 const INVALID_SIGNING_PAYLOAD_ERROR = "No se pudo procesar la firma";
 const SIGNING_SESSION_NOT_PENDING_ERROR = "SIGNING_SESSION_NOT_PENDING";
+
+class SigningAuditError extends Error {}
 
 const tokenSchema = z
   .string()
@@ -444,16 +445,6 @@ export async function POST(
         throw new Error(SIGNING_SESSION_NOT_PENDING_ERROR);
       }
 
-      await tx.member.update({
-        where: { id: existingSession.memberId },
-        data: {
-          fullName: mergedFullName,
-          dni: mergedDni,
-          phone: mergedPhone,
-          email: mergedEmail,
-        },
-      });
-
       const createdContract = await tx.memberContract.create({
         data: {
           memberId: existingSession.memberId,
@@ -473,20 +464,41 @@ export async function POST(
         },
       });
 
+      try {
+        await tx.auditLog.create({
+          data: {
+            actorUserId: null,
+            actorEmail: null,
+            action: "CONTRACT_SIGNED",
+            entityType: "MemberContract",
+            entityId: String(createdContract.id),
+            summary: "Contrato firmado",
+            metadata: {
+              memberId: existingSession.memberId,
+              signingSessionId: existingSession.id,
+              source: "PUBLIC_SIGNING",
+            },
+          },
+        });
+      } catch (error) {
+        // Audit failures must roll back, never enter contract replay recovery.
+        throw new SigningAuditError("Contract audit failed", { cause: error });
+      }
+
       return {
         contractId: createdContract.id,
       };
     });
   } catch (error) {
+    if (error instanceof SigningAuditError) {
+      return invalidSigningPayload(500);
+    }
+
     if (
       error instanceof Error &&
       error.message === SIGNING_SESSION_NOT_PENDING_ERROR
     ) {
       return publicSigningError(409);
-    }
-
-    if (isUniqueConstraintError(error, "dni")) {
-      return invalidSigningPayload(409);
     }
 
     if (!isSigningSessionContractUniqueError(error)) {
