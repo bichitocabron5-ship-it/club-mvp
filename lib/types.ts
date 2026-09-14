@@ -586,6 +586,7 @@ export type SigningSessionData = {
 };
 
 export type PublicSigningSessionData = {
+  monthlyLimitError?: "MONTHLY_LIMIT_NOT_CONFIGURED" | "MONTHLY_LIMIT_UNAVAILABLE" | null;
   status: "PENDING" | "SIGNED" | "CANCELLED" | string;
   member: {
     fullName: string;
@@ -606,7 +607,7 @@ export type PublicSigningSessionData = {
     fileUrl: string;
   } | null;
   clubSettings?: {
-    defaultMonthlyLimitG: number;
+    defaultMonthlyLimitG: number | null;
   };
 };
 

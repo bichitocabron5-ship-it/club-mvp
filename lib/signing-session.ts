@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 
-import { getClubSettings } from "@/lib/club-settings";
+import { getPersistedMonthlyLimitG } from "@/lib/club-settings";
 import { createSignedUrlForAllowedStorageRef } from "@/lib/contract-storage";
 import {
   findActiveContractTemplate,
@@ -57,7 +57,19 @@ export async function serializePublicSigningSession(
         context: "lib/signing-session:contractTemplate",
       })
     : null;
-  const settings = await getClubSettings();
+  // Signed responses (including replay) never depend on current settings.
+  let authorizedMonthlyLimitG: number | null = null;
+  let monthlyLimitError: PublicSigningSessionData["monthlyLimitError"] = null;
+  if (!session.contract && session.status === "PENDING") {
+    try {
+      authorizedMonthlyLimitG = await getPersistedMonthlyLimitG();
+      if (authorizedMonthlyLimitG === null) {
+        monthlyLimitError = "MONTHLY_LIMIT_NOT_CONFIGURED";
+      }
+    } catch {
+      monthlyLimitError = "MONTHLY_LIMIT_UNAVAILABLE";
+    }
+  }
   const contractData = await getLatestContractData(session);
 
   return {
@@ -70,7 +82,9 @@ export async function serializePublicSigningSession(
       address: contractData?.address ?? null,
       birthPlace: contractData?.birthPlace ?? null,
       birthDate: contractData?.birthDate?.toISOString() ?? null,
-      consumptionGrams: contractData?.consumptionGrams ?? null,
+      consumptionGrams: session.contract
+        ? session.contract.consumptionGrams
+        : authorizedMonthlyLimitG,
       memberNumber: session.member.memberNumber,
       displayNumber: session.member.memberNumber ?? String(session.member.id),
     },
@@ -83,8 +97,9 @@ export async function serializePublicSigningSession(
         }
       : null,
     clubSettings: {
-      defaultMonthlyLimitG: settings.defaultMonthlyLimitG,
+      defaultMonthlyLimitG: authorizedMonthlyLimitG,
     },
+    monthlyLimitError,
   };
 }
 

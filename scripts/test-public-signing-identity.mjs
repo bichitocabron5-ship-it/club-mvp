@@ -16,7 +16,7 @@ const { Prisma } = require("@prisma/client");
 const root = resolve(import.meta.dirname, "..");
 const copy = value => structuredClone(value);
 const plain = value => JSON.parse(JSON.stringify(value));
-function loader(mocks) {
+export function loader(mocks) {
   const cache = new Map();
   function load(name) {
     if (name in mocks) return mocks[name];
@@ -68,7 +68,7 @@ const templateDocument = await PDFDocument.create();
 for (let i = 0; i < 3; i++) templateDocument.addPage();
 const templateBytes = await templateDocument.save();
 
-function harness(options = {}) {
+export function harness(options = {}) {
   const members = copy([original, other]);
   let state = {
     session: {
@@ -79,7 +79,13 @@ function harness(options = {}) {
     contracts: options.previous ? [copy(previous)] : [], audits: [],
   };
   const initial = copy(state);
-  const calls = { transactions: 0, rollbacks: 0, memberWrites: 0, creates: 0, audits: 0, recoveries: 0, globalRecoveries: 0, pdf: 0, pdfUpdates: 0 };
+  const calls = { transactions: 0, rollbacks: 0, memberWrites: 0, creates: 0, audits: 0, recoveries: 0, globalRecoveries: 0, pdf: 0, pdfUpdates: 0, settingsReads: 0, settingsLocks: 0 };
+  let monthlyLimit = Object.hasOwn(options, "monthlyLimit") ? options.monthlyLimit : 30;
+  let settingsError = options.settingsError;
+  const readSettings = () => {
+    if (settingsError) throw settingsError;
+    return monthlyLimit === undefined ? null : { defaultMonthlyLimitG: monthlyLimit };
+  };
   const pdfSources = [], pdfText = [], uploads = [];
   const gate = deferred();
   let initialReads = 0, tail = Promise.resolve();
@@ -90,6 +96,12 @@ function harness(options = {}) {
   const latest = (contracts, memberId) => contracts.filter(c => c.memberId === memberId)
     .sort((a, b) => b.signedAt - a.signedAt || b.id - a.id)[0] ?? null;
   const prisma = {
+    clubSetting: { async findUnique({ where, select }) {
+      calls.settingsReads++;
+      assert.deepEqual(plain(where), { id: 1 });
+      assert.deepEqual(plain(select), { defaultMonthlyLimitG: true });
+      return readSettings();
+    } },
     member: memberDelegate,
     signingSession: { async findUnique({ where }) {
       if (where.token !== token) return null;
@@ -129,6 +141,14 @@ function harness(options = {}) {
       await wait;
       const staged = copy(state);
       const tx = {
+        async $queryRaw(strings, ...values) {
+          calls.settingsLocks++;
+          assert.equal(staged.session.status, "SIGNED", "claim session before settings read");
+          assert.match(strings.join("?"), /SELECT "defaultMonthlyLimitG" FROM "ClubSetting" WHERE "id" = 1 FOR SHARE/);
+          assert.equal(values.length, 0);
+          const row = readSettings();
+          return row ? [row] : [];
+        },
         member: memberDelegate,
         signingSession: { async updateMany({ where, data }) {
           assert.deepEqual(plain(where), { id: 9, status: "PENDING" });
@@ -167,6 +187,7 @@ function harness(options = {}) {
       try {
         const result = await fn(tx);
         state = staged;
+        options.onCommit?.();
         return result;
       } catch (error) {
         calls.rollbacks++;
@@ -179,7 +200,6 @@ function harness(options = {}) {
     "next/server": { NextResponse: Response },
     "@/lib/prisma": { prisma },
     "@/lib/contract-templates": { findActiveContractTemplate: async () => template, resolveContractTemplateForContract: async () => template },
-    "@/lib/club-settings": { getClubSettings: async () => ({ defaultMonthlyLimitG: 30 }) },
     "@/lib/storage": { isStorageUrlsDisabled: () => false },
     "@/lib/contract-storage": {
       createSignedUrlForAllowedStorageRef: async ref => ref ? "https://storage.invalid/controlled" : null,
@@ -215,10 +235,12 @@ function harness(options = {}) {
   const { POST, GET } = load("@/app/api/signing-sessions/[token]/route");
   return {
     calls, initial, pdfSources, pdfText, uploads,
+    setMonthlyLimit(value) { monthlyLimit = value; },
+    setSettingsError(value) { settingsError = value; },
     get members() { return copy(members); }, get state() { return copy(state); },
     normalize: load("@/lib/member-identity").normalizeMemberIdentity,
-    async post(form = identical, requestToken = token) {
-      const body = { signatureImage, ...(form === null ? {} : { form }) };
+    async post(form = identical, requestToken = token, expectedConsumptionGrams = 30, overrides = {}) {
+      const body = { signatureImage, expectedConsumptionGrams, ...(form === null ? {} : { form }), ...overrides };
       const response = await POST(new Request(`http://localhost/api/signing-sessions/${requestToken}`, {
         method: "POST", body: JSON.stringify(body),
       }), { params: Promise.resolve({ token: requestToken }) });
@@ -237,7 +259,7 @@ function intact(h) {
   assert.deepEqual(h.members[0].updatedAt, original.updatedAt, "I: timestamp sentinel unchanged");
   assert.equal(h.calls.memberWrites, 0, "AE: no Member delegate calls");
 }
-function committed(h) {
+export function committed(h) {
   intact(h);
   const contracts = h.state.contracts.filter(c => c.signingSessionId === 9);
   assert.equal(contracts.length, 1, "P: one contract");
@@ -248,15 +270,16 @@ function committed(h) {
   assert.deepEqual(h.state.audits[0], {
     actorUserId: null, actorEmail: null, action: "CONTRACT_SIGNED", entityType: "MemberContract",
     entityId: String(contracts[0].id), summary: "Contrato firmado",
-    metadata: { memberId: 17, signingSessionId: 9, source: "PUBLIC_SIGNING" },
+    metadata: { memberId: 17, signingSessionId: 9, source: "PUBLIC_SIGNING", monthlyLimitSource: "CLUB_SETTING", monthlyLimitG: contracts[0].consumptionGrams },
   }, "S/AF: exact non-PII audit; no MEMBER_UPDATED");
   return contracts[0];
 }
-function rolledBack(h) {
+export function rolledBack(h) {
   intact(h);
   assert.deepEqual(h.state, h.initial, "session/signature/date/contract/audit rollback together");
   assert.equal(h.calls.pdf, 0);
 }
+if (resolve(process.argv[1] ?? "") === resolve(import.meta.filename)) {
 for (const [label, form] of [
   ["A", identical], ["B", { ...identical, fullName: different.fullName }],
   ["C", { ...identical, dni: "  x-12.3  " }], ["D", { ...identical, phone: " 222 " }],
@@ -280,7 +303,8 @@ await test("K/M: omitted form uses Member and previous-contract fallbacks", asyn
   const h = harness({ previous: true }); assert.equal((await h.post(null)).status, 200);
   const contract = committed(h);
   for (const field of Object.keys(identical)) assert.equal(contract[field], original[field]);
-  for (const field of ["address", "birthPlace", "birthDate", "consumptionGrams"]) assert.deepEqual(contract[field], previous[field]);
+  for (const field of ["address", "birthPlace", "birthDate"]) assert.deepEqual(contract[field], previous[field]);
+  assert.equal(contract.consumptionGrams, 30);
   assert.deepEqual(h.state.contracts[0], previous, "previous contract unchanged");
 });
 for (const field of Object.keys(identical)) await test(`K: omitted ${field}`, async () => {
@@ -291,14 +315,16 @@ for (const field of Object.keys(identical)) await test(`K: omitted ${field}`, as
 await test("K: empty form without previous contract retains null fallbacks", async () => {
   const h = harness(); assert.equal((await h.post({})).status, 200);
   const contract = committed(h);
-  for (const field of ["address", "birthPlace", "birthDate", "consumptionGrams"]) assert.equal(contract[field], null);
+  for (const field of ["address", "birthPlace", "birthDate"]) assert.equal(contract[field], null);
+  assert.equal(contract.consumptionGrams, 30);
 });
 await test("N: empty optional values keep identity but clear other contractual fields", async () => {
   const h = harness({ previous: true });
   assert.equal((await h.post({ fullName: "  ", phone: "", email: "  ", address: "", birthPlace: " ", birthDate: "", consumptionGrams: "" })).status, 200);
   const contract = committed(h);
   for (const field of Object.keys(identical)) assert.equal(contract[field], original[field]);
-  for (const field of ["address", "birthPlace", "birthDate", "consumptionGrams"]) assert.equal(contract[field], null);
+  for (const field of ["address", "birthPlace", "birthDate"]) assert.equal(contract[field], null);
+  assert.equal(contract.consumptionGrams, 30);
 });
 for (const dni of ["", " .- "]) await test("O: explicit empty canonical DNI remains 400", async () => {
   const h = harness(); assert.equal((await h.post({ dni })).status, 400); rolledBack(h);
@@ -331,16 +357,12 @@ await test("Y: two pending reads, serialized transaction double, count-zero reco
   assert.equal(h.calls.creates, 1); assert.equal(h.calls.audits, 1);
 });
 for (const value of [undefined, "", "  ", "1", 30, "1000", 0, -1, 1001, 1.5, "invalid", null]) {
-  await test(`Z: unchanged consumptionGrams ${JSON.stringify(value)}`, async () => {
+  await test(`Z: legacy consumptionGrams ignored ${JSON.stringify(value)}`, async () => {
     const h = harness({ previous: true });
-    const expected = value === undefined ? 37 : typeof value === "string" && !value.trim() ? null : Number(value);
-    const valid = value !== null && (expected === null || (Number.isInteger(expected) && expected > 0 && expected <= 1000));
     const result = await h.post(value === undefined ? {} : { consumptionGrams: value });
-    assert.equal(result.status, valid ? 200 : 400);
-    if (valid) {
-      assert.equal(committed(h).consumptionGrams, expected);
-      assert.equal(result.body.member.consumptionGrams, expected);
-    } else rolledBack(h);
+    assert.equal(result.status, 200);
+    assert.equal(committed(h).consumptionGrams, 30);
+    assert.equal(result.body.member.consumptionGrams, 30);
   });
 }
 for (const invalid of ["invalid", "b".repeat(48)]) await test("AA: invalid/missing token", async () => {
@@ -374,3 +396,4 @@ await test("AE/AF: source contains no Member writer, internal HTTP or MEMBER_UPD
   assert.equal((source.match(/action: "CONTRACT_SIGNED"/g) ?? []).length, 1);
 });
 console.log(`${checks} checks passed. A-AF covered with controlled dependencies; no PostgreSQL concurrency or Next.js HTTP-500 rendering claim.`);
+}

@@ -1,4 +1,5 @@
 import { ensureSignedContractPdf } from "@/lib/contract-pdf";
+import { getPersistedMonthlyLimitG } from "@/lib/club-settings";
 import { findActiveContractTemplate } from "@/lib/contract-templates";
 import {
   MEMBER_IDENTITY_MAX_INPUT_LENGTH,
@@ -33,6 +34,9 @@ const INVALID_SIGNING_PAYLOAD_ERROR = "No se pudo procesar la firma";
 const SIGNING_SESSION_NOT_PENDING_ERROR = "SIGNING_SESSION_NOT_PENDING";
 
 class SigningAuditError extends Error {}
+class MonthlyLimitConfigurationError extends Error {}
+class MonthlyLimitReadError extends Error {}
+class MonthlyLimitChangedError extends Error {}
 
 const tokenSchema = z
   .string()
@@ -79,6 +83,7 @@ function isPngSignatureDataUrl(value: string) {
 
 const signPayloadSchema = z
   .object({
+    expectedConsumptionGrams: z.number().int().positive().max(2_147_483_647),
     signatureImage: z
       .string()
       .trim()
@@ -93,9 +98,9 @@ const signPayloadSchema = z
         birthDate: optionalText(10),
         phone: optionalText(40),
         email: optionalText(254),
-        consumptionGrams: z
-          .union([z.string().trim().max(6), z.number()])
-          .optional(),
+        // Legacy clients may send this field; it has no authority or validation.
+        // The existing request byte limit still applies to the entire payload.
+        consumptionGrams: z.unknown().optional(),
       })
       .strict()
       .optional(),
@@ -195,24 +200,6 @@ function parseBirthDate(value: string | null | undefined) {
   }
 
   return date;
-}
-
-function parseConsumptionGrams(value: string | number | null | undefined) {
-  if (value === undefined || value === null || value === "") {
-    return null;
-  }
-
-  const numericValue = typeof value === "number" ? value : Number(value);
-
-  if (
-    !Number.isInteger(numericValue) ||
-    numericValue <= 0 ||
-    numericValue > 1000
-  ) {
-    return "INVALID" as const;
-  }
-
-  return numericValue;
 }
 
 function hasOwnFormField(form: object, field: string) {
@@ -371,14 +358,10 @@ export async function POST(
   const hasBirthPlace = hasOwnFormField(form, "birthPlace");
   const hasBirthDate = hasOwnFormField(form, "birthDate");
   const hasDni = hasOwnFormField(form, "dni");
-  const hasConsumptionGrams = hasOwnFormField(form, "consumptionGrams");
   const birthDate = hasBirthDate ? parseBirthDate(form.birthDate) : null;
-  const consumptionGrams = hasConsumptionGrams
-    ? parseConsumptionGrams(form.consumptionGrams)
-    : null;
   const submittedDni = hasDni ? normalizeMemberIdentity(form.dni ?? "") : null;
 
-  if (birthDate === "INVALID" || consumptionGrams === "INVALID") {
+  if (birthDate === "INVALID") {
     return invalidSigningPayload(400);
   }
 
@@ -405,9 +388,6 @@ export async function POST(
   const mergedBirthDate = hasBirthDate
     ? birthDate
     : previousContract?.birthDate ?? null;
-  const mergedConsumptionGrams = hasConsumptionGrams
-    ? consumptionGrams
-    : previousContract?.consumptionGrams ?? null;
 
   if (!mergedDni) {
     return invalidSigningPayload(400);
@@ -445,6 +425,21 @@ export async function POST(
         throw new Error(SIGNING_SESSION_NOT_PENDING_ERROR);
       }
 
+      // Claim/recover the session first, so a concurrent replay needs no settings.
+      // The shared settings row lock is held through contract + audit commit.
+      let authorizedMonthlyLimitG: number | null;
+      try {
+        authorizedMonthlyLimitG = await getPersistedMonthlyLimitG(tx);
+      } catch (error) {
+        throw new MonthlyLimitReadError("Monthly limit unavailable", { cause: error });
+      }
+      if (authorizedMonthlyLimitG === null) {
+        throw new MonthlyLimitConfigurationError();
+      }
+      if (parsedBody.data.expectedConsumptionGrams !== authorizedMonthlyLimitG) {
+        throw new MonthlyLimitChangedError();
+      }
+
       const createdContract = await tx.memberContract.create({
         data: {
           memberId: existingSession.memberId,
@@ -458,7 +453,7 @@ export async function POST(
           birthDate: mergedBirthDate,
           phone: mergedPhone,
           email: mergedEmail,
-          consumptionGrams: mergedConsumptionGrams,
+          consumptionGrams: authorizedMonthlyLimitG,
 
           signatureImage: parsedBody.data.signatureImage,
         },
@@ -477,6 +472,8 @@ export async function POST(
               memberId: existingSession.memberId,
               signingSessionId: existingSession.id,
               source: "PUBLIC_SIGNING",
+              monthlyLimitSource: "CLUB_SETTING",
+              monthlyLimitG: authorizedMonthlyLimitG,
             },
           },
         });
@@ -490,6 +487,24 @@ export async function POST(
       };
     });
   } catch (error) {
+    if (error instanceof MonthlyLimitConfigurationError) {
+      return NextResponse.json({
+        code: "MONTHLY_LIMIT_NOT_CONFIGURED",
+        error: "No se puede completar la firma porque el límite mensual no está configurado. Contacta con el club.",
+      }, { status: 503 });
+    }
+    if (error instanceof MonthlyLimitReadError) {
+      return NextResponse.json({
+        code: "MONTHLY_LIMIT_UNAVAILABLE",
+        error: "No se puede consultar el límite mensual. Inténtalo de nuevo más tarde.",
+      }, { status: 503 });
+    }
+    if (error instanceof MonthlyLimitChangedError) {
+      return NextResponse.json({
+        code: "MONTHLY_LIMIT_CHANGED",
+        error: "El límite mensual ha cambiado. Revisa el nuevo valor antes de firmar.",
+      }, { status: 409 });
+    }
     if (error instanceof SigningAuditError) {
       return invalidSigningPayload(500);
     }

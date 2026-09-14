@@ -1,4 +1,24 @@
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
+
+// Authorization requires a persisted positive INTEGER, never a display default.
+// With a transaction, FOR SHARE holds the row against UPDATE/DELETE until commit.
+// The existing settings upsert takes a conflicting row lock without API changes.
+export async function getPersistedMonthlyLimitG(
+  tx?: Prisma.TransactionClient
+): Promise<number | null> {
+  const settings = tx
+    ? (await tx.$queryRaw<Array<{ defaultMonthlyLimitG: number }>>`
+        SELECT "defaultMonthlyLimitG" FROM "ClubSetting" WHERE "id" = 1 FOR SHARE
+      `)[0]
+    : await prisma.clubSetting.findUnique({
+        where: { id: 1 },
+        select: { defaultMonthlyLimitG: true },
+      });
+  const value = settings?.defaultMonthlyLimitG;
+  return typeof value === "number" && Number.isInteger(value) &&
+    value > 0 && value <= 2_147_483_647 ? value : null;
+}
 
 export const DEFAULT_CLUB_SETTINGS = {
   dailyLimitG: 10,

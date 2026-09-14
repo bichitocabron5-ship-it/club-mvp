@@ -97,7 +97,7 @@ export function AdminSettingsClient() {
     <main className="mx-auto max-w-3xl p-4 md:p-6">
       <PageHeader
         title="Límites del club"
-        description="Configura los límites operativos del TPV y el valor mensual inicial de los contratos."
+        description="Configura los límites operativos del TPV y el límite mensual autorizado de los nuevos contratos."
       />
 
       {error ? (
@@ -254,7 +254,7 @@ export function AdminSettingsClient() {
               </div>
 
               <span className="mt-2 block text-xs font-normal app-muted">
-                Valor inicial que se propondrá al formalizar nuevos contratos.
+                Límite autorizado que se aplicará al firmar nuevos contratos.
               </span>
             </label>
           </div>
@@ -267,9 +267,9 @@ export function AdminSettingsClient() {
                 </div>
 
                 <p className="mt-1 text-sm leading-6 app-muted">
-                  El límite mensual definitivo se guarda individualmente en el
-                  contrato de cada socio. Este valor solo funciona como propuesta
-                  inicial para contratos nuevos.
+                  Este límite se aplicará a los nuevos contratos firmados y será
+                  el límite mensual operativo del socio. No modifica los contratos
+                  ya firmados.
                 </p>
               </div>
 
