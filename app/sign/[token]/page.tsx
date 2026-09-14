@@ -13,7 +13,6 @@ type SignForm = {
   birthDate: string;
   phone: string;
   email: string;
-  consumptionGrams: string;
 };
 
 const emptyForm: SignForm = {
@@ -24,7 +23,6 @@ const emptyForm: SignForm = {
   birthDate: "",
   phone: "",
   email: "",
-  consumptionGrams: "",
 };
 
 function toDateInputValue(value: string | null | undefined) {
@@ -52,6 +50,11 @@ export default function SignPage() {
   const [form, setForm] = useState<SignForm>(emptyForm);
   const session = sessionState?.token === token ? sessionState.data : null;
   const saved = savedToken === token;
+  const monthlyLimitG = session?.member.consumptionGrams ?? null;
+  const monthlyLimitUnavailable = monthlyLimitG === null || !!session?.monthlyLimitError;
+  const monthlyLimitMessage = session?.monthlyLimitError === "MONTHLY_LIMIT_UNAVAILABLE"
+    ? "No se puede consultar el límite mensual. Inténtalo de nuevo más tarde."
+    : "No se puede completar la firma porque el límite mensual no está configurado. Contacta con el club.";
   const error = !token
     ? "Falta el token de firma en la URL."
     : errorState?.token === token
@@ -92,11 +95,6 @@ export default function SignPage() {
           birthDate: toDateInputValue(sessionData.member?.birthDate),
           phone: sessionData.member?.phone || "",
           email: sessionData.member?.email || "",
-          consumptionGrams: String(
-            sessionData.member?.consumptionGrams ??
-              sessionData.clubSettings?.defaultMonthlyLimitG ??
-              30
-          ),
         });
       })
       .catch(() => {
@@ -114,11 +112,11 @@ export default function SignPage() {
   }, [token]);
 
   async function saveSignature() {
-    if (!token || savingRef.current || saved) {
+    if (!token || savingRef.current || saved || monthlyLimitUnavailable) {
       return;
     }
 
-   if (!sigRef.current || sigRef.current.isEmpty()) {
+    if (!sigRef.current || sigRef.current.isEmpty()) {
       setSignatureError("Debes firmar dentro del recuadro antes de continuar.");
       return;
     }
@@ -139,16 +137,39 @@ export default function SignPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ signatureImage, form }),
+        body: JSON.stringify({ signatureImage, form, expectedConsumptionGrams: monthlyLimitG }),
       });
       const data = await res.json().catch(() => null);
 
       if (!res.ok) {
-        const err = data as { error?: string } | null;
+        const err = data as { error?: string; code?: string } | null;
 
         setSaveError(
           err?.error || "No se ha podido guardar la firma. Inténtalo de nuevo."
         );
+
+        if (err?.code === "MONTHLY_LIMIT_CHANGED" ||
+            err?.code === "MONTHLY_LIMIT_NOT_CONFIGURED" ||
+            err?.code === "MONTHLY_LIMIT_UNAVAILABLE") {
+          // Refresh only GET. Clear acceptance; never retry the POST automatically.
+          sigRef.current?.clear();
+          setSessionState((current) => current?.token === token ? {
+            token,
+            data: {
+              ...current.data,
+              member: { ...current.data.member, consumptionGrams: null },
+              monthlyLimitError: "MONTHLY_LIMIT_UNAVAILABLE",
+            },
+          } : current);
+          try {
+            const refreshed = await fetch(`/api/signing-sessions/${token}`, { cache: "no-store" });
+            if (!refreshed.ok) throw new Error("Session refresh failed");
+            const refreshedSession = await refreshed.json() as PublicSigningSessionData;
+            setSessionState({ token, data: refreshedSession });
+          } catch {
+            setSaveError("No se pudo actualizar el límite mensual. Recarga la página antes de volver a firmar.");
+          }
+        }
 
         return;
       }
@@ -158,6 +179,8 @@ export default function SignPage() {
       }
 
       setSavedToken(token);
+    } catch {
+      setSaveError("No se ha podido guardar la firma. Inténtalo de nuevo.");
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -231,6 +254,9 @@ export default function SignPage() {
 
             <p className="mt-3 text-base leading-7 text-[#6d6860]">
               El contrato se ha firmado correctamente y ha quedado registrado.
+            </p>
+            <p className="mt-3 text-sm font-bold text-[#201f1d]">
+              Límite mensual del contrato: {monthlyLimitG === null ? "No indicado" : `${monthlyLimitG} g`}
             </p>
           </div>
 
@@ -459,30 +485,13 @@ export default function SignPage() {
             />
           </label>
 
-          <label className="block">
-            <span className="text-sm font-bold text-[#201f1d]">
-              Consumo mensual declarado
-            </span>
-
-            <div className="relative mt-2">
-              <input
-                className="w-full rounded-xl border border-black/10 bg-white px-4 py-3 pr-12 outline-none focus:border-[#a7282d]/40 focus:ring-4 focus:ring-[#a7282d]/8"
-                type="number"
-                placeholder="30"
-                value={form.consumptionGrams}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    consumptionGrams: e.target.value,
-                  })
-                }
-              />
-
-              <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-sm font-black text-[#6d6860]">
-                g
-              </span>
-            </div>
-          </label>
+          <div className="block">
+            <p className="text-sm font-bold text-[#201f1d]">Límite mensual autorizado</p>
+            <p className="mt-2 text-lg font-black text-[#201f1d]">
+              {monthlyLimitG === null ? "No disponible" : `${monthlyLimitG} g`}
+            </p>
+            {monthlyLimitUnavailable ? <p role="alert" className="mt-2 text-sm text-red-700">{monthlyLimitMessage}</p> : null}
+          </div>
         </div>
       </section>
 
@@ -544,10 +553,10 @@ export default function SignPage() {
 
           <div>
             <dt className="text-xs font-bold text-[#6d6860]">
-              Consumo mensual declarado
+              Límite mensual autorizado
             </dt>
             <dd className="mt-1 font-black text-[#201f1d]">
-              {form.consumptionGrams ? `${form.consumptionGrams} g` : "-"}
+              {monthlyLimitG === null ? "No disponible" : `${monthlyLimitG} g`}
             </dd>
           </div>
         </dl>
@@ -651,7 +660,7 @@ export default function SignPage() {
             <button
               type="button"
               onClick={() => void saveSignature()}
-              disabled={saving}
+              disabled={saving || monthlyLimitUnavailable}
               className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-[#a7282d] px-6 py-3 font-black text-white transition hover:bg-[#861f23] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
             >
               {saving ? (
