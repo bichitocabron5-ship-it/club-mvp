@@ -5,13 +5,27 @@ import {
   downloadAllowedStorageObject,
   serializeAllowedStorageRef,
 } from "@/lib/contract-storage";
-import { resolveContractTemplateForContract } from "@/lib/contract-templates";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { isStorageUrlsDisabled } from "@/lib/storage";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
 const SIGNED_CONTRACT_BUCKET = "signed-contracts";
+
+const PDF_ERRORS = {
+  CONTRACT_NOT_FOUND: { status: 404, message: "Contrato no encontrado" },
+  SIGNED_PDF_IMMUTABLE: { status: 409, message: "El PDF firmado existente no puede sustituirse." },
+  CONTRACT_TEMPLATE_UNRESOLVED: { status: 409, message: "No se puede determinar de forma segura la plantilla original del contrato." },
+} as const;
+
+export class ContractPdfError extends Error {
+  readonly status: number;
+  constructor(readonly code: keyof typeof PDF_ERRORS) {
+    super(PDF_ERRORS[code].message);
+    this.status = PDF_ERRORS[code].status;
+  }
+}
 
 function formatLongDate(value: string | Date | null | undefined) {
   if (!value) return "-";
@@ -46,6 +60,19 @@ export async function ensureSignedContractPdf(
   contractId: number,
   options?: { force?: boolean }
 ) {
+  try {
+    return await materializeSignedContractPdf(contractId, options);
+  } catch (error) {
+    if (error instanceof ContractPdfError) throw error;
+    // The public signing caller logs this message: never propagate storage/DB/PII details.
+    throw new Error("No se pudo obtener el PDF firmado");
+  }
+}
+
+async function materializeSignedContractPdf(
+  contractId: number,
+  options?: { force?: boolean }
+) {
   const contract = await prisma.memberContract.findUnique({
     where: { id: contractId },
     include: {
@@ -55,14 +82,15 @@ export async function ensureSignedContractPdf(
   });
 
   if (!contract) {
-    throw new Error("Contrato no encontrado");
+    throw new ContractPdfError("CONTRACT_NOT_FOUND");
   }
 
   if (isStorageUrlsDisabled()) {
     throw new Error("PDFs de contratos desactivados temporalmente.");
   }
 
-  if (contract.signedPdfUrl && !options?.force) {
+  if (contract.signedPdfUrl !== null) {
+    if (options?.force) throw new ContractPdfError("SIGNED_PDF_IMMUTABLE");
     const signedUrl = await createSignedUrlForAllowedStorageRef(
       contract.signedPdfUrl,
       {
@@ -81,12 +109,11 @@ export async function ensureSignedContractPdf(
     };
   }
 
-  const template = await resolveContractTemplateForContract(
-    contract.contractTemplateId
-  );
+  // Never fall back to today's active template or repair a historical association.
+  const template = contract.contractTemplate;
 
-  if (!template) {
-    throw new Error("No hay plantilla de contrato activa configurada");
+  if (!contract.contractTemplateId || !template || template.id !== contract.contractTemplateId) {
+    throw new ContractPdfError("CONTRACT_TEMPLATE_UNRESOLVED");
   }
 
   const { bytes: templateBytes } = await downloadAllowedStorageObject(
@@ -260,36 +287,58 @@ export async function ensureSignedContractPdf(
     .from(SIGNED_CONTRACT_BUCKET)
     .upload(filePath, Buffer.from(pdfBytes), {
       contentType: "application/pdf",
-      upsert: true,
+      upsert: false,
     });
 
   if (upload.error) {
-    throw new Error(upload.error.message);
+    // Another initial generation may have published. Only reuse a DB-confirmed
+    // publication; never adopt an unreferenced object of unknown provenance.
+    return reuseConcurrentPublication(contract.id, options);
   }
 
   const storedPdfRef = serializeAllowedStorageRef({
     bucket: SIGNED_CONTRACT_BUCKET,
     path: filePath,
   });
+  try {
+    // Atomic compare-and-set, without holding a transaction during PDF/storage IO.
+    // The uploaded object is never overwritten, even if the member's path changed.
+    await prisma.memberContract.update({
+      where: { id: contract.id, signedPdfUrl: null },
+      data: { signedPdfUrl: storedPdfRef },
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+      return reuseConcurrentPublication(contract.id, options);
+    }
+    throw error;
+  }
+
+  // Publish before requesting a temporary URL: URL failure must not orphan a
+  // successfully published PDF or require regeneration on retry.
   const signedUrl = await createSignedUrlForAllowedStorageRef(storedPdfRef, {
     context: "lib/contract-pdf:newSignedPdf",
   });
-
-  if (!signedUrl) {
-    throw new Error("No se pudo generar URL temporal del contrato firmado");
-  }
-
-  await prisma.memberContract.update({
-    where: { id: contract.id },
-    data: {
-      contractTemplateId: contract.contractTemplateId ?? template.id,
-      signedPdfUrl: storedPdfRef,
-    },
-  });
+  if (!signedUrl) throw new Error("No se pudo obtener el PDF firmado");
 
   return {
     url: signedUrl,
-    contract,
+    contract: { ...contract, signedPdfUrl: storedPdfRef },
     template,
   };
+}
+
+async function reuseConcurrentPublication(contractId: number, options?: { force?: boolean }) {
+  const published = await prisma.memberContract.findUnique({
+    where: { id: contractId },
+    include: { contractTemplate: true },
+  });
+  if (!published) throw new ContractPdfError("CONTRACT_NOT_FOUND");
+  if (published.signedPdfUrl === null) throw new Error("No se pudo obtener el PDF firmado");
+  if (options?.force) throw new ContractPdfError("SIGNED_PDF_IMMUTABLE");
+  const url = await createSignedUrlForAllowedStorageRef(published.signedPdfUrl, {
+    context: "lib/contract-pdf:concurrentPublication",
+  });
+  if (!url) throw new Error("No se pudo obtener el PDF firmado");
+  return { url, contract: published, template: published.contractTemplate };
 }
