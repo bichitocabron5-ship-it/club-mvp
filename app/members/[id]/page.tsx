@@ -56,7 +56,6 @@ function MemberDetailContent({ id }: { id: string }) {
   const rfidBaseRef = useRef<string | null | undefined>(undefined);
   const rfidBlockedRef = useRef(false);
   const [rfidBlocked, setRfidBlocked] = useState(false);
-  const [savingContractId, setSavingContractId] = useState<number | null>(null);
   const rfidRef = useRef<HTMLInputElement | null>(null);
 
   const [editForm, setEditForm] = useState({
@@ -103,52 +102,6 @@ function MemberDetailContent({ id }: { id: string }) {
       const contractsData: MemberContractRecord[] = await contractsRes.json();
       setContracts(contractsData);
     }
-  }
-
-  async function updateContractMonthlyLimit(
-    contractId: number,
-    currentValue: number | null
-  ) {
-    const nextValue = prompt(
-      "Nuevo límite mensual en gramos. Deja vacío para quitarlo.",
-      currentValue !== null ? String(currentValue) : ""
-    );
-
-    if (nextValue === null) return;
-
-    const trimmed = nextValue.trim();
-    const payload =
-      trimmed === ""
-        ? { consumptionGrams: null }
-        : { consumptionGrams: Number(trimmed) };
-
-    if (
-      payload.consumptionGrams !== null &&
-      (!Number.isInteger(payload.consumptionGrams) || payload.consumptionGrams <= 0)
-    ) {
-      alert("Introduce un número entero mayor que 0");
-      return;
-    }
-
-    setSavingContractId(contractId);
-
-    const res = await fetch(`/api/contracts/${contractId}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-
-    setSavingContractId(null);
-
-    if (!res.ok) {
-      const err: { error?: string } = await res.json();
-      alert(err.error || "No se pudo actualizar el límite mensual");
-      return;
-    }
-
-    await refreshMember();
   }
 
   useEffect(() => {
@@ -1370,43 +1323,17 @@ function MemberDetailContent({ id }: { id: string }) {
                   )}
 
                   <div className="flex flex-col gap-2 border-t border-black/7 pt-4 sm:flex-row sm:flex-wrap">
-                    {contract.signedPdfUrl ? (
-                      <a
-                        href={contract.signedPdfUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="app-button-primary inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-bold"
-                      >
-                        Ver contrato firmado
-                      </a>
-                    ) : null}
-
                     <a
                       href={`/api/contracts/${contract.id}/pdf`}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex items-center justify-center rounded-xl bg-[#0b0b0c] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#171719]"
+                      className="app-button-primary inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-bold"
                     >
-                      Regenerar PDF
+                      {contract.signedPdfUrl ? "Ver contrato firmado" : "Generar PDF firmado"}
                     </a>
-
-                    {isAdmin ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void updateContractMonthlyLimit(
-                            contract.id,
-                            contract.consumptionGrams,
-                          );
-                        }}
-                        disabled={savingContractId === contract.id}
-                        className="app-button-secondary rounded-xl px-4 py-2.5 text-sm font-bold disabled:opacity-40"
-                      >
-                        {savingContractId === contract.id
-                          ? "Guardando..."
-                          : "Editar límite mensual"}
-                      </button>
-                    ) : null}
+                    <p className="w-full text-sm app-muted">
+                      El contrato firmado no puede modificarse. Para cambiar sus condiciones se requiere una nueva firma.
+                    </p>
                   </div>
                 </div>
               </article>

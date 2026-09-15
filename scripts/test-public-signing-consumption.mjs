@@ -182,7 +182,10 @@ await test("AI/AJ/AK: actual auth guards keep settings and contract PATCH ADMIN-
     "@/lib/prisma": { prisma: {
       appUser: { findUnique: async () => ({ id: 1, role, active: true, name: "Test", email: null }) },
       clubSetting: { upsert: async ({ update }) => { settingsWrites++; return update; } },
-      memberContract: { update: async ({ data }) => { contractWrites++; return { id: 9, ...data }; } },
+      memberContract: {
+        findUnique: async () => ({ id: 9 }),
+        update: async ({ data }) => { contractWrites++; return { id: 9, ...data }; },
+      },
     } },
   });
   const settings = load("@/app/api/admin/settings/route");
@@ -197,9 +200,9 @@ await test("AI/AJ/AK: actual auth guards keep settings and contract PATCH ADMIN-
   assert.equal(settingsWrites, 1);
   for (const value of [1001, null]) {
     const res = await contracts.PATCH(request({ consumptionGrams: value }), { params: Promise.resolve({ id: "9" }) });
-    assert.equal(res.status, 200); assert.equal((await res.json()).consumptionGrams, value);
+    assert.equal(res.status, 409); assert.equal((await res.json()).code, "SIGNED_CONTRACT_IMMUTABLE");
   }
-  assert.equal(contractWrites, 2);
+  assert.equal(contractWrites, 0);
 });
 
 // Execute the actual page with controlled hook state and fetch. This is not a DOM/browser test.
