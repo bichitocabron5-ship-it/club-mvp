@@ -244,12 +244,10 @@ export async function PATCH(
         dni: normalizedDni,
         phone: data.phone === "" ? null : data.phone,
         email: data.email === "" ? null : data.email,
-        expiresAt:
-          normalizedExpiresAt === undefined
-            ? undefined
-            : normalizedExpiresAt === null
-              ? null
-              : new Date(normalizedExpiresAt),
+        // Omission must not write the expiration, including its original time.
+        ...(normalizedExpiresAt === undefined ? {} : {
+          expiresAt: normalizedExpiresAt === null ? null : new Date(normalizedExpiresAt),
+        }),
         commercialProfile: isAdmin ? data.commercialProfile : undefined,
         discountPercent: isAdmin ? data.discountPercent : undefined,
         commercialNotes: isAdmin
