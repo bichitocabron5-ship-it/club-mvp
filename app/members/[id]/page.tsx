@@ -44,6 +44,7 @@ function MemberDetailContent({ id }: { id: string }) {
   const [contracts, setContracts] = useState<MemberContractRecord[]>([]);
   const [accessLogs, setAccessLogs] = useState<AccessLogRecord[]>([]);
   const [editing, setEditing] = useState(false);
+  const [expirationEdited, setExpirationEdited] = useState(false);
   const [assigningRfid, setAssigningRfid] = useState(false);
   const [rfidMessage, setRfidMessage] = useState("");
   const [rfidInput, setRfidInput] = useState("");
@@ -203,6 +204,15 @@ function MemberDetailContent({ id }: { id: string }) {
     ));
   }
 
+  function changeEditing(next: boolean) {
+    setExpirationEdited(false);
+    setEditForm((current) => ({
+      ...current,
+      expiresAt: data?.member.expiresAt?.slice(0, 10) ?? "",
+    }));
+    setEditing(next);
+  }
+
   async function saveMember() {
     const payload: Record<string, string | number> = {
       memberNumber: editForm.memberNumber.trim(),
@@ -210,8 +220,10 @@ function MemberDetailContent({ id }: { id: string }) {
       dni: editForm.dni,
       phone: editForm.phone.trim(),
       email: editForm.email.trim(),
-      expiresAt: editForm.expiresAt,
     };
+
+    // The displayed date omits the stored time; only an explicit edit may replace it.
+    if (expirationEdited) payload.expiresAt = editForm.expiresAt;
 
     if (isAdmin) {
       payload.commercialProfile = editForm.commercialProfile;
@@ -616,7 +628,7 @@ function MemberDetailContent({ id }: { id: string }) {
 
                 <button
                   type="button"
-                  onClick={() => setEditing(!editing)}
+                  onClick={() => changeEditing(!editing)}
                   className={`inline-flex min-h-12 items-center justify-center rounded-xl px-4 py-3 text-sm font-bold ${
                     editing
                       ? "border border-[#a7282d]/20 bg-[#a7282d]/8 text-[#861f23]"
@@ -796,12 +808,13 @@ function MemberDetailContent({ id }: { id: string }) {
                     className="mt-2 w-full rounded-xl border border-black/10 bg-white px-4 py-3 outline-none focus:border-[#a7282d]/40 focus:ring-4 focus:ring-[#a7282d]/8"
                     type="date"
                     value={editForm.expiresAt}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      setExpirationEdited(true);
                       setEditForm({
                         ...editForm,
                         expiresAt: e.target.value,
-                      })
-                    }
+                      });
+                    }}
                   />
 
                   <span className="mt-2 block text-xs font-normal app-muted">
@@ -1099,7 +1112,7 @@ function MemberDetailContent({ id }: { id: string }) {
               <div className="flex flex-col-reverse gap-2 border-t border-black/7 pt-5 md:col-span-2 sm:flex-row sm:justify-end">
                 <button
                   type="button"
-                  onClick={() => setEditing(false)}
+                  onClick={() => changeEditing(false)}
                   className="app-button-secondary inline-flex w-full items-center justify-center rounded-xl px-5 py-3 font-bold sm:w-auto"
                 >
                   Cancelar
