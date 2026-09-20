@@ -1,5 +1,6 @@
 // app/api/access/toggle/route.ts
 import { requireStaffOrAdmin } from "@/lib/auth-server";
+import { getMemberOperationalFacts } from "@/lib/member-operational-status";
 import { prisma } from "@/lib/prisma";
 import { normalizeRfidCode } from "@/lib/rfid";
 import { resolveStorageUrlForResponse } from "@/lib/storage";
@@ -114,14 +115,29 @@ export async function POST(req: Request) {
         return { status: 409, code: "MEMBER_INACTIVE", error: "Socio inactivo" };
       }
 
-      const hasContract = await tx.memberContract.findFirst({
+      const contract = await tx.memberContract.findFirst({
         where: { memberId },
-        select: { id: true },
+        select: { id: true, consumptionGrams: true },
       });
-      if (!hasContract) {
+      const now = new Date();
+      const facts = getMemberOperationalFacts(
+        {
+          active: member.active,
+          expiresAt: member.expiresAt,
+          rfidCode: member.rfidCode,
+        },
+        contract
+          ? {
+              id: contract.id,
+              consumptionGrams: contract.consumptionGrams,
+            }
+          : null,
+        now,
+      );
+      if (!facts.hasContract) {
         return { status: 409, code: "CONTRACT_REQUIRED", error: "Contrato no firmado" };
       }
-      if (member.expiresAt && member.expiresAt < new Date()) {
+      if (facts.expired) {
         return { status: 409, code: "MEMBERSHIP_EXPIRED", error: "Membresia caducada" };
       }
 
