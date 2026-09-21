@@ -11,6 +11,7 @@ import {
   validateMemberNumber,
 } from "@/lib/member-number";
 import { prisma } from "@/lib/prisma";
+import { getMemberOperationalFacts } from "@/lib/member-operational-status";
 import { normalizeRfidCode } from "@/lib/rfid";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -47,8 +48,10 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
   });
 
+  const now = new Date();
   const result = members.map((member) => {
     const { contracts, ...memberData } = member;
+    const facts = getMemberOperationalFacts(member, contracts[0] ?? null, now);
 
     return {
       ...memberData,
@@ -56,7 +59,8 @@ export async function GET() {
       hasPhoto: Boolean(member.photoUrl),
       dniFrontUrl: null,
       dniBackUrl: null,
-      hasContract: contracts.length > 0,
+      hasContract: facts.hasContract,
+      expired: facts.expired,
     };
   });
 

@@ -1,7 +1,7 @@
 // app/members/page.tsx
 "use client";
 
-import type { MemberSummary } from "@/lib/types";
+import type { MemberListItem } from "@/lib/types";
 import { normalizeMemberIdentity } from "@/lib/member-identity";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -29,7 +29,7 @@ export default function MembersPage() {
   const createPendingRef = useRef(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
-  const [members, setMembers] = useState<MemberSummary[]>([]);
+  const [members, setMembers] = useState<MemberListItem[]>([]);
   const [form, setForm] = useState<MemberForm>(initialForm);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<MemberFilter>("ALL");
@@ -37,7 +37,7 @@ export default function MembersPage() {
   async function loadMembers() {
     const res = await fetch("/api/members");
     if (!res.ok) throw new Error("List refresh failed");
-    const data: MemberSummary[] = await res.json();
+    const data: MemberListItem[] = await res.json();
     if (!Array.isArray(data)) throw new Error("Invalid list response");
     setMembers(data);
   }
@@ -47,7 +47,7 @@ export default function MembersPage() {
 
     void fetch("/api/members")
       .then((res) => res.json())
-      .then((data: MemberSummary[]) => {
+      .then((data: MemberListItem[]) => {
         if (!cancelled) {
           setMembers(data);
         }
@@ -107,9 +107,7 @@ export default function MembersPage() {
         : false) ||
       String(m.memberNumber ?? "").toLowerCase().includes(query);
 
-    const now = new Date();
-
-    const isExpired = m.expiresAt && new Date(m.expiresAt) < now;
+    const isExpired = m.expired;
     const isBlocked = !m.active;
     const hasContract = m.hasContract;
 
@@ -457,9 +455,7 @@ export default function MembersPage() {
           ) : (
             <div className="grid gap-3 lg:grid-cols-2">
               {filteredMembers.map((member) => {
-                const expired =
-                  Boolean(member.expiresAt) &&
-                  new Date(member.expiresAt as string) < new Date();
+                const expired = member.expired;
 
                 const initials =
                   member.fullName
