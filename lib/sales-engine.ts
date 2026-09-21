@@ -6,6 +6,7 @@ import { createAuditLog } from "@/lib/audit";
 import { getClubSettings } from "@/lib/club-settings";
 import { formatLocalDay } from "@/lib/cash-move";
 import { isClosureOpen } from "@/lib/day-closure";
+import { getMemberOperationalFacts } from "@/lib/member-operational-status";
 import { prisma } from "@/lib/prisma";
 import { normalizeRfidCode } from "@/lib/rfid";
 import {
@@ -507,6 +508,7 @@ async function getSaleMemberStatusTx(
       fullName: true,
       active: true,
       expiresAt: true,
+      rfidCode: true,
       commercialProfile: true,
       discountPercent: true,
     },
@@ -525,17 +527,30 @@ async function getSaleMemberStatusTx(
     throw new SaleValidationError("Socio no activo");
   }
 
-  if (member.expiresAt && member.expiresAt < new Date()) {
+  const now = new Date();
+  const facts = getMemberOperationalFacts(
+    {
+      active: member.active,
+      expiresAt: member.expiresAt,
+      rfidCode: member.rfidCode,
+    },
+    contract
+      ? { id: contract.id, consumptionGrams: contract.consumptionGrams }
+      : null,
+    now,
+  );
+
+  if (facts.expired) {
     throw new SaleValidationError("Membresía caducada");
   }
 
-  if (!contract) {
+  if (!facts.hasContract) {
     throw new SaleValidationError("El socio no ha firmado el contrato");
   }
 
   return {
     ...member,
-    monthlyLimitG: contract.consumptionGrams ?? null,
+    monthlyLimitG: facts.monthlyLimitG,
   } satisfies TransactionMember;
 }
 

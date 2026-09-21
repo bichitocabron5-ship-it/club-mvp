@@ -1,5 +1,6 @@
 // app/api/members/[id]/operational-status/route.ts
 import { requireAuth } from "@/lib/auth-server";
+import { getMemberOperationalFacts } from "@/lib/member-operational-status";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
@@ -36,25 +37,33 @@ export async function GET(
     },
   });
 
-  const expired =
-    member.expiresAt !== null && new Date(member.expiresAt) < new Date();
+  const now = new Date();
+  const facts = getMemberOperationalFacts(
+    {
+      active: member.active,
+      expiresAt: member.expiresAt,
+      rfidCode: member.rfidCode,
+    },
+    contract,
+    now,
+  );
 
-  const canWithdraw = member.active && !expired && !!contract;
+  const canWithdraw = facts.active && !facts.expired && facts.hasContract;
 
   return NextResponse.json({
     member,
-    hasContract: !!contract,
-    contract: contract
+    hasContract: facts.hasContract,
+    contract: facts.hasContract
       ? {
-          monthlyLimitG: contract.consumptionGrams,
+          monthlyLimitG: facts.monthlyLimitG,
         }
       : null,
-    expired,
+    expired: facts.expired,
     canWithdraw,
     reasons: {
-      inactive: !member.active,
-      noContract: !contract,
-      expired,
+      inactive: !facts.active,
+      noContract: !facts.hasContract,
+      expired: facts.expired,
     },
   });
 }
