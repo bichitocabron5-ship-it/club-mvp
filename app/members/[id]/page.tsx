@@ -12,8 +12,50 @@ import type {
 import Image from "next/image";
 import { useSession } from "next-auth/react";
 import { useParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { PageHeader } from "@/components/ui/page-header";
+
+type OperationalSnapshot = {
+  member: { active: boolean; expiresAt: string | null };
+  expired: boolean;
+  hasContract: boolean;
+};
+type OperationalState = {
+  snapshot: OperationalSnapshot | null;
+  loading: boolean;
+  error: string;
+};
+
+async function loadOperationalSnapshot(
+  id: string,
+  version: { current: number },
+  setState: Dispatch<SetStateAction<OperationalState>>,
+) {
+  const requestVersion = ++version.current;
+  setState((current) => ({ ...current, loading: true, error: "" }));
+  try {
+    const response = await fetch(`/api/members/${id}/operational-status`, { cache: "no-store" });
+    if (!response.ok) throw new Error("Operational status unavailable");
+    const snapshot: OperationalSnapshot = await response.json();
+    if (typeof snapshot?.member?.active !== "boolean" ||
+        !(snapshot.member.expiresAt === null || typeof snapshot.member.expiresAt === "string") ||
+        typeof snapshot.expired !== "boolean" || typeof snapshot.hasContract !== "boolean") {
+      throw new Error("Invalid operational status");
+    }
+    if (requestVersion !== version.current) return false;
+    setState({ snapshot, loading: false, error: "" });
+    return true;
+  } catch {
+    if (requestVersion === version.current) {
+      setState((current) => ({
+        ...current,
+        loading: false,
+        error: "No se pudo actualizar el estado operativo. Reintenta la consulta.",
+      }));
+    }
+    return false;
+  }
+}
 
 function mergeMemberHistory(
   current: MemberHistoryData | null,
@@ -41,6 +83,10 @@ function MemberDetailContent({ id }: { id: string }) {
     session?.user?.role === "ADMIN" || session?.user?.role === "STAFF";
 
   const [data, setData] = useState<MemberHistoryData | null>(null);
+  const [operational, setOperational] = useState<OperationalState>({
+    snapshot: null, loading: true, error: "",
+  });
+  const operationalRequestRef = useRef(0);
   const [contracts, setContracts] = useState<MemberContractRecord[]>([]);
   const [accessLogs, setAccessLogs] = useState<AccessLogRecord[]>([]);
   const [editing, setEditing] = useState(false);
@@ -75,6 +121,15 @@ function MemberDetailContent({ id }: { id: string }) {
   function focusRfidInput() {
     setTimeout(() => rfidRef.current?.focus(), 0);
   }
+
+  function refreshOperationalStatus() {
+    return loadOperationalSnapshot(id, operationalRequestRef, setOperational);
+  }
+
+  useEffect(() => {
+    void loadOperationalSnapshot(id, operationalRequestRef, setOperational);
+    return () => { operationalRequestRef.current += 1; };
+  }, [id]);
 
   async function refreshMember() {
     if (!id) return;
@@ -165,12 +220,7 @@ function MemberDetailContent({ id }: { id: string }) {
 
   const authReady = status !== "loading";
   const visibleMemberNumber = data.member.memberNumber ?? data.member.id;
-  const membershipExpired =
-    Boolean(data.member.expiresAt) &&
-    new Date(data.member.expiresAt as string) < new Date();
-
-  const membershipValid =
-    Boolean(data.member.expiresAt) && !membershipExpired;
+  const operationalStatus = operational.snapshot;
 
   type MemberStatusPayload = {
     active?: boolean;
@@ -191,6 +241,9 @@ function MemberDetailContent({ id }: { id: string }) {
       alert("Error actualizando socio");
       return;
     }
+
+    // Independent of history: its failure must not prevent the operational refresh.
+    void refreshOperationalStatus();
 
     const requestVersion = ++historyRequestRef.current;
     const rfidVersion = rfidVersionRef.current;
@@ -247,6 +300,11 @@ function MemberDetailContent({ id }: { id: string }) {
     }
 
     setEditing(false);
+    if (expirationEdited && !(await refreshOperationalStatus())) {
+      // Keep the confirmed snapshot and visible error instead of discarding them on reload.
+      await refreshMember();
+      return;
+    }
     window.location.reload();
   }
 
@@ -412,30 +470,40 @@ function MemberDetailContent({ id }: { id: string }) {
                 </div>
 
                 <div className="mt-4 flex flex-wrap gap-2">
+                  {operationalStatus && <>
                   <span
                     className={`rounded-full border px-3 py-1 text-xs font-black ${
-                      data.member.active
+                      operationalStatus.member.active
                         ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                         : "border-red-200 bg-red-50 text-red-700"
                     }`}
                   >
-                    {data.member.active ? "ACTIVO" : "BLOQUEADO"}
+                    {operationalStatus.member.active ? "ACTIVO" : "BLOQUEADO"}
                   </span>
 
-                  {membershipExpired ? (
+                  {operationalStatus.expired ? (
                     <span className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-black text-red-700">
                       MEMBRESÍA CADUCADA
                     </span>
-                  ) : membershipValid ? (
+                  ) : operationalStatus.member.expiresAt ? (
                     <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">
                       VÁLIDA HASTA{" "}
-                      {new Date(data.member.expiresAt as string).toLocaleDateString("es-ES")}
+                      {new Date(operationalStatus.member.expiresAt).toLocaleDateString("es-ES")}
                     </span>
                   ) : (
                     <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-black text-amber-800">
                       SIN VENCIMIENTO
                     </span>
                   )}
+
+                  <span className={`rounded-full border px-3 py-1 text-xs font-black ${
+                    operationalStatus.hasContract
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : "border-amber-200 bg-amber-50 text-amber-800"
+                  }`}>
+                    {operationalStatus.hasContract ? "CONTRATO" : "SIN CONTRATO"}
+                  </span>
+                  </>}
 
                   {data.member.rfidCode ? (
                     <span className="rounded-full border border-[#b4a78d]/30 bg-[#f3f0e9] px-3 py-1 text-xs font-black text-[#645b4c]">
@@ -447,6 +515,14 @@ function MemberDetailContent({ id }: { id: string }) {
                     </span>
                   )}
                 </div>
+                {operational.loading && <p role="status" className="mt-2 text-sm app-muted">
+                  {operationalStatus ? "Actualizando estado operativo..." : "Cargando estado operativo..."}
+                </p>}
+                {operational.error && <div role="alert" className="mt-2 text-sm text-red-700">
+                  {operational.error}{operationalStatus && " Se muestra el último estado confirmado."}
+                  <button type="button" className="app-button-secondary ml-2 rounded-full px-3 py-1"
+                    onClick={() => void refreshOperationalStatus()}>Reintentar</button>
+                </div>}
               </div>
             </div>
           </div>
@@ -502,15 +578,16 @@ function MemberDetailContent({ id }: { id: string }) {
 
                 <div
                   className={`mt-2 font-black ${
-                    data.member.expiresAt &&
-                    new Date(data.member.expiresAt) < new Date()
+                    operationalStatus?.expired
                       ? "text-red-700"
                       : "text-[#201f1d]"
                   }`}
                 >
-                  {data.member.expiresAt
-                    ? new Date(data.member.expiresAt).toLocaleDateString("es-ES")
-                    : "Sin vencimiento"}
+                  {operationalStatus
+                    ? operationalStatus.member.expiresAt
+                      ? new Date(operationalStatus.member.expiresAt).toLocaleDateString("es-ES")
+                      : "Sin vencimiento"
+                    : operational.loading ? "Cargando..." : "Estado no disponible"}
                 </div>
               </div>
             </div>

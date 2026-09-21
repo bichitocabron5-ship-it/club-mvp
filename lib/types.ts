@@ -124,6 +124,8 @@ export type ProductLike = {
   unit: ProductUnit | string;
 };
 
+export type MemberListItem = MemberSummary & { expired: boolean };
+
 export type MemberSummary = {
   id: number;
   memberNumber?: string | number | null;
