@@ -345,6 +345,7 @@ model ContractTemplate {
   createdAt DateTime @default(now())
 
   contracts MemberContract[]
+  signingSessions SigningSession[]
 }
 
 model MemberContract {
@@ -375,6 +376,7 @@ model SigningSession {
   id             Int       @id @default(autoincrement())
   token          String    @unique
   memberId       Int
+  contractTemplateId Int?
   status         String    @default("PENDING") // PENDING / SIGNED / CANCELLED
   signatureImage String?   @db.Text
   signedAt       DateTime?
@@ -383,8 +385,10 @@ model SigningSession {
 
   member   Member          @relation(fields: [memberId], references: [id])
   contract MemberContract?
+  contractTemplate ContractTemplate? @relation(fields: [contractTemplateId], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
   @@index([status, expiresAt])
+  @@index([contractTemplateId])
 }
 
 model ClubSetting {

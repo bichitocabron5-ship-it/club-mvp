@@ -24,7 +24,7 @@ export function loader(mocks) {
     if (cache.has(name)) return cache.get(name);
     const filename = resolve(root, name.slice(2) + ".ts");
     const code = ts.transpileModule(readFileSync(filename, "utf8"), {
-      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
     }).outputText;
     const exports = {};
     cache.set(name, exports);
@@ -58,7 +58,6 @@ const previous = {
   birthDate: new Date("1990-01-01"), consumptionGrams: 37,
   signatureImage, signedAt: new Date("2025-01-01"), signedPdfUrl: null,
 };
-const template = { id: 3, name: "Template", version: "1", fileUrl: "template-ref" };
 const deferred = () => {
   let resolve;
   const promise = new Promise(yes => { resolve = yes; });
@@ -69,10 +68,12 @@ for (let i = 0; i < 3; i++) templateDocument.addPage();
 const templateBytes = await templateDocument.save();
 
 export function harness(options = {}) {
+  const template = { id: 3, name: "Template", version: "1", fileUrl: "template-ref", active: options.templateActive ?? true };
   const members = copy([original, other]);
   let state = {
     session: {
       id: 9, token, memberId: original.id, status: options.status ?? "PENDING",
+      contractTemplateId: Object.hasOwn(options, "templateId") ? options.templateId : 3,
       expiresAt: new Date(Date.now() + (options.expired ? -60_000 : 3600_000)),
       signatureImage: null, signedAt: null, createdAt: new Date(),
     },
@@ -96,6 +97,10 @@ export function harness(options = {}) {
   const latest = (contracts, memberId) => contracts.filter(c => c.memberId === memberId)
     .sort((a, b) => b.signedAt - a.signedAt || b.id - a.id)[0] ?? null;
   const prisma = {
+    contractTemplate: { async findUnique({ where }) {
+      if (options.templateDbError) throw new Error("PRIVATE_TEMPLATE_DB");
+      return where.id === 3 ? copy(template) : null;
+    } },
     clubSetting: { async findUnique({ where, select }) {
       calls.settingsReads++;
       assert.deepEqual(plain(where), { id: 1 });
@@ -105,7 +110,7 @@ export function harness(options = {}) {
     member: memberDelegate,
     signingSession: { async findUnique({ where }) {
       if (where.token !== token) return null;
-      const snapshot = copy({ ...state.session, member: members[0], contract: state.contracts.find(c => c.signingSessionId === state.session.id) ?? null });
+      const snapshot = copy({ ...state.session, member: members[0], contractTemplate: state.session.contractTemplateId === 3 ? template : null, contract: state.contracts.find(c => c.signingSessionId === state.session.id) ?? null });
       if (options.simultaneous && ++initialReads <= 2) {
         if (initialReads === 2) gate.resolve();
         await gate.promise;
@@ -139,6 +144,7 @@ export function harness(options = {}) {
       const release = deferred();
       tail = release.promise;
       await wait;
+      options.beforeClaim?.(state);
       const staged = copy(state);
       const tx = {
         async $queryRaw(strings, ...values) {
@@ -151,10 +157,13 @@ export function harness(options = {}) {
         },
         member: memberDelegate,
         signingSession: { async updateMany({ where, data }) {
-          assert.deepEqual(plain(where), { id: 9, status: "PENDING" });
-          if (staged.session.status !== where.status) return { count: 0 };
+          assert.deepEqual(plain(where), { id: 9, status: "PENDING", memberId: 17, contractTemplateId: 3 });
+          if (staged.session.status !== where.status || staged.session.memberId !== where.memberId || staged.session.contractTemplateId !== where.contractTemplateId) return { count: 0 };
           Object.assign(staged.session, copy(data));
           return { count: 1 };
+        }, async findUnique() {
+          return copy({ ...staged.session, member: members[0], contract: null,
+            contractTemplate: staged.session.contractTemplateId ? { ...template, id: staged.session.contractTemplateId } : null });
         } },
         memberContract: {
           async findUnique({ where }) {
@@ -199,14 +208,24 @@ export function harness(options = {}) {
     "server-only": {},
     "next/server": { NextResponse: Response },
     "@/lib/prisma": { prisma },
-    "@/lib/contract-templates": { findActiveContractTemplate: async () => template, resolveContractTemplateForContract: async () => template },
-    "@/lib/storage": { isStorageUrlsDisabled: () => false },
-    "@/lib/contract-storage": {
-      createSignedUrlForAllowedStorageRef: async ref => ref ? "https://storage.invalid/controlled" : null,
-      downloadAllowedStorageObject: async () => ({ bytes: templateBytes }),
-      serializeAllowedStorageRef: ref => JSON.stringify(ref),
+    "@/lib/contract-templates": { findActiveContractTemplate: async () => { throw new Error("Active lookup forbidden"); }, resolveContractTemplateForContract: async () => { throw new Error("Fallback forbidden"); } },
+    "@/lib/storage": {
+      isStorageUrlsDisabled: () => options.storageDisabled ?? false,
+      parseStorageUrl: ref => ref === "template-ref" ? { bucket: "contract-templates", path: ref } : JSON.parse(ref),
+      buildStoragePublicUrl: () => "https://storage.invalid/controlled",
+      buildStoredStorageRef: (bucket, path) => JSON.stringify({ bucket, path }),
+      createStorageSignedUrl: async (_ref, settings) => {
+        options.onSignedUrl?.(settings);
+        return options.urlMissing ? null : "https://storage.invalid/controlled";
+      },
     },
     "@/lib/supabase-admin": { getSupabaseAdmin: () => ({ storage: { from(bucket) {
+      if (bucket === "contract-templates") return { async download() {
+        await options.beforeDocumentRead?.();
+        return options.objectMissing ? { error: true } : {
+          data: new Blob([options.objectEmpty ? new Uint8Array() : templateBytes]), error: null,
+        };
+      } };
       assert.equal(bucket, "signed-contracts");
       return { async upload(path, bytes) {
         uploads.push({ path, size: bytes.length });
@@ -235,12 +254,15 @@ export function harness(options = {}) {
   const { POST, GET } = load("@/app/api/signing-sessions/[token]/route");
   return {
     calls, initial, pdfSources, pdfText, uploads,
+    setSessionTemplateId(id) { state.session.contractTemplateId = id; },
+    setContractTemplateId(id) { state.contracts.find(c => c.signingSessionId === 9).contractTemplateId = id; },
+    setTemplateActive(value) { template.active = value; },
     setMonthlyLimit(value) { monthlyLimit = value; },
     setSettingsError(value) { settingsError = value; },
     get members() { return copy(members); }, get state() { return copy(state); },
     normalize: load("@/lib/member-identity").normalizeMemberIdentity,
     async post(form = identical, requestToken = token, expectedConsumptionGrams = 30, overrides = {}) {
-      const body = { signatureImage, expectedConsumptionGrams, ...(form === null ? {} : { form }), ...overrides };
+      const body = { signatureImage, expectedConsumptionGrams, expectedContractTemplateId: 3, ...(form === null ? {} : { form }), ...overrides };
       const response = await POST(new Request(`http://localhost/api/signing-sessions/${requestToken}`, {
         method: "POST", body: JSON.stringify(body),
       }), { params: Promise.resolve({ token: requestToken }) });

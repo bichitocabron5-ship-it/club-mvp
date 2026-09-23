@@ -35,6 +35,8 @@ export default function SignPage() {
 
   const sigRef = useRef<SignatureCanvas | null>(null);
   const savingRef = useRef(false);
+  const refreshingRef = useRef(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [sessionState, setSessionState] = useState<{
     token: string;
     data: PublicSigningSessionData;
@@ -46,12 +48,14 @@ export default function SignPage() {
   const [errorState, setErrorState] = useState<{
     token: string;
     message: string;
+    code?: string;
   } | null>(null);
   const [form, setForm] = useState<SignForm>(emptyForm);
   const session = sessionState?.token === token ? sessionState.data : null;
   const saved = savedToken === token;
   const monthlyLimitG = session?.member.consumptionGrams ?? null;
   const monthlyLimitUnavailable = monthlyLimitG === null || !!session?.monthlyLimitError;
+  const templateUnavailable = !session?.contractTemplate?.id || !session.contractTemplate.fileUrl;
   const monthlyLimitMessage = session?.monthlyLimitError === "MONTHLY_LIMIT_UNAVAILABLE"
     ? "No se puede consultar el límite mensual. Inténtalo de nuevo más tarde."
     : "No se puede completar la firma porque el límite mensual no está configurado. Contacta con el club.";
@@ -78,6 +82,7 @@ export default function SignPage() {
           setErrorState({
             token,
             message: data.error || "La sesión de firma no está disponible",
+            code: data.code,
           });
           return;
         }
@@ -111,8 +116,35 @@ export default function SignPage() {
     };
   }, [token]);
 
+  async function refreshDocument() {
+    if (!token || refreshingRef.current) return;
+    refreshingRef.current = true;
+    setRefreshing(true);
+    sigRef.current?.clear();
+    setSessionState((current) => current?.token === token
+      ? { token, data: { ...current.data, contractTemplate: null } } : current);
+    try {
+      const response = await fetch(`/api/signing-sessions/${token}`, { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) {
+        setErrorState({ token, message: data.error || "No se pudo cargar el documento.", code: data.code });
+        return;
+      }
+      setErrorState(null);
+      setSessionState({ token, data: data as PublicSigningSessionData });
+      if (!session) setForm({ ...emptyForm, fullName: data.member.fullName || "", dni: data.member.dni || "",
+        phone: data.member.phone || "", email: data.member.email || "", address: data.member.address || "",
+        birthPlace: data.member.birthPlace || "", birthDate: toDateInputValue(data.member.birthDate) });
+    } catch {
+      setErrorState({ token, code: "SIGNING_TEMPLATE_UNAVAILABLE", message: "No se pudo cargar el documento. Reintenta su carga." });
+    } finally {
+      refreshingRef.current = false;
+      setRefreshing(false);
+    }
+  }
+
   async function saveSignature() {
-    if (!token || savingRef.current || saved || monthlyLimitUnavailable) {
+    if (!token || savingRef.current || refreshingRef.current || saved || monthlyLimitUnavailable || templateUnavailable) {
       return;
     }
 
@@ -137,7 +169,8 @@ export default function SignPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ signatureImage, form, expectedConsumptionGrams: monthlyLimitG }),
+        body: JSON.stringify({ signatureImage, form, expectedConsumptionGrams: monthlyLimitG,
+          expectedContractTemplateId: session!.contractTemplate!.id }),
       });
       const data = await res.json().catch(() => null);
 
@@ -147,6 +180,18 @@ export default function SignPage() {
         setSaveError(
           err?.error || "No se ha podido guardar la firma. Inténtalo de nuevo."
         );
+
+        if (err?.code === "SIGNING_TEMPLATE_CHANGED") {
+          await refreshDocument();
+          return;
+        }
+        if (err?.code === "SIGNING_TEMPLATE_UNRESOLVED" || err?.code === "SIGNING_TEMPLATE_UNAVAILABLE") {
+          sigRef.current?.clear();
+          setSessionState((current) => current?.token === token
+            ? { token, data: { ...current.data, contractTemplate: null } } : current);
+          setErrorState({ token, code: err.code, message: err.error || "Solicita un nuevo enlace al personal." });
+          return;
+        }
 
         if (err?.code === "MONTHLY_LIMIT_CHANGED" ||
             err?.code === "MONTHLY_LIMIT_NOT_CONFIGURED" ||
@@ -207,6 +252,12 @@ export default function SignPage() {
             <p className="mt-3 leading-7 text-red-700">
               {error}
             </p>
+            {errorState?.code === "SIGNING_TEMPLATE_UNAVAILABLE" ? (
+              <button type="button" disabled={refreshing} onClick={() => void refreshDocument()}
+                className="mt-4 rounded-xl border px-4 py-3 font-bold">
+                {refreshing ? "Cargando documento..." : "Reintentar carga del documento"}
+              </button>
+            ) : null}
           </div>
 
           <div className="border-t border-red-100 px-6 py-4 text-center text-sm text-[#6d6860]">
@@ -660,7 +711,7 @@ export default function SignPage() {
             <button
               type="button"
               onClick={() => void saveSignature()}
-              disabled={saving || monthlyLimitUnavailable}
+              disabled={saving || refreshing || monthlyLimitUnavailable || templateUnavailable}
               className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-[#a7282d] px-6 py-3 font-black text-white transition hover:bg-[#861f23] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
             >
               {saving ? (
