@@ -1,11 +1,11 @@
 import type { Prisma } from "@prisma/client";
 
 import { getPersistedMonthlyLimitG } from "@/lib/club-settings";
-import { createSignedUrlForAllowedStorageRef } from "@/lib/contract-storage";
 import {
-  findActiveContractTemplate,
-  resolveContractTemplateForContract,
-} from "@/lib/contract-templates";
+  createSignedUrlForAllowedStorageRef,
+  requireSigningTemplateDocument,
+  SigningTemplateError,
+} from "@/lib/contract-storage";
 import { prisma } from "@/lib/prisma";
 import type {
   InternalSigningSessionData,
@@ -18,6 +18,7 @@ export type SigningSessionWithPublicRelations = Prisma.SigningSessionGetPayload<
   include: {
     member: true;
     contract: true;
+    contractTemplate: true;
   };
 }>;
 
@@ -29,6 +30,14 @@ export function getSigningSessionExpiresAt() {
 
 export function isSigningSessionExpired(expiresAt: Date | string) {
   return new Date(expiresAt) <= new Date();
+}
+
+export function requireSessionContractTemplate(session: SigningSessionWithPublicRelations) {
+  if (!session.contractTemplateId || !session.contractTemplate ||
+      session.contractTemplate.id !== session.contractTemplateId) {
+    throw new SigningTemplateError("SIGNING_TEMPLATE_UNRESOLVED");
+  }
+  return session.contractTemplate;
 }
 
 async function getLatestContractData(session: SigningSessionWithPublicRelations) {
@@ -49,14 +58,30 @@ export async function serializePublicSigningSession(
     return null;
   }
 
-  const contractTemplate = session.contract?.contractTemplateId
-    ? await resolveContractTemplateForContract(session.contract.contractTemplateId)
-    : await findActiveContractTemplate();
-  const contractTemplateFileUrl = contractTemplate
-    ? await createSignedUrlForAllowedStorageRef(contractTemplate.fileUrl, {
-        context: "lib/signing-session:contractTemplate",
-      })
-    : null;
+  // A signed contract wins, including legacy null provenance. Never use today's active template.
+  let contractTemplate: SigningSessionWithPublicRelations["contractTemplate"] = null;
+  if (session.contract) {
+    if (session.contract.contractTemplateId) {
+      contractTemplate = await prisma.contractTemplate.findUnique({
+        where: { id: session.contract.contractTemplateId },
+      });
+    }
+  } else if (session.status === "PENDING") {
+    contractTemplate = requireSessionContractTemplate(session);
+  }
+  let contractTemplateFileUrl: string | null = null;
+  if (contractTemplate) {
+    if (!session.contract && session.status === "PENDING") {
+      contractTemplateFileUrl = await requireSigningTemplateDocument(contractTemplate.fileUrl);
+    } else {
+      // Historical recognition must not depend on Storage availability.
+      try {
+        contractTemplateFileUrl = await createSignedUrlForAllowedStorageRef(contractTemplate.fileUrl, {
+          context: "lib/signing-session:contractTemplate",
+        });
+      } catch { /* Keep the signed result without a template link. */ }
+    }
+  }
   // Signed responses (including replay) never depend on current settings.
   let authorizedMonthlyLimitG: number | null = null;
   let monthlyLimitError: PublicSigningSessionData["monthlyLimitError"] = null;
@@ -73,7 +98,7 @@ export async function serializePublicSigningSession(
   const contractData = await getLatestContractData(session);
 
   return {
-    status: session.status,
+    status: session.contract ? "SIGNED" : session.status,
     member: {
       fullName: session.member.fullName,
       dni: session.member.dni,

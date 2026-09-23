@@ -73,6 +73,7 @@ function harness(options = {}) {
   const objects = new Map(), draws = [], urlRefs = [], updateInputs = [];
   const failWriter = () => { calls.writes++; throw new Error("Unexpected writer"); };
   const prisma = {
+    contractTemplate: { async findUnique({ where }) { assert.equal(where.id, 3); return copy(template); } },
     appUser: { async findUnique() {
       if (options.authError) throw new Error("PRIVATE_AUTH_SQL");
       return { id: 1, role: options.role ?? "ADMIN", active: options.active ?? true, name: "Operator", email: null };

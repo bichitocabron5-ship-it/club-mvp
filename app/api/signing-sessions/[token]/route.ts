@@ -1,6 +1,6 @@
 import { ensureSignedContractPdf } from "@/lib/contract-pdf";
 import { getPersistedMonthlyLimitG } from "@/lib/club-settings";
-import { findActiveContractTemplate } from "@/lib/contract-templates";
+import { requireSigningTemplateDocument, SigningTemplateError } from "@/lib/contract-storage";
 import {
   MEMBER_IDENTITY_MAX_INPUT_LENGTH,
   normalizeMemberIdentity,
@@ -18,6 +18,7 @@ import {
 } from "@/lib/request-body";
 import {
   isSigningSessionExpired,
+  requireSessionContractTemplate,
   serializePublicSigningSession,
 } from "@/lib/signing-session";
 import { isStorageUrlsDisabled } from "@/lib/storage";
@@ -83,6 +84,7 @@ function isPngSignatureDataUrl(value: string) {
 
 const signPayloadSchema = z
   .object({
+    expectedContractTemplateId: z.number().int().positive().max(2_147_483_647),
     expectedConsumptionGrams: z.number().int().positive().max(2_147_483_647),
     signatureImage: z
       .string()
@@ -221,6 +223,7 @@ async function getPublicSigningSession(token: string) {
     include: {
       member: true,
       contract: true,
+      contractTemplate: true,
     },
   });
 
@@ -250,6 +253,7 @@ async function getSigningSessionSuccessResponse(token: string) {
     include: {
       member: true,
       contract: true,
+      contractTemplate: true,
     },
   });
 
@@ -277,21 +281,30 @@ export async function GET(
     return result.response;
   }
 
-  if (result.session.status !== "PENDING" && result.session.status !== "SIGNED") {
+  if (!result.session.contract && result.session.status !== "PENDING" && result.session.status !== "SIGNED") {
     return publicSigningError(404);
   }
 
-  const payload = await serializePublicSigningSession(result.session);
-
-  if (
-    !payload?.contractTemplate &&
-    payload?.status !== "SIGNED" &&
-    !isStorageUrlsDisabled()
-  ) {
-    return publicSigningError(503);
+  try {
+    return NextResponse.json(await serializePublicSigningSession(result.session));
+  } catch (error) {
+    if (!(error instanceof SigningTemplateError)) throw error;
+    return await recoverConfirmedSigning(result.session.token) ?? templateErrorResponse(error);
   }
+}
 
-  return NextResponse.json(payload);
+function templateErrorResponse(error: SigningTemplateError) {
+  return NextResponse.json({ code: error.code, error: error.message }, { status: error.status });
+}
+
+// A concurrent committed signature wins over new-signing preflight errors.
+async function recoverConfirmedSigning(token: string) {
+  const session = await prisma.signingSession.findUnique({
+    where: { token }, include: { member: true, contract: true, contractTemplate: true },
+  });
+  if (!session?.contract) return null;
+  await ensureSignedPdfForContract(session.contract.id);
+  return NextResponse.json(await serializePublicSigningSession(session));
 }
 
 export async function POST(
@@ -322,14 +335,11 @@ export async function POST(
   }
 
   if (existingSession.status !== "PENDING") {
-    return publicSigningError(409);
+    return await recoverConfirmedSigning(existingSession.token) ?? publicSigningError(409);
   }
 
-  const contractTemplate = await findActiveContractTemplate();
-
-  if (!contractTemplate) {
-    return publicSigningError(503);
-  }
+  const rejectNewSigning = async (response: Response) =>
+    await recoverConfirmedSigning(existingSession.token) ?? response;
 
   let body: unknown;
 
@@ -337,20 +347,32 @@ export async function POST(
     body = await readJsonBodyWithLimit(req, SIGNATURE_PAYLOAD_MAX_BYTES);
   } catch (error) {
     if (error instanceof RequestBodyTooLargeError) {
-      return invalidSigningPayload(413);
+      return rejectNewSigning(invalidSigningPayload(413));
     }
 
     if (error instanceof InvalidJsonBodyError) {
-      return invalidSigningPayload(400);
+      return rejectNewSigning(invalidSigningPayload(400));
     }
 
-    return invalidSigningPayload(400);
+    return rejectNewSigning(invalidSigningPayload(400));
   }
 
   const parsedBody = signPayloadSchema.safeParse(body);
 
   if (!parsedBody.success) {
-    return invalidSigningPayload(400);
+    return rejectNewSigning(invalidSigningPayload(400));
+  }
+
+  let contractTemplate;
+  try {
+    contractTemplate = requireSessionContractTemplate(existingSession);
+    if (parsedBody.data.expectedContractTemplateId !== contractTemplate.id) {
+      throw new SigningTemplateError("SIGNING_TEMPLATE_CHANGED");
+    }
+    await requireSigningTemplateDocument(contractTemplate.fileUrl);
+  } catch (error) {
+    if (!(error instanceof SigningTemplateError)) throw error;
+    return rejectNewSigning(templateErrorResponse(error));
   }
 
   const form = parsedBody.data.form || {};
@@ -362,11 +384,11 @@ export async function POST(
   const submittedDni = hasDni ? normalizeMemberIdentity(form.dni ?? "") : null;
 
   if (birthDate === "INVALID") {
-    return invalidSigningPayload(400);
+    return rejectNewSigning(invalidSigningPayload(400));
   }
 
   if (hasDni && !submittedDni) {
-    return invalidSigningPayload(400);
+    return rejectNewSigning(invalidSigningPayload(400));
   }
 
   const previousContract = await prisma.memberContract.findFirst({
@@ -390,7 +412,7 @@ export async function POST(
     : previousContract?.birthDate ?? null;
 
   if (!mergedDni) {
-    return invalidSigningPayload(400);
+    return rejectNewSigning(invalidSigningPayload(400));
   }
 
   let session: { contractId: number };
@@ -402,6 +424,8 @@ export async function POST(
         where: {
           id: existingSession.id,
           status: "PENDING",
+          memberId: existingSession.memberId,
+          contractTemplateId: contractTemplate.id,
         },
         data: {
           status: "SIGNED",
@@ -422,8 +446,23 @@ export async function POST(
           };
         }
 
+        const current = await tx.signingSession.findUnique({
+          where: { id: existingSession.id }, include: { member: true, contract: true, contractTemplate: true },
+        });
+        if (current) {
+          const currentTemplate = requireSessionContractTemplate(current);
+          if (currentTemplate.id !== contractTemplate.id) throw new SigningTemplateError("SIGNING_TEMPLATE_CHANGED");
+        }
         throw new Error(SIGNING_SESSION_NOT_PENDING_ERROR);
       }
+
+      // UPDATE owns the row lock until commit; confirm the authoritative association.
+      const claimed = await tx.signingSession.findUnique({
+        where: { id: existingSession.id }, include: { member: true, contract: true, contractTemplate: true },
+      });
+      if (!claimed || claimed.memberId !== existingSession.memberId) throw new Error(SIGNING_SESSION_NOT_PENDING_ERROR);
+      const claimedTemplate = requireSessionContractTemplate(claimed);
+      if (claimedTemplate.id !== contractTemplate.id) throw new SigningTemplateError("SIGNING_TEMPLATE_CHANGED");
 
       // Claim/recover the session first, so a concurrent replay needs no settings.
       // The shared settings row lock is held through contract + audit commit.
@@ -444,7 +483,7 @@ export async function POST(
         data: {
           memberId: existingSession.memberId,
           signingSessionId: existingSession.id,
-          contractTemplateId: contractTemplate.id,
+          contractTemplateId: claimedTemplate.id,
 
           fullName: mergedFullName,
           dni: mergedDni,
@@ -487,6 +526,9 @@ export async function POST(
       };
     });
   } catch (error) {
+    if (error instanceof SigningTemplateError) {
+      return rejectNewSigning(templateErrorResponse(error));
+    }
     if (error instanceof MonthlyLimitConfigurationError) {
       return NextResponse.json({
         code: "MONTHLY_LIMIT_NOT_CONFIGURED",
