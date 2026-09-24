@@ -113,7 +113,7 @@ export default function MemberContractPage() {
     if (!session?.token || session.status === "SIGNED") return;
 
     const interval = setInterval(async () => {
-      const res = await fetch(`/api/signing-sessions/${session.token}`);
+      const res = await fetch(`/api/signing-sessions/${session.token}?mode=status`, { cache: "no-store" });
 
       if (!res.ok) {
         setError("No se pudo actualizar el estado de la firma");
@@ -121,12 +121,12 @@ export default function MemberContractPage() {
         return;
       }
 
-      const data: PublicSigningSessionData = await res.json();
+      const data: Pick<PublicSigningSessionData, "status"> = await res.json();
       setSession((current) =>
         current
           ? {
               ...current,
-              ...data,
+              status: data.status,
             }
           : current
       );

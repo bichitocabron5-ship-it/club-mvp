@@ -223,15 +223,16 @@ export default function NewMemberPage() {
 
     const interval = setInterval(async () => {
       try {
-        const data = await fetchJson<PublicSigningSessionData>(
-          `/api/signing-sessions/${signingSession.token}`
+        const data = await fetchJson<Pick<PublicSigningSessionData, "status">>(
+          `/api/signing-sessions/${signingSession.token}?mode=status`,
+          { cache: "no-store" }
         );
 
         setSigningSession((current) =>
           current
             ? {
                 ...current,
-                ...data,
+                status: data.status,
               }
             : current
         );
