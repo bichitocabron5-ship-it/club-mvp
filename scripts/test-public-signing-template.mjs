@@ -15,6 +15,65 @@ const deferred = () => { let release; const promise = new Promise(r => { release
 const contract = h => h.state.contracts.find(c => c.signingSessionId === 9);
 const untouched = h => { assert.equal(h.calls.creates, 0); assert.equal(h.calls.audits, 0); assert.equal(h.state.session.status, "PENDING"); };
 
+await test("status polling never downloads templates or creates URLs, even during Storage failure", async () => {
+  let downloads = 0, urls = 0;
+  const options = {
+    beforeDocumentRead: () => { downloads++; throw new Error("Storage outage"); },
+    onSignedUrl: () => { urls++; throw new Error("Storage outage"); },
+  };
+  const h = harness(options);
+  h.setSettingsError(new Error("Status must not read monthly settings"));
+  for (let i = 0; i < 10; i++) {
+    const r = await h.get("?mode=status");
+    assert.equal(r.status, 200); assert.deepEqual(r.body, { status: "PENDING" });
+    assert.equal(r.headers.get("cache-control"), "no-store");
+  }
+  assert.equal(downloads, 0); assert.equal(urls, 0); untouched(h);
+  // Status success provides no document and cannot authorize a new signature.
+  assert.equal((await h.get()).status, 503);
+  assert.equal((await h.post()).status, 503);
+  assert.equal(downloads, 2); assert.equal(urls, 0); untouched(h);
+});
+await test("status recognizes signed contracts without Storage; replay remains idempotent", async () => {
+  let downloads = 0, urls = 0;
+  const options = { beforeDocumentRead: () => { downloads++; }, onSignedUrl: () => { urls++; } };
+  const h = harness(options); assert.equal((await h.post()).status, 200);
+  const before = { downloads, urls };
+  options.objectMissing = true; options.urlMissing = true;
+  for (let i = 0; i < 5; i++) {
+    const r = await h.get("?mode=status");
+    assert.equal(r.status, 200); assert.deepEqual(r.body, { status: "SIGNED" });
+  }
+  assert.deepEqual({ downloads, urls }, before);
+  assert.equal((await h.post()).status, 200);
+  assert.equal(downloads, before.downloads);
+  assert.equal(h.calls.creates, 1); assert.equal(h.calls.audits, 1);
+});
+await test("status is observation only for unresolved legacy sessions; signing stays fail-closed", async () => {
+  const h = harness({ templateId: null });
+  assert.deepEqual((await h.get("?mode=status")).body, { status: "PENDING" });
+  for (const r of [await h.get(), await h.post()]) {
+    assert.equal(r.status, 409); assert.equal(r.body.code, "SIGNING_TEMPLATE_UNRESOLVED");
+  }
+  untouched(h);
+});
+await test("status retains token validation, missing-session rejection and GET rate limiting", async () => {
+  const h = harness();
+  assert.equal((await h.get("?mode=status", "invalid")).status, 404);
+  assert.equal((await h.get("?mode=status", "b".repeat(48))).status, 404);
+  let r;
+  for (let i = 0; i < 121; i++) r = await h.get("?mode=status");
+  assert.equal(r.status, 429);
+});
+await test("admin consumers use status mode; signer retains document GETs", async () => {
+  for (const path of ["app/members/[id]/contract/page.tsx", "app/members/new/page.tsx"]) {
+    const source = read(path);
+    assert.match(source, /\/api\/signing-sessions\/\$\{[^}]+\}\?mode=status/);
+    assert.match(source, /status: data.status/);
+  }
+  assert.doesNotMatch(read("app/sign/[token]/page.tsx"), /mode=status/);
+});
+
 function creationHarness(options = {}) {
   const A = { id: 3, name: "A", version: "1", fileUrl: "template-ref", active: true };
   const B = { id: 4, name: "B", version: "2", fileUrl: "template-b", active: true };

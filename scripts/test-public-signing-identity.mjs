@@ -268,9 +268,9 @@ export function harness(options = {}) {
       }), { params: Promise.resolve({ token: requestToken }) });
       return { status: response.status, body: await response.json() };
     },
-    async get() {
-      const response = await GET(new Request(`http://localhost/api/signing-sessions/${token}`), { params: Promise.resolve({ token }) });
-      return { status: response.status, body: await response.json() };
+    async get(query = "", requestToken = token) {
+      const response = await GET(new Request(`http://localhost/api/signing-sessions/${requestToken}${query}`), { params: Promise.resolve({ token: requestToken }) });
+      return { status: response.status, body: await response.json(), headers: response.headers };
     },
   };
 }

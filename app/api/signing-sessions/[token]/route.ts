@@ -285,6 +285,15 @@ export async function GET(
     return publicSigningError(404);
   }
 
+  // Observation only: no document URL or signing authorization. The default GET
+  // and every new-signing POST retain their fresh document availability check.
+  if (new URL(req.url).searchParams.get("mode") === "status") {
+    return NextResponse.json(
+      { status: result.session.contract ? "SIGNED" : result.session.status },
+      { headers: { "Cache-Control": "no-store" } }
+    );
+  }
+
   try {
     return NextResponse.json(await serializePublicSigningSession(result.session));
   } catch (error) {
