@@ -233,7 +233,7 @@ function detailHarness(initial = snapshot()) {
       return Response.json(member);
     }
     if (url.endsWith("/history")) return Response.json({ member, sales: [], totalSpent: 0, count: 0 });
-    if (url.endsWith("/contracts")) return Response.json([{ ...contract, signedAt: now.toISOString(), signedPdfUrl: "/pdf", signatureImage: "signature" }]);
+    if (url.endsWith("/contracts")) return Response.json([{ ...contract, signedAt: now.toISOString(), signedPdfUrl: "/pdf" }]);
     assert.ok(url.endsWith("/access-logs")); return Response.json([]);
   });
   return { page, requests, pending, payloads,
@@ -249,6 +249,8 @@ await test("Detail keeps history/contract collection/RFID; visual facts exclusiv
   assert.match(h.page.text, /Member A/); assert.doesNotMatch(h.page.text, /Wrong name|UNTRUSTED-OPERATIONAL-RFID/);
   assert.ok(badge(h.page.tree, "RFID ASIGNADO"));
   assert.ok(h.page.nodes.some(n => n.props?.href === "/api/contracts/42/pdf"), "Historical PDF remains despite hasContract=false");
+  assert.doesNotMatch(h.page.text, /Firma no disponible/);
+  assert.ok(!h.page.nodes.some(n => String(n.props?.src ?? "").startsWith("data:image")));
   assert.ok(h.page.nodes.some(n => n.props?.className?.includes("text-red-700") && text(n) === new Date(snapshot().member.expiresAt).toLocaleDateString("es-ES")));
   await h.page.click("Editar socio");
   assert.equal(h.page.nodes.find(n => n.props?.id === "member-rfid-code").props.value, "CONFIRMED");

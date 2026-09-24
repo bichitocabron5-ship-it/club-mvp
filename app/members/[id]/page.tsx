@@ -9,7 +9,6 @@ import type {
   MemberContractRecord,
   MemberHistoryData,
 } from "@/lib/types";
-import Image from "next/image";
 import { useSession } from "next-auth/react";
 import { useParams } from "next/navigation";
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
@@ -1386,31 +1385,6 @@ function MemberDetailContent({ id }: { id: string }) {
                       </div>
                     </div>
                   ) : null}
-
-                  {contract.signatureImage ? (
-                    <div className="overflow-hidden rounded-[1.5rem] border border-black/8 bg-white">
-                      <div className="border-b border-black/7 px-4 py-3">
-                        <div className="text-[0.65rem] font-black uppercase tracking-[0.1em] app-muted">
-                          Firma del socio
-                        </div>
-                      </div>
-
-                      <div className="flex min-h-[180px] items-center justify-center bg-[#f7f4ee]/50 p-4">
-                        <Image
-                          src={contract.signatureImage}
-                          alt={`Firma de ${contract.fullName}`}
-                          width={360}
-                          height={180}
-                          unoptimized
-                          className="max-h-[180px] max-w-full object-contain"
-                        />
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="rounded-[1.25rem] border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
-                      Firma no disponible.
-                    </div>
-                  )}
 
                   <div className="flex flex-col gap-2 border-t border-black/7 pt-4 sm:flex-row sm:flex-wrap">
                     <a

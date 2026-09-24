@@ -70,6 +70,7 @@ function harness(options = {}) {
   };
   const initial = copy(state);
   const calls = { reads: 0, writes: 0, uploads: 0, downloads: 0, renders: 0, urls: 0, publications: 0 };
+  const signatureEmbeds = [], signatureDraws = [];
   const objects = new Map(), draws = [], urlRefs = [], updateInputs = [];
   const failWriter = () => { calls.writes++; throw new Error("Unexpected writer"); };
   const prisma = {
@@ -159,7 +160,18 @@ function harness(options = {}) {
       PDFDocument: { async load(bytes) {
         calls.renders++;
         const doc = await PDFDocument.load(bytes);
+        const embed = doc.embedPng.bind(doc);
+        doc.embedPng = async bytes => {
+          const image = await embed(bytes);
+          signatureEmbeds.push({ bytes: Buffer.from(bytes), image });
+          return image;
+        };
         for (const page of doc.getPages()) {
+          const drawImage = page.drawImage.bind(page);
+          page.drawImage = (image, settings) => {
+            signatureDraws.push({ image, page: doc.getPages().indexOf(page) });
+            return drawImage(image, settings);
+          };
           const draw = page.drawText.bind(page);
           page.drawText = (text, settings) => { draws.push(text); return draw(text, settings); };
         }
@@ -173,7 +185,7 @@ function harness(options = {}) {
   const getPdf = load("@/app/api/contracts/[id]/pdf/route").GET;
   const replay = load("@/app/api/signing-sessions/[token]/route").POST;
   return {
-    state, initial, calls, objects, draws, urlRefs, updateInputs, pdf, options, load,
+    state, initial, calls, objects, draws, signatureEmbeds, signatureDraws, urlRefs, updateInputs, pdf, options, load,
     patch(body = { consumptionGrams: 60 }, id = "41", raw = false) {
       return patch(new Request("http://test/api/contracts/41", { method: "PATCH", body: raw ? body : JSON.stringify(body) }),
         { params: Promise.resolve({ id }) });
@@ -304,6 +316,10 @@ for (const force of [false, true]) await test(`P/R/S/T/U: initial PDF snapshot, 
   for (const field of ["fullName", "dni", "phone", "email", "address", "birthPlace"]) assert.ok(h.draws.includes(original[field]));
   assert.ok(!h.draws.includes(member.fullName)); assert.ok(!h.draws.includes(member.dni));
   const bytes = [...h.objects.values()][0]; assert.equal((await PDFDocument.load(bytes)).getPageCount(), 3);
+  assert.equal(h.signatureEmbeds.length, 1);
+  assert.deepEqual(h.signatureEmbeds[0].bytes, Buffer.from(original.signatureImage.split(",")[1], "base64"));
+  assert.deepEqual(h.signatureDraws.map(draw => draw.page), [1, 1, 2, 2]);
+  for (const draw of h.signatureDraws) assert.equal(draw.image, h.signatureEmbeds[0].image);
   assert.ok(h.state.contract.signedPdfUrl); snapshotIntact(h);
 });
 for (const options of [{ contract: { contractTemplateId: null } }, { missingTemplate: true }, { contract: { contractTemplateId: 8 } }]) {
@@ -332,6 +348,10 @@ for (const options of [{ uploadError: true }, { uploadThrows: true }, { download
 }
 await test("URL failure after publication can retry without regeneration", async () => {
   const h = harness({ urlError: true }); await responseIs(await h.get(), 500);
+  assert.equal(h.signatureEmbeds.length, 1);
+  assert.deepEqual(h.signatureEmbeds[0].bytes, Buffer.from(original.signatureImage.split(",")[1], "base64"));
+  assert.deepEqual(h.signatureDraws.map(draw => draw.page), [1, 1, 2, 2]);
+  for (const draw of h.signatureDraws) assert.equal(draw.image, h.signatureEmbeds[0].image);
   assert.ok(h.state.contract.signedPdfUrl); snapshotIntact(h);
   h.options.urlError = false; assert.equal((await h.get()).status, 302);
   assert.equal(h.calls.uploads, 1); assert.equal(h.calls.writes, 1);

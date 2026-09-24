@@ -515,7 +515,6 @@ export type MemberContractRecord = {
   phone?: string | null;
   email?: string | null;
   consumptionGrams: number | null;
-  signatureImage: string;
   signedAt: string;
   signedPdfUrl: string | null;
   contractTemplate?: ContractTemplateRecord | null;
@@ -617,7 +616,6 @@ export type InternalSigningSessionData = PublicSigningSessionData & {
   token: string;
   signUrl: string;
   expiresAt: string;
-  signatureImage?: string | null;
 };
 
 export type AccessLogRecord = {
