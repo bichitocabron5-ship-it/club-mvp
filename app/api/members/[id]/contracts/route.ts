@@ -18,7 +18,21 @@ export async function GET(
 
   const contracts = await prisma.memberContract.findMany({
     where: { memberId },
-    include: {
+    select: {
+      id: true,
+      memberId: true,
+      signingSessionId: true,
+      contractTemplateId: true,
+      fullName: true,
+      dni: true,
+      address: true,
+      birthPlace: true,
+      birthDate: true,
+      phone: true,
+      email: true,
+      consumptionGrams: true,
+      signedAt: true,
+      signedPdfUrl: true,
       contractTemplate: true,
     },
     orderBy: { signedAt: "desc" },
@@ -26,7 +40,19 @@ export async function GET(
 
   const response = await Promise.all(
     contracts.map(async (contract) => ({
-      ...contract,
+      id: contract.id,
+      memberId: contract.memberId,
+      signingSessionId: contract.signingSessionId,
+      contractTemplateId: contract.contractTemplateId,
+      fullName: contract.fullName,
+      dni: contract.dni,
+      address: contract.address,
+      birthPlace: contract.birthPlace,
+      birthDate: contract.birthDate,
+      phone: contract.phone,
+      email: contract.email,
+      consumptionGrams: contract.consumptionGrams,
+      signedAt: contract.signedAt,
       signedPdfUrl:
         (await createSignedUrlForAllowedStorageRef(contract.signedPdfUrl, {
           context: "api/members/[id]/contracts:signedPdfUrl",

@@ -5,7 +5,6 @@ import type {
   MemberHistoryData,
   PublicSigningSessionData,
 } from "@/lib/types";
-import Image from "next/image";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/ui/page-header";
@@ -497,31 +496,6 @@ export default function MemberContractPage() {
                         </div>
                       </div>
 
-                      {session.signatureImage ? (
-                        <div className="overflow-hidden rounded-[1.5rem] border border-black/8 bg-white">
-                          <div className="border-b border-black/7 px-4 py-3 sm:px-5">
-                            <div className="text-[0.65rem] font-black uppercase tracking-[0.12em] app-muted">
-                              Firma del socio
-                            </div>
-                          </div>
-
-                          <div className="flex min-h-[220px] items-center justify-center bg-[#f7f4ee]/55 p-5">
-                            <Image
-                              src={session.signatureImage}
-                              alt="Firma del socio"
-                              width={420}
-                              height={210}
-                              unoptimized
-                              className="max-h-[210px] max-w-full object-contain"
-                            />
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="rounded-[1.25rem] border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
-                          El contrato consta como firmado, pero la imagen de la firma no está disponible.
-                        </div>
-                      )}
-
                       <div className="flex flex-col gap-2 border-t border-black/7 pt-4 sm:flex-row sm:justify-end">
                         <a
                           href={`/members/${memberId}`}
@@ -541,16 +515,6 @@ export default function MemberContractPage() {
             <div className="rounded-[1.5rem] border border-emerald-200 bg-emerald-50/55 p-4">
               <h2 className="mb-3 font-bold text-emerald-700">Contrato firmado</h2>
 
-              {session.signatureImage && (
-                <Image
-                  src={session.signatureImage}
-                  alt="Firma"
-                  width={384}
-                  height={192}
-                  unoptimized
-                  className="max-w-sm rounded-xl border border-black/8 bg-white p-2"
-                />
-              )}
             </div>
           )}
         </div>
