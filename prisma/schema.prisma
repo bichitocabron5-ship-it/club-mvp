@@ -336,6 +336,18 @@ model OperationalTask {
   completedByUser AppUser? @relation("OperationalTaskCompletedByUser", fields: [completedByUserId], references: [id])
 }
 
+model ContractDocumentSnapshot {
+  id         String   @id @default(uuid()) @db.Uuid
+  sha256     String   @unique @db.VarChar(64)
+  bytes      Bytes    @db.ByteA
+  byteLength Int
+  capturedAt DateTime @default(now())
+
+  templates       ContractTemplate[]
+  signingSessions SigningSession[]
+  contracts       MemberContract[]
+}
+
 model ContractTemplate {
   id        Int      @id @default(autoincrement())
   name      String
@@ -344,8 +356,13 @@ model ContractTemplate {
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
 
+  documentSnapshotId String? @db.Uuid
+  documentSnapshot ContractDocumentSnapshot? @relation(fields: [documentSnapshotId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
   contracts MemberContract[]
   signingSessions SigningSession[]
+
+  @@index([documentSnapshotId])
 }
 
 model MemberContract {
@@ -353,6 +370,9 @@ model MemberContract {
   memberId           Int
   signingSessionId   Int? @unique
   contractTemplateId Int?
+
+  documentSnapshotId String? @db.Uuid
+  documentSnapshot ContractDocumentSnapshot? @relation(fields: [documentSnapshotId], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
   fullName         String
   dni              String
@@ -370,6 +390,8 @@ model MemberContract {
   member           Member            @relation(fields: [memberId], references: [id])
   contractTemplate ContractTemplate? @relation(fields: [contractTemplateId], references: [id])
   signingSession   SigningSession?   @relation(fields: [signingSessionId], references: [id])
+
+  @@index([documentSnapshotId])
 }
 
 model SigningSession {
@@ -377,6 +399,8 @@ model SigningSession {
   token          String    @unique
   memberId       Int
   contractTemplateId Int?
+  documentSnapshotId String? @db.Uuid
+  documentSnapshot ContractDocumentSnapshot? @relation(fields: [documentSnapshotId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   status         String    @default("PENDING") // PENDING / SIGNED / CANCELLED
   signatureImage String?   @db.Text
   signedAt       DateTime?
@@ -389,6 +413,7 @@ model SigningSession {
 
   @@index([status, expiresAt])
   @@index([contractTemplateId])
+  @@index([documentSnapshotId])
 }
 
 model ClubSetting {
