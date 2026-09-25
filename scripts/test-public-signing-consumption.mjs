@@ -251,7 +251,7 @@ function pageHarness(initial, refreshed = initial, refreshFails = false) {
     get cleared() { return cleared; }, draw() { ink = true; },
   };
 }
-const pending = (value, error = null) => ({ status: "PENDING", member: { fullName: "Test", dni: "ABC", consumptionGrams: value }, monthlyLimitError: error, contractTemplate: { id: 3, name: "Template", version: "1", fileUrl: "https://storage.invalid/template" } });
+const pending = (value, error = null) => ({ documentSnapshotId: "11111111-1111-4111-8111-111111111111", status: "PENDING", member: { fullName: "Test", dni: "ABC", consumptionGrams: value }, monthlyLimitError: error, contractTemplate: { id: 3, name: "Template", version: "1", fileUrl: "https://storage.invalid/template" } });
 await test("O/P/W/X: actual UI displays read-only X, sends expected X, refreshes Y without POST retry", async () => {
   assert.doesNotMatch(pageSource, /form\.consumptionGrams|placeholder="30"|\?\?\s*30\b|Consumo mensual declarado/);
   const h = pageHarness(pending(X), pending(60));

@@ -1,9 +1,9 @@
+import { verifyContractDocumentSnapshot } from "@/lib/contract-document-snapshot";
 import type { Prisma } from "@prisma/client";
 
 import { getPersistedMonthlyLimitG } from "@/lib/club-settings";
 import {
   createSignedUrlForAllowedStorageRef,
-  requireSigningTemplateDocument,
   SigningTemplateError,
 } from "@/lib/contract-storage";
 import { prisma } from "@/lib/prisma";
@@ -40,6 +40,18 @@ export function requireSessionContractTemplate(session: SigningSessionWithPublic
   return session.contractTemplate;
 }
 
+/** Read immutable bytes outside the signing transaction; never infer from fileUrl. */
+export async function requireSessionDocumentSnapshot(session: { documentSnapshotId: string | null }) {
+  if (!session.documentSnapshotId) throw new SigningTemplateError("SIGNING_DOCUMENT_REQUIRED");
+  try {
+    const snapshot = await prisma.contractDocumentSnapshot.findUnique({ where: { id: session.documentSnapshotId } });
+    if (!snapshot || snapshot.id !== session.documentSnapshotId) throw new Error("Missing snapshot");
+    return await verifyContractDocumentSnapshot(snapshot);
+  } catch {
+    throw new SigningTemplateError("SIGNING_DOCUMENT_UNAVAILABLE");
+  }
+}
+
 async function getLatestContractData(session: SigningSessionWithPublicRelations) {
   if (session.contract) {
     return session.contract;
@@ -72,7 +84,8 @@ export async function serializePublicSigningSession(
   let contractTemplateFileUrl: string | null = null;
   if (contractTemplate) {
     if (!session.contract && session.status === "PENDING") {
-      contractTemplateFileUrl = await requireSigningTemplateDocument(contractTemplate.fileUrl);
+      const snapshot = await requireSessionDocumentSnapshot(session);
+      contractTemplateFileUrl = `/api/signing-sessions/${encodeURIComponent(session.token)}?mode=document&expectedDocumentSnapshotId=${encodeURIComponent(snapshot.id)}`;
     } else {
       // Historical recognition must not depend on Storage availability.
       try {
@@ -98,6 +111,7 @@ export async function serializePublicSigningSession(
   const contractData = await getLatestContractData(session);
 
   return {
+    documentSnapshotId: session.contract ? session.contract.documentSnapshotId : session.documentSnapshotId,
     status: session.contract ? "SIGNED" : session.status,
     member: {
       fullName: session.member.fullName,

@@ -11,6 +11,9 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 const ALLOWED_CONTRACT_BUCKETS = ["contract-templates", "signed-contracts"] as const;
 
 const SIGNING_TEMPLATE_ERRORS = {
+  SIGNING_DOCUMENT_REQUIRED: { status: 409, message: "La sesión no tiene snapshot documental. Solicita un nuevo enlace al personal." },
+  SIGNING_DOCUMENT_CHANGED: { status: 409, message: "El documento ha cambiado. Revisa el documento y vuelve a firmar." },
+  SIGNING_DOCUMENT_UNAVAILABLE: { status: 503, message: "El snapshot documental no está disponible. Reintenta su carga antes de firmar." },
   SIGNING_TEMPLATE_UNRESOLVED: { status: 409, message: "La sesión no tiene una plantilla identificada. Solicita un nuevo enlace al personal." },
   SIGNING_TEMPLATE_CHANGED: { status: 409, message: "La plantilla no coincide con la revisada. Revisa el documento y vuelve a firmar." },
   SIGNING_TEMPLATE_UNAVAILABLE: { status: 503, message: "El documento contractual no está disponible. Reintenta su carga antes de firmar." },

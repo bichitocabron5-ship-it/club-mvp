@@ -587,6 +587,7 @@ export type SigningSessionData = {
 };
 
 export type PublicSigningSessionData = {
+  documentSnapshotId: string | null;
   monthlyLimitError?: "MONTHLY_LIMIT_NOT_CONFIGURED" | "MONTHLY_LIMIT_UNAVAILABLE" | null;
   status: "PENDING" | "SIGNED" | "CANCELLED" | string;
   member: {

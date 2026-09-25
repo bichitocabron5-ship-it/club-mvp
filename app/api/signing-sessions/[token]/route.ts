@@ -1,6 +1,6 @@
 import { ensureSignedContractPdf } from "@/lib/contract-pdf";
 import { getPersistedMonthlyLimitG } from "@/lib/club-settings";
-import { requireSigningTemplateDocument, SigningTemplateError } from "@/lib/contract-storage";
+import { SigningTemplateError } from "@/lib/contract-storage";
 import {
   MEMBER_IDENTITY_MAX_INPUT_LENGTH,
   normalizeMemberIdentity,
@@ -19,6 +19,7 @@ import {
 import {
   isSigningSessionExpired,
   requireSessionContractTemplate,
+  requireSessionDocumentSnapshot,
   serializePublicSigningSession,
 } from "@/lib/signing-session";
 import { isStorageUrlsDisabled } from "@/lib/storage";
@@ -84,6 +85,7 @@ function isPngSignatureDataUrl(value: string) {
 
 const signPayloadSchema = z
   .object({
+    expectedDocumentSnapshotId: z.string().uuid(),
     expectedContractTemplateId: z.number().int().positive().max(2_147_483_647),
     expectedConsumptionGrams: z.number().int().positive().max(2_147_483_647),
     signatureImage: z
@@ -110,11 +112,11 @@ const signPayloadSchema = z
   .strict();
 
 function publicSigningError(status: number) {
-  return NextResponse.json({ error: PUBLIC_SIGNING_ERROR }, { status });
+  return NextResponse.json({ error: PUBLIC_SIGNING_ERROR }, { status, headers: { "Cache-Control": "no-store" } });
 }
 
 function invalidSigningPayload(status = 400) {
-  return NextResponse.json({ error: INVALID_SIGNING_PAYLOAD_ERROR }, { status });
+  return NextResponse.json({ error: INVALID_SIGNING_PAYLOAD_ERROR }, { status, headers: { "Cache-Control": "no-store" } });
 }
 
 function isSigningSessionContractUniqueError(error: unknown) {
@@ -261,7 +263,7 @@ async function getSigningSessionSuccessResponse(token: string) {
     return publicSigningError(404);
   }
 
-  return NextResponse.json(await serializePublicSigningSession(session));
+  return NextResponse.json(await serializePublicSigningSession(session), { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function GET(
@@ -295,15 +297,33 @@ export async function GET(
   }
 
   try {
-    return NextResponse.json(await serializePublicSigningSession(result.session));
+    if (new URL(req.url).searchParams.get("mode") === "document") {
+      if (result.session.contract || result.session.status !== "PENDING") return publicSigningError(409);
+      requireSessionContractTemplate(result.session);
+      const expected = z.string().uuid().safeParse(new URL(req.url).searchParams.get("expectedDocumentSnapshotId"));
+      if (!expected.success) return invalidSigningPayload();
+      if (!result.session.documentSnapshotId) throw new SigningTemplateError("SIGNING_DOCUMENT_REQUIRED");
+      if (expected.data !== result.session.documentSnapshotId) throw new SigningTemplateError("SIGNING_DOCUMENT_CHANGED");
+      const snapshot = await requireSessionDocumentSnapshot(result.session);
+      return new Response(new Uint8Array(snapshot.bytes), { headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": 'inline; filename="contrato.pdf"',
+        "Content-Length": String(snapshot.byteLength),
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "no-referrer",
+      } });
+    }
+    return NextResponse.json(await serializePublicSigningSession(result.session), { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (!(error instanceof SigningTemplateError)) throw error;
+    if (new URL(req.url).searchParams.get("mode") === "document") return templateErrorResponse(error);
     return await recoverConfirmedSigning(result.session.token) ?? templateErrorResponse(error);
   }
 }
 
 function templateErrorResponse(error: SigningTemplateError) {
-  return NextResponse.json({ code: error.code, error: error.message }, { status: error.status });
+  return NextResponse.json({ code: error.code, error: error.message }, { status: error.status, headers: { "Cache-Control": "no-store" } });
 }
 
 // A concurrent committed signature wins over new-signing preflight errors.
@@ -313,7 +333,7 @@ async function recoverConfirmedSigning(token: string) {
   });
   if (!session?.contract) return null;
   await ensureSignedPdfForContract(session.contract.id);
-  return NextResponse.json(await serializePublicSigningSession(session));
+  return NextResponse.json(await serializePublicSigningSession(session), { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(
@@ -339,7 +359,8 @@ export async function POST(
     await ensureSignedPdfForContract(existingSession.contract.id);
 
     return NextResponse.json(
-      await serializePublicSigningSession(existingSession)
+      await serializePublicSigningSession(existingSession),
+      { headers: { "Cache-Control": "no-store" } }
     );
   }
 
@@ -378,7 +399,11 @@ export async function POST(
     if (parsedBody.data.expectedContractTemplateId !== contractTemplate.id) {
       throw new SigningTemplateError("SIGNING_TEMPLATE_CHANGED");
     }
-    await requireSigningTemplateDocument(contractTemplate.fileUrl);
+    if (!existingSession.documentSnapshotId) throw new SigningTemplateError("SIGNING_DOCUMENT_REQUIRED");
+    if (parsedBody.data.expectedDocumentSnapshotId !== existingSession.documentSnapshotId) {
+      throw new SigningTemplateError("SIGNING_DOCUMENT_CHANGED");
+    }
+    await requireSessionDocumentSnapshot(existingSession);
   } catch (error) {
     if (!(error instanceof SigningTemplateError)) throw error;
     return rejectNewSigning(templateErrorResponse(error));
@@ -435,6 +460,7 @@ export async function POST(
           status: "PENDING",
           memberId: existingSession.memberId,
           contractTemplateId: contractTemplate.id,
+          documentSnapshotId: parsedBody.data.expectedDocumentSnapshotId,
         },
         data: {
           status: "SIGNED",
@@ -459,6 +485,7 @@ export async function POST(
           where: { id: existingSession.id }, include: { member: true, contract: true, contractTemplate: true },
         });
         if (current) {
+          if (current.documentSnapshotId !== parsedBody.data.expectedDocumentSnapshotId) throw new SigningTemplateError("SIGNING_DOCUMENT_CHANGED");
           const currentTemplate = requireSessionContractTemplate(current);
           if (currentTemplate.id !== contractTemplate.id) throw new SigningTemplateError("SIGNING_TEMPLATE_CHANGED");
         }
@@ -470,6 +497,7 @@ export async function POST(
         where: { id: existingSession.id }, include: { member: true, contract: true, contractTemplate: true },
       });
       if (!claimed || claimed.memberId !== existingSession.memberId) throw new Error(SIGNING_SESSION_NOT_PENDING_ERROR);
+      if (claimed.documentSnapshotId !== parsedBody.data.expectedDocumentSnapshotId) throw new SigningTemplateError("SIGNING_DOCUMENT_CHANGED");
       const claimedTemplate = requireSessionContractTemplate(claimed);
       if (claimedTemplate.id !== contractTemplate.id) throw new SigningTemplateError("SIGNING_TEMPLATE_CHANGED");
 
@@ -493,6 +521,7 @@ export async function POST(
           memberId: existingSession.memberId,
           signingSessionId: existingSession.id,
           contractTemplateId: claimedTemplate.id,
+          documentSnapshotId: claimed.documentSnapshotId,
 
           fullName: mergedFullName,
           dni: mergedDni,
