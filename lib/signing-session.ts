@@ -37,6 +37,10 @@ export function requireSessionContractTemplate(session: SigningSessionWithPublic
       session.contractTemplate.id !== session.contractTemplateId) {
     throw new SigningTemplateError("SIGNING_TEMPLATE_UNRESOLVED");
   }
+  if (session.documentSnapshotId &&
+      session.contractTemplate.documentSnapshotId !== session.documentSnapshotId) {
+    throw new SigningTemplateError("SIGNING_DOCUMENT_CHANGED");
+  }
   return session.contractTemplate;
 }
 
@@ -86,7 +90,7 @@ export async function serializePublicSigningSession(
     if (!session.contract && session.status === "PENDING") {
       const snapshot = await requireSessionDocumentSnapshot(session);
       contractTemplateFileUrl = `/api/signing-sessions/${encodeURIComponent(session.token)}?mode=document&expectedDocumentSnapshotId=${encodeURIComponent(snapshot.id)}`;
-    } else {
+    } else if (session.contract?.documentSnapshotId === null) {
       // Historical recognition must not depend on Storage availability.
       try {
         contractTemplateFileUrl = await createSignedUrlForAllowedStorageRef(contractTemplate.fileUrl, {

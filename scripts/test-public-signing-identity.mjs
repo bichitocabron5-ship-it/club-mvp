@@ -226,7 +226,7 @@ export function harness(options = {}) {
       buildStoragePublicUrl: () => "https://storage.invalid/controlled",
       buildStoredStorageRef: (bucket, path) => JSON.stringify({ bucket, path }),
       createStorageSignedUrl: async (_ref, settings) => {
-        options.onSignedUrl?.(settings);
+        options.onSignedUrl?.(settings, _ref);
         return options.urlMissing ? null : "https://storage.invalid/controlled";
       },
     },
@@ -267,6 +267,7 @@ export function harness(options = {}) {
     calls, initial, pdfSources, pdfText, uploads,
     setContractSnapshotId(id) { state.contracts.find(c => c.signingSessionId === 9).documentSnapshotId = id; },
     setSnapshotId(id) { state.session.documentSnapshotId = id; },
+    setTemplateSnapshotId(id) { template.documentSnapshotId = id; },
     setFileUrl(url) { template.fileUrl = url; },
     setSessionTemplateId(id) { state.session.contractTemplateId = id; },
     setContractTemplateId(id) { state.contracts.find(c => c.signingSessionId === 9).contractTemplateId = id; },

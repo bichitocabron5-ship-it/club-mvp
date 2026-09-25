@@ -1,8 +1,8 @@
 import { requireStaffOrAdmin } from "@/lib/auth-server";
 import { findActiveContractTemplate } from "@/lib/contract-templates";
-import { requireSigningTemplateDocument, SigningTemplateError } from "@/lib/contract-storage";
+import { SigningTemplateError } from "@/lib/contract-storage";
 import { prisma } from "@/lib/prisma";
-import { getSigningSessionExpiresAt, serializeInternalSigningSession } from "@/lib/signing-session";
+import { getSigningSessionExpiresAt, requireSessionDocumentSnapshot, serializeInternalSigningSession } from "@/lib/signing-session";
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import crypto from "crypto";
@@ -28,7 +28,7 @@ export async function POST(req: Request) {
     if (!template.documentSnapshotId) {
       return NextResponse.json({ code: "SIGNING_TEMPLATE_SNAPSHOT_REQUIRED", error: "La plantilla no tiene snapshot. Configura una nueva plantilla válida." }, { status: 409 });
     }
-    await requireSigningTemplateDocument(template.fileUrl);
+    await requireSessionDocumentSnapshot(template);
     const session = await prisma.$transaction(async (tx) => {
       // FOR SHARE blocks deletion and non-key updates (including snapshot changes).
       // Keep the selected pair; never silently select another template or snapshot.

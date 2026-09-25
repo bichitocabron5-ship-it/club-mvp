@@ -93,4 +93,19 @@ await test("delivery validates evidence, token, expiry and status", async () => 
   assert.equal((await harness({ status: "CANCELLED" }).get(delivery(snapshotId))).status, 404);
   untouched(h);
 });
+await test("template/snapshot mismatch rejects document and signature before writes", async () => {
+  const h = harness(); h.setTemplateSnapshotId(otherId);
+  for (const r of [await h.get(), await h.get(delivery(snapshotId)), await h.post()]) {
+    assert.equal(r.status, 409); assert.equal(r.body.code, "SIGNING_DOCUMENT_CHANGED");
+  }
+  untouched(h); assert.equal(h.calls.transactions, 0);
+});
+await test("signed snapshot response never exposes mutable template URL", async () => {
+  const refs = [];
+  const h = harness({ onSignedUrl: (_settings, ref) => refs.push(ref) });
+  assert.equal((await h.post()).body.contractTemplate, null);
+  assert.equal((await h.get()).body.contractTemplate, null);
+  assert.equal(refs.includes("template-ref"), false);
+  assert.equal(h.calls.pdfUpdates, 1);
+});
 console.log(`${checks} snapshot signing checks passed; no real PostgreSQL/browser validation.`);
