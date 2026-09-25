@@ -75,9 +75,10 @@ await test("admin consumers use status mode; signer retains document GETs", asyn
 });
 
 function creationHarness(options = {}) {
-  const A = { id: 3, name: "A", version: "1", fileUrl: "template-ref", active: true };
+  const A = { id: 3, name: "A", version: "1", fileUrl: "template-ref", active: true,
+    documentSnapshotId: options.legacy ? null : "snapshot-a" };
   const B = { id: 4, name: "B", version: "2", fileUrl: "template-b", active: true };
-  let active = A, selected = 0, saved = null;
+  let active = A, selected = 0, saved = null, locked = false, downloads = 0;
   const member = { id: 17, fullName: "Member", dni: "DOC", memberNumber: "17", phone: null, email: null };
   const mocks = {
     "next/server": { NextResponse: Response },
@@ -92,14 +93,28 @@ function creationHarness(options = {}) {
       createStorageSignedUrl: async (_ref, settings) => { assert.equal(settings.cache, false); return "https://storage.invalid/template"; },
     },
     "@/lib/supabase-admin": { getSupabaseAdmin: () => ({ storage: { from: () => ({ download: async () => {
+      assert.equal(locked, false); downloads++;
       active = B; // B becomes active after A was selected, before INSERT.
       return { data: new Blob(["document"]), error: null };
     } }) } }) },
     "@/lib/prisma": { prisma: {
+      async $transaction(run) {
+        try { return await run({
+          $queryRaw: async (sql, id) => {
+            locked = true;
+            assert.match(sql.join("?"), /WHERE "id" = \? FOR SHARE/);
+            assert.equal(id, A.id);
+            return options.deleted ? [] : [{ id, documentSnapshotId: options.changed ? "snapshot-b" : A.documentSnapshotId }];
+          },
+          signingSession: this.signingSession,
+        }); } finally { locked = false; }
+      },
       member: { findUnique: async () => options.missingMember ? null : member },
       signingSession: { create: async ({ data }) => {
+        assert.equal(locked, true);
         if (options.createError) throw options.createError;
         assert.equal(data.contractTemplateId, A.id);
+        assert.equal(data.documentSnapshotId, A.documentSnapshotId);
         saved = { id: 9, status: "PENDING", ...data, member, contract: null, contractTemplate: A };
         return saved;
       } },
@@ -108,10 +123,20 @@ function creationHarness(options = {}) {
     } },
   };
   const post = loader(mocks)("@/app/api/signing-sessions/route").POST;
-  return { get saved() { return saved; }, get selected() { return selected; }, async post(body = { memberId: 17 }, raw = false) {
+  return { get saved() { return saved; }, get selected() { return selected; }, get downloads() { return downloads; },
+    changeSnapshot() { A.documentSnapshotId = "later-snapshot"; }, async post(body = { memberId: 17 }, raw = false) {
     const response = await post(new Request("https://club.invalid/api/signing-sessions", { method: "POST", body: raw ? body : JSON.stringify(body) }));
     return { status: response.status, body: await response.json() };
   } };
+}
+
+for (const options of [{ legacy: true }, { changed: true }, { deleted: true }]) {
+  await test(`snapshot binding fails closed ${JSON.stringify(options)}`, async () => {
+    const h = creationHarness(options), r = await h.post();
+    assert.equal(r.status, 409); assert.equal(h.saved, null); assert.equal(h.selected, 1);
+    assert.equal(r.body.code, options.legacy ? "SIGNING_TEMPLATE_SNAPSHOT_REQUIRED" : "SIGNING_TEMPLATE_CHANGED");
+    if (options.legacy) assert.equal(h.downloads, 0);
+  });
 }
 
 await test("A: authorized creation persists A even if B appears before INSERT", async () => {
@@ -119,6 +144,7 @@ await test("A: authorized creation persists A even if B appears before INSERT", 
   assert.equal(r.status, 200); assert.equal(h.selected, 1);
   assert.equal(h.saved.contractTemplateId, 3); assert.equal(r.body.contractTemplate.id, 3);
   assert.match(h.saved.token, /^[a-f0-9]{48}$/); assert.ok(r.body.signUrl.includes(h.saved.token));
+  h.changeSnapshot(); assert.equal(h.saved.documentSnapshotId, "snapshot-a");
 });
 for (const value of [undefined, "17", 0, -1, 1.2, 2147483648]) await test(`creation validates memberId ${value}`, async () => {
   const h = creationHarness(); assert.equal((await h.post({ memberId: value })).status, 400); assert.equal(h.saved, null);

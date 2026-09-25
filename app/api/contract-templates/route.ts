@@ -7,6 +7,8 @@ import {
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { createContractTemplate, ContractTemplateCreationError } from "@/lib/contract-templates";
+import { ContractDocumentSnapshotError } from "@/lib/contract-document-snapshot";
 
 const contractTemplateSchema = z.object({
   name: z.string().trim().min(1),
@@ -59,19 +61,25 @@ export async function POST(req: Request) {
     );
   }
 
-  const template = await prisma.contractTemplate.create({
-    data: {
+  try {
+    const template = await createContractTemplate({
       name: parsed.data.name,
       version: parsed.data.version,
       fileUrl: storageRef.storageRef,
       active: parsed.data.active ?? true,
-    },
-  });
+    });
 
-  return NextResponse.json({
-    ...template,
-    fileUrl: await createSignedUrlForAllowedStorageRef(template.fileUrl, {
-      context: "api/contract-templates:post",
-    }),
-  });
+    return NextResponse.json({
+      ...template,
+      fileUrl: await createSignedUrlForAllowedStorageRef(template.fileUrl, {
+        context: "api/contract-templates:post",
+      }),
+    });
+  } catch (error) {
+    if (error instanceof ContractTemplateCreationError || error instanceof ContractDocumentSnapshotError) {
+      return NextResponse.json({ code: error.code, error: "No se pudo capturar el documento de la plantilla" },
+        { status: error instanceof ContractTemplateCreationError && error.code === "TEMPLATE_STORAGE_UNAVAILABLE" ? 503 : 422 });
+    }
+    throw error;
+  }
 }

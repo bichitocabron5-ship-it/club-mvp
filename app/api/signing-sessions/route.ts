@@ -25,13 +25,28 @@ export async function POST(req: Request) {
     // Select once, only in this authorized creation flow.
     const template = await findActiveContractTemplate();
     if (!template) return NextResponse.json({ error: "No hay plantilla de contrato activa configurada" }, { status: 400 });
+    if (!template.documentSnapshotId) {
+      return NextResponse.json({ code: "SIGNING_TEMPLATE_SNAPSHOT_REQUIRED", error: "La plantilla no tiene snapshot. Configura una nueva plantilla válida." }, { status: 409 });
+    }
     await requireSigningTemplateDocument(template.fileUrl);
-    const session = await prisma.signingSession.create({
-      data: {
-        token: crypto.randomBytes(24).toString("hex"), memberId: member.id,
-        contractTemplateId: template.id, expiresAt: getSigningSessionExpiresAt(),
-      },
-      include: { member: true, contract: true, contractTemplate: true },
+    const session = await prisma.$transaction(async (tx) => {
+      // FOR SHARE blocks deletion and non-key updates (including snapshot changes).
+      // Keep the selected pair; never silently select another template or snapshot.
+      const rows = await tx.$queryRaw<{ id: number; documentSnapshotId: string | null }[]>`
+        SELECT "id", "documentSnapshotId" FROM "ContractTemplate"
+        WHERE "id" = ${template.id} FOR SHARE
+      `;
+      if (!rows[0] || rows[0].documentSnapshotId !== template.documentSnapshotId) {
+        throw new SigningTemplateError("SIGNING_TEMPLATE_CHANGED");
+      }
+      return tx.signingSession.create({
+        data: {
+          token: crypto.randomBytes(24).toString("hex"), memberId: member.id,
+          contractTemplateId: template.id, expiresAt: getSigningSessionExpiresAt(),
+          documentSnapshotId: template.documentSnapshotId,
+        },
+        include: { member: true, contract: true, contractTemplate: true },
+      });
     });
     return NextResponse.json(await serializeInternalSigningSession(session, req));
   } catch (error) {
