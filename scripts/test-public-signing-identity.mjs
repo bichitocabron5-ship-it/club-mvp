@@ -54,7 +54,7 @@ const other = { ...original, id: 18, memberNumber: "M18", dni: "DNIB", fullName:
 const identical = { fullName: original.fullName, dni: original.dni, phone: original.phone, email: original.email };
 const different = { fullName: "Nombre contractual", dni: "DNI-B", phone: "222", email: "b@example.com" };
 const previous = {
-  id: 40, memberId: original.id, signingSessionId: null, contractTemplateId: 3,
+  id: 40, memberId: original.id, signingSessionId: null, contractTemplateId: 3, documentSnapshotId: null,
   ...identical, address: "Previous address", birthPlace: "Previous place",
   birthDate: new Date("1990-01-01"), consumptionGrams: 37,
   signatureImage, signedAt: new Date("2025-01-01"), signedPdfUrl: null,
@@ -70,7 +70,7 @@ export const snapshotId = "11111111-1111-4111-8111-111111111111";
 export const templateBytes = await templateDocument.save();
 
 export function harness(options = {}) {
-  const template = { id: 3, name: "Template", version: "1", fileUrl: "template-ref", active: options.templateActive ?? true };
+  const template = { id: 3, name: "Template", version: "1", fileUrl: "template-ref", documentSnapshotId: snapshotId, active: options.templateActive ?? true };
   const members = copy([original, other]);
   let state = {
     session: {
@@ -226,7 +226,7 @@ export function harness(options = {}) {
       buildStoragePublicUrl: () => "https://storage.invalid/controlled",
       buildStoredStorageRef: (bucket, path) => JSON.stringify({ bucket, path }),
       createStorageSignedUrl: async (_ref, settings) => {
-        options.onSignedUrl?.(settings);
+        options.onSignedUrl?.(settings, _ref);
         return options.urlMissing ? null : "https://storage.invalid/controlled";
       },
     },
@@ -267,6 +267,7 @@ export function harness(options = {}) {
     calls, initial, pdfSources, pdfText, uploads,
     setContractSnapshotId(id) { state.contracts.find(c => c.signingSessionId === 9).documentSnapshotId = id; },
     setSnapshotId(id) { state.session.documentSnapshotId = id; },
+    setTemplateSnapshotId(id) { template.documentSnapshotId = id; },
     setFileUrl(url) { template.fileUrl = url; },
     setSessionTemplateId(id) { state.session.contractTemplateId = id; },
     setContractTemplateId(id) { state.contracts.find(c => c.signingSessionId === 9).contractTemplateId = id; },

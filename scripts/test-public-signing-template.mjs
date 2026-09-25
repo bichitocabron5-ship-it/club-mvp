@@ -119,7 +119,12 @@ function creationHarness(options = {}) {
         saved = { id: 9, status: "PENDING", ...data, member, contract: null, contractTemplate: A };
         return saved;
       } },
-      contractDocumentSnapshot: { findUnique: async ({ where }) => ({ id: where.id, bytes: templateBytes, byteLength: templateBytes.length, sha256: (await import("node:crypto")).createHash("sha256").update(templateBytes).digest("hex") }) },
+      contractDocumentSnapshot: { findUnique: async ({ where }) => {
+        assert.equal(locked, false);
+        active = B;
+        if (options.snapshotMissing) return null;
+        return { id: where.id, bytes: templateBytes, byteLength: templateBytes.length, sha256: (await import("node:crypto")).createHash("sha256").update(templateBytes).digest("hex") };
+      } },
       clubSetting: { findUnique: async () => ({ defaultMonthlyLimitG: 30 }) },
       memberContract: { findFirst: async () => null },
     } },
@@ -151,13 +156,18 @@ await test("A: authorized creation persists A even if B appears before INSERT", 
 for (const value of [undefined, "17", 0, -1, 1.2, 2147483648]) await test(`creation validates memberId ${value}`, async () => {
   const h = creationHarness(); assert.equal((await h.post({ memberId: value })).status, 400); assert.equal(h.saved, null);
 });
-for (const [options, status] of [[{ denied: true }, 403], [{ missingMember: true }, 404], [{ disabled: true }, 503], [{ createError: new Error("PRIVATE_DB") }, 500]]) {
+for (const [options, status] of [[{ denied: true }, 403], [{ missingMember: true }, 404], [{ snapshotMissing: true }, 503], [{ createError: new Error("PRIVATE_DB") }, 500]]) {
   await test(`creation failure ${status} does not persist session`, async () => {
     const h = creationHarness(options); const r = await h.post(); assert.equal(r.status, status); assert.equal(h.saved, null);
     assert.doesNotMatch(JSON.stringify(r.body), /PRIVATE_DB/);
   });
 }
 await test("creation malformed JSON", async () => { assert.equal((await creationHarness().post("{", true)).status, 400); });
+await test("creation uses snapshot even with Storage disabled; no mutable download", async () => {
+  const h = creationHarness({ disabled: true });
+  assert.equal((await h.post()).status, 200);
+  assert.equal(h.downloads, 0);
+});
 await test("selected template deleted before INSERT: controlled FK conflict, no reselection", async () => {
   const { Prisma } = await import("@prisma/client");
   const h = creationHarness({ createError: new Prisma.PrismaClientKnownRequestError("PRIVATE_FK", { code: "P2003", clientVersion: "7.8.0" }) });
@@ -201,7 +211,7 @@ for (const legacyTemplate of [3, null]) await test(`H: signed legacy wins; Stora
   assert.equal(h.calls.creates, 1); assert.equal(h.calls.audits, 1);
 });
 await test("H: legacy session null still returns the contract's historical template", async () => {
-  const h = harness(); await h.post(); h.setSessionTemplateId(null);
+  const h = harness(); await h.post(); h.setSessionTemplateId(null); h.setContractSnapshotId(null);
   assert.equal((await h.get()).body.contractTemplate.id, 3);
   assert.equal((await h.post({}, undefined, 30, { expectedContractTemplateId: 4 })).body.contractTemplate.id, 3);
   assert.equal(h.calls.creates, 1);
