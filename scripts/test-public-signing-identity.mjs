@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 // Real POST/GET, serializer, DNI normalizer, body validation, rate limiter and PDF
 // generator; controlled Prisma/storage dependencies. No database or credentials.
 // Serialized transaction doubles test route branches, NOT PostgreSQL concurrency.
@@ -65,7 +66,8 @@ const deferred = () => {
 };
 const templateDocument = await PDFDocument.create();
 for (let i = 0; i < 3; i++) templateDocument.addPage();
-const templateBytes = await templateDocument.save();
+export const snapshotId = "11111111-1111-4111-8111-111111111111";
+export const templateBytes = await templateDocument.save();
 
 export function harness(options = {}) {
   const template = { id: 3, name: "Template", version: "1", fileUrl: "template-ref", active: options.templateActive ?? true };
@@ -73,6 +75,7 @@ export function harness(options = {}) {
   let state = {
     session: {
       id: 9, token, memberId: original.id, status: options.status ?? "PENDING",
+      documentSnapshotId: Object.hasOwn(options, "snapshotId") ? options.snapshotId : snapshotId,
       contractTemplateId: Object.hasOwn(options, "templateId") ? options.templateId : 3,
       expiresAt: new Date(Date.now() + (options.expired ? -60_000 : 3600_000)),
       signatureImage: null, signedAt: null, createdAt: new Date(),
@@ -97,6 +100,12 @@ export function harness(options = {}) {
   const latest = (contracts, memberId) => contracts.filter(c => c.memberId === memberId)
     .sort((a, b) => b.signedAt - a.signedAt || b.id - a.id)[0] ?? null;
   const prisma = {
+    contractDocumentSnapshot: { async findUnique({ where }) {
+      await options.beforeSnapshotRead?.();
+      if (options.snapshotMissing) return null;
+      return { id: where.id, bytes: templateBytes, byteLength: templateBytes.length,
+        sha256: options.snapshotCorrupt ? "0".repeat(64) : createHash("sha256").update(templateBytes).digest("hex") };
+    } },
     contractTemplate: { async findUnique({ where }) {
       if (options.templateDbError) throw new Error("PRIVATE_TEMPLATE_DB");
       return where.id === 3 ? copy(template) : null;
@@ -157,11 +166,12 @@ export function harness(options = {}) {
         },
         member: memberDelegate,
         signingSession: { async updateMany({ where, data }) {
-          assert.deepEqual(plain(where), { id: 9, status: "PENDING", memberId: 17, contractTemplateId: 3 });
-          if (staged.session.status !== where.status || staged.session.memberId !== where.memberId || staged.session.contractTemplateId !== where.contractTemplateId) return { count: 0 };
+          assert.deepEqual(plain(where), { id: 9, status: "PENDING", memberId: 17, contractTemplateId: 3, documentSnapshotId: snapshotId });
+          if (staged.session.status !== where.status || staged.session.memberId !== where.memberId || staged.session.contractTemplateId !== where.contractTemplateId || staged.session.documentSnapshotId !== where.documentSnapshotId) return { count: 0 };
           Object.assign(staged.session, copy(data));
           return { count: 1 };
         }, async findUnique() {
+          options.beforeClaimConfirmation?.(staged);
           return copy({ ...staged.session, member: members[0], contract: null,
             contractTemplate: staged.session.contractTemplateId ? { ...template, id: staged.session.contractTemplateId } : null });
         } },
@@ -176,6 +186,7 @@ export function harness(options = {}) {
             assert.equal(data.memberId, original.id);
             assert.equal(data.signingSessionId, 9);
             assert.equal(data.contractTemplateId, 3);
+            assert.equal(data.documentSnapshotId, staged.session.documentSnapshotId);
             if (options.contractError) throw options.contractError;
             if (staged.contracts.some(c => c.signingSessionId === data.signingSessionId)) throw unique(["signingSessionId"]);
             const contract = { id: 41, signedAt: new Date(), signedPdfUrl: null, ...copy(data) };
@@ -254,6 +265,9 @@ export function harness(options = {}) {
   const { POST, GET } = load("@/app/api/signing-sessions/[token]/route");
   return {
     calls, initial, pdfSources, pdfText, uploads,
+    setContractSnapshotId(id) { state.contracts.find(c => c.signingSessionId === 9).documentSnapshotId = id; },
+    setSnapshotId(id) { state.session.documentSnapshotId = id; },
+    setFileUrl(url) { template.fileUrl = url; },
     setSessionTemplateId(id) { state.session.contractTemplateId = id; },
     setContractTemplateId(id) { state.contracts.find(c => c.signingSessionId === 9).contractTemplateId = id; },
     setTemplateActive(value) { template.active = value; },
@@ -262,7 +276,7 @@ export function harness(options = {}) {
     get members() { return copy(members); }, get state() { return copy(state); },
     normalize: load("@/lib/member-identity").normalizeMemberIdentity,
     async post(form = identical, requestToken = token, expectedConsumptionGrams = 30, overrides = {}) {
-      const body = { signatureImage, expectedConsumptionGrams, expectedContractTemplateId: 3, ...(form === null ? {} : { form }), ...overrides };
+      const body = { expectedDocumentSnapshotId: snapshotId, signatureImage, expectedConsumptionGrams, expectedContractTemplateId: 3, ...(form === null ? {} : { form }), ...overrides };
       const response = await POST(new Request(`http://localhost/api/signing-sessions/${requestToken}`, {
         method: "POST", body: JSON.stringify(body),
       }), { params: Promise.resolve({ token: requestToken }) });
@@ -270,7 +284,7 @@ export function harness(options = {}) {
     },
     async get(query = "", requestToken = token) {
       const response = await GET(new Request(`http://localhost/api/signing-sessions/${requestToken}${query}`), { params: Promise.resolve({ token: requestToken }) });
-      return { status: response.status, body: await response.json(), headers: response.headers };
+      return { status: response.status, body: response.headers.get("content-type") === "application/pdf" ? Buffer.from(await response.arrayBuffer()) : await response.json(), headers: response.headers };
     },
   };
 }

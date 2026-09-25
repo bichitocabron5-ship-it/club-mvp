@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import vm from "node:vm";
 import ts from "typescript";
-import { harness, loader } from "./test-public-signing-identity.mjs";
+import { harness, loader, snapshotId, templateBytes } from "./test-public-signing-identity.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const read = path => readFileSync(resolve(root, path), "utf8");
@@ -18,7 +18,7 @@ const untouched = h => { assert.equal(h.calls.creates, 0); assert.equal(h.calls.
 await test("status polling never downloads templates or creates URLs, even during Storage failure", async () => {
   let downloads = 0, urls = 0;
   const options = {
-    beforeDocumentRead: () => { downloads++; throw new Error("Storage outage"); },
+    beforeSnapshotRead: () => { downloads++; throw new Error("Storage outage"); },
     onSignedUrl: () => { urls++; throw new Error("Storage outage"); },
   };
   const h = harness(options);
@@ -81,6 +81,7 @@ function creationHarness(options = {}) {
   let active = A, selected = 0, saved = null, locked = false, downloads = 0;
   const member = { id: 17, fullName: "Member", dni: "DOC", memberNumber: "17", phone: null, email: null };
   const mocks = {
+    "server-only": {},
     "next/server": { NextResponse: Response },
     "@/lib/auth-server": { requireStaffOrAdmin: async () => options.denied
       ? { ok: false, status: 403, error: "FORBIDDEN" } : { ok: true } },
@@ -118,6 +119,7 @@ function creationHarness(options = {}) {
         saved = { id: 9, status: "PENDING", ...data, member, contract: null, contractTemplate: A };
         return saved;
       } },
+      contractDocumentSnapshot: { findUnique: async ({ where }) => ({ id: where.id, bytes: templateBytes, byteLength: templateBytes.length, sha256: (await import("node:crypto")).createHash("sha256").update(templateBytes).digest("hex") }) },
       clubSetting: { findUnique: async () => ({ defaultMonthlyLimitG: 30 }) },
       memberContract: { findFirst: async () => null },
     } },
@@ -208,17 +210,10 @@ await test("DB errors are never converted to template availability errors", asyn
   const options = {}, h = harness(options); await h.post(); options.templateDbError = true;
   await assert.rejects(h.get(), /PRIVATE_TEMPLATE_DB/);
 });
-for (const [name, options] of [["I disabled", { storageDisabled: true }], ["J missing", { objectMissing: true }],
-  ["empty", { objectEmpty: true }], ["L URL failure", { urlMissing: true }]]) await test(`${name}: GET/POST unavailable, no signature`, async () => {
+for (const options of [{ storageDisabled: true }, { objectMissing: true }, { objectEmpty: true }, { urlMissing: true }]) await test("snapshot signing independent of mutable Storage", async () => {
   const h = harness(options);
-  for (const r of [await h.get(), await h.post()]) { assert.equal(r.status, 503); assert.equal(r.body.code, "SIGNING_TEMPLATE_UNAVAILABLE"); }
-  untouched(h);
-});
-await test("K: a previously available URL cannot authorize a now-missing object", async () => {
-  const settings = [], options = { onSignedUrl: s => settings.push(s) }, h = harness(options);
-  assert.equal((await h.get()).status, 200); assert.equal(settings[0].cache, false);
-  options.objectMissing = true;
-  assert.equal((await h.post()).status, 503); assert.equal(settings.length, 1); untouched(h);
+  assert.equal((await h.get()).status, 200);
+  assert.equal((await h.post()).status, 200);
 });
 await test("O: two pending reads produce one contract/audit (serialized double)", async () => {
   const h = harness({ simultaneous: true }); const results = await Promise.all([h.post(), h.post()]);
@@ -231,7 +226,7 @@ for (const id of [4, null]) await test(`P: association changes before claim to $
 });
 await test("Q: competing POST commits while first preflight fails; recover historical success", async () => {
   const entered = deferred(), resume = deferred(); let reads = 0;
-  const h = harness({ beforeDocumentRead: async () => {
+  const h = harness({ beforeSnapshotRead: async () => {
     if (++reads === 1) { entered.release(); await resume.promise; throw new Error("Storage unavailable"); }
   } });
   const first = h.post(); await entered.promise;
@@ -307,14 +302,20 @@ function pageHarness(initial, postCode = "SIGNING_TEMPLATE_CHANGED", refresh = i
     button: text => nodes(tree).find(n => n.type === "button" && JSON.stringify(n.props.children).includes(text)),
   };
 }
-const pending = { status: "PENDING", member: { fullName: "M", dni: "D", consumptionGrams: 30 },
+const pending = { documentSnapshotId: snapshotId, status: "PENDING", member: { fullName: "M", dni: "D", consumptionGrams: 30 },
   contractTemplate: { id: 3, name: "A", version: "1", fileUrl: "https://storage.invalid/A" } };
-await test("U: UI sends ID, clears on CHANGED, refreshes GET only and requires fresh ink", async () => {
-  const h = pageHarness(pending); await h.flush(); h.button("Confirmar y guardar").props.onClick(); await h.flush();
+for (const code of ["SIGNING_TEMPLATE_CHANGED", "SIGNING_DOCUMENT_CHANGED"]) await test(`U: UI evidence and fresh ink on ${code}`, async () => {
+  const h = pageHarness(pending, code); await h.flush(); h.button("Confirmar y guardar").props.onClick(); await h.flush();
   const posts = h.requests.filter(r => r.method === "POST"); assert.equal(posts.length, 1);
+  assert.equal(JSON.parse(posts[0].body).expectedDocumentSnapshotId, snapshotId);
   assert.equal(JSON.parse(posts[0].body).expectedContractTemplateId, 3); assert.equal(h.cleared, 1);
   assert.equal(h.requests.length, 3); h.button("Confirmar y guardar").props.onClick(); await h.flush();
   assert.equal(h.requests.filter(r => r.method === "POST").length, 1);
+});
+await test("U: UI blocks without snapshot evidence", async () => {
+  const h = pageHarness({ ...pending, documentSnapshotId: null }); await h.flush();
+  assert.equal(h.button("Confirmar y guardar").props.disabled, true);
+  h.button("Confirmar y guardar").props.onClick(); await h.flush(); assert.equal(h.requests.length, 1);
 });
 await test("U: UI blocks without template or URL", async () => {
   for (const contractTemplate of [null, { ...pending.contractTemplate, fileUrl: "" }]) {
@@ -323,15 +324,15 @@ await test("U: UI blocks without template or URL", async () => {
     h.button("Confirmar y guardar").props.onClick(); await h.flush(); assert.equal(h.requests.length, 1);
   }
 });
-await test("U: UNAVAILABLE clears and blocks; explicit document retry never retries POST", async () => {
-  const h = pageHarness(pending, "SIGNING_TEMPLATE_UNAVAILABLE"); await h.flush();
+for (const code of ["SIGNING_TEMPLATE_UNAVAILABLE", "SIGNING_DOCUMENT_UNAVAILABLE"]) await test(`U: ${code} clears and blocks; explicit retry never retries POST`, async () => {
+  const h = pageHarness(pending, code); await h.flush();
   h.button("Confirmar y guardar").props.onClick(); await h.flush(); assert.equal(h.cleared, 1);
   assert.equal(h.button("Confirmar y guardar"), undefined); assert.equal(h.requests.length, 2);
   h.button("Reintentar carga").props.onClick(); await h.flush();
   assert.equal(h.requests.length, 3); assert.equal(h.requests.filter(r => r.method === "POST").length, 1);
 });
-await test("U: UNRESOLVED blocks and has no automatic retry", async () => {
-  const h = pageHarness(pending, "SIGNING_TEMPLATE_UNRESOLVED"); await h.flush();
+for (const code of ["SIGNING_TEMPLATE_UNRESOLVED", "SIGNING_DOCUMENT_REQUIRED"]) await test(`U: ${code} blocks without retry`, async () => {
+  const h = pageHarness(pending, code); await h.flush();
   h.button("Confirmar y guardar").props.onClick(); await h.flush();
   assert.equal(h.cleared, 1); assert.equal(h.button("Confirmar y guardar"), undefined); assert.equal(h.requests.length, 2);
 });
