@@ -54,7 +54,7 @@ const other = { ...original, id: 18, memberNumber: "M18", dni: "DNIB", fullName:
 const identical = { fullName: original.fullName, dni: original.dni, phone: original.phone, email: original.email };
 const different = { fullName: "Nombre contractual", dni: "DNI-B", phone: "222", email: "b@example.com" };
 const previous = {
-  id: 40, memberId: original.id, signingSessionId: null, contractTemplateId: 3,
+  id: 40, memberId: original.id, signingSessionId: null, contractTemplateId: 3, documentSnapshotId: null,
   ...identical, address: "Previous address", birthPlace: "Previous place",
   birthDate: new Date("1990-01-01"), consumptionGrams: 37,
   signatureImage, signedAt: new Date("2025-01-01"), signedPdfUrl: null,
@@ -70,7 +70,7 @@ export const snapshotId = "11111111-1111-4111-8111-111111111111";
 export const templateBytes = await templateDocument.save();
 
 export function harness(options = {}) {
-  const template = { id: 3, name: "Template", version: "1", fileUrl: "template-ref", active: options.templateActive ?? true };
+  const template = { id: 3, name: "Template", version: "1", fileUrl: "template-ref", documentSnapshotId: snapshotId, active: options.templateActive ?? true };
   const members = copy([original, other]);
   let state = {
     session: {

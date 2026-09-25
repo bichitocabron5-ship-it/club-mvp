@@ -3,6 +3,7 @@
 // No database, network, credentials or real PostgreSQL/Storage concurrency.
 // Run: node scripts/test-signed-contract-integrity.mjs
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
@@ -24,7 +25,7 @@ const token = "a".repeat(48);
 const X = 42;
 const signatureImage = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==";
 const original = {
-  id: 41, memberId: 17, signingSessionId: 9, contractTemplateId: 3,
+  id: 41, memberId: 17, signingSessionId: 9, contractTemplateId: 3, documentSnapshotId: null,
   fullName: "Contract name", dni: "CONTRACT-DOC", address: "Contract address",
   birthPlace: "Contract birthplace", birthDate: new Date("1990-01-01"),
   phone: "111", email: "contract@example.invalid", consumptionGrams: X,
@@ -39,6 +40,8 @@ const template = { id: 3, name: "Original", version: "1", fileUrl: "original-tem
 const document = await PDFDocument.create();
 for (let i = 0; i < 3; i++) document.addPage();
 const templateBytes = await document.save();
+const snapshot = { id: "snapshot-A", bytes: templateBytes, byteLength: templateBytes.length,
+  sha256: createHash("sha256").update(templateBytes).digest("hex") };
 
 function loader(mocks) {
   const cache = new Map();
@@ -69,11 +72,18 @@ function harness(options = {}) {
       metadata: { monthlyLimitSource: "CLUB_SETTING", monthlyLimitG: X } }],
   };
   const initial = copy(state);
-  const calls = { reads: 0, writes: 0, uploads: 0, downloads: 0, renders: 0, urls: 0, publications: 0 };
+  const calls = { reads: 0, writes: 0, uploads: 0, downloads: 0, renders: 0, urls: 0, publications: 0, snapshotReads: 0 };
+  const loadedBytes = [];
   const signatureEmbeds = [], signatureDraws = [];
   const objects = new Map(), draws = [], urlRefs = [], updateInputs = [];
   const failWriter = () => { calls.writes++; throw new Error("Unexpected writer"); };
   const prisma = {
+    contractDocumentSnapshot: { async findUnique({ where }) {
+      calls.snapshotReads++;
+      assert.equal(where.id, "snapshot-A");
+      if (options.snapshotReadError) throw new Error("PRIVATE_SNAPSHOT_SQL");
+      return copy(options.snapshot === undefined ? snapshot : options.snapshot);
+    } },
     contractTemplate: { async findUnique({ where }) { assert.equal(where.id, 3); return copy(template); } },
     appUser: { async findUnique() {
       if (options.authError) throw new Error("PRIVATE_AUTH_SQL");
@@ -93,7 +103,7 @@ function harness(options = {}) {
         const result = copy(state.contract);
         if (include?.member) result.member = { ...member,
           memberNumber: options.differentPaths ? `M${calls.reads}` : member.memberNumber };
-        if (include?.contractTemplate) result.contractTemplate = options.missingTemplate ? null : copy(template);
+        if (include?.contractTemplate) result.contractTemplate = options.missingTemplate ? null : { ...copy(template), ...copy(options.template ?? {}) };
         return result;
       },
       async update({ where, data }) {
@@ -157,9 +167,10 @@ function harness(options = {}) {
     } } }) },
     "pdf-lib": {
       ...require("pdf-lib"),
-      PDFDocument: { async load(bytes) {
+      PDFDocument: { async load(bytes, settings) {
         calls.renders++;
-        const doc = await PDFDocument.load(bytes);
+        loadedBytes.push(Buffer.from(bytes));
+        const doc = await PDFDocument.load(bytes, settings);
         const embed = doc.embedPng.bind(doc);
         doc.embedPng = async bytes => {
           const image = await embed(bytes);
@@ -185,7 +196,7 @@ function harness(options = {}) {
   const getPdf = load("@/app/api/contracts/[id]/pdf/route").GET;
   const replay = load("@/app/api/signing-sessions/[token]/route").POST;
   return {
-    state, initial, calls, objects, draws, signatureEmbeds, signatureDraws, urlRefs, updateInputs, pdf, options, load,
+    state, initial, calls, objects, draws, signatureEmbeds, signatureDraws, urlRefs, updateInputs, pdf, options, load, loadedBytes,
     patch(body = { consumptionGrams: 60 }, id = "41", raw = false) {
       return patch(new Request("http://test/api/contracts/41", { method: "PATCH", body: raw ? body : JSON.stringify(body) }),
         { params: Promise.resolve({ id }) });
@@ -442,4 +453,56 @@ await test("member UI offers initial generation or existing PDF, never contract 
   assert.match(source, /contract\.signedPdfUrl \? "Ver contrato firmado" : "Generar PDF firmado"/);
   assert.match(source, /se requiere una nueva firma/);
 });
-console.log(`${checks} checks passed. A-Z plus controlled race/failure cases; no real PostgreSQL/Storage concurrency or browser claim.`);
+const provenance = { contract: { documentSnapshotId: "snapshot-A" }, template: { documentSnapshotId: "snapshot-A", fileUrl: "changed-to-B" } };
+for (const deleted of [false, true]) await test(`snapshot A is exact base despite changed/deleted Storage (${deleted})`, async () => {
+  const h = harness({ ...provenance, downloadError: deleted });
+  assert.equal((await h.get()).status, 302);
+  assert.equal(h.calls.downloads, 0);
+  assert.equal(h.calls.snapshotReads, 1);
+  assert.equal(h.loadedBytes.length, 2, "production verification then production rendering");
+  for (const bytes of h.loadedBytes) assert.deepEqual(bytes, Buffer.from(templateBytes));
+  assert.equal(h.signatureEmbeds.length, 1);
+  assert.deepEqual(h.signatureEmbeds[0].bytes, Buffer.from(signatureImage.split(",")[1], "base64"));
+  assert.deepEqual(h.signatureDraws.map(draw => draw.page), [1, 1, 2, 2]);
+  snapshotIntact(h);
+});
+const invalidPdf = Buffer.from("not a PDF");
+for (const bad of [null, { ...snapshot, bytes: new Uint8Array() },
+  { ...snapshot, sha256: "0".repeat(64) }, { ...snapshot, byteLength: snapshot.byteLength + 1 },
+  { ...snapshot, bytes: invalidPdf, byteLength: invalidPdf.length, sha256: createHash("sha256").update(invalidPdf).digest("hex") },
+  { ...snapshot, id: "different-snapshot" }]) await test("missing/corrupt/hash/length/PDF/ID fails closed without fallback", async () => {
+    const h = harness({ ...provenance, snapshot: bad });
+    await responseIs(await h.get(), 409, "CONTRACT_DOCUMENT_UNAVAILABLE");
+    assert.equal(h.calls.uploads + h.calls.downloads, 0); untouched(h);
+  });
+for (const overrides of [
+  { template: { documentSnapshotId: "snapshot-B" } }, { template: { documentSnapshotId: null } },
+  { contract: { documentSnapshotId: "snapshot-A", contractTemplateId: 8 } }, { missingTemplate: true },
+]) await test("contract/template/snapshot mismatch cannot publish", async () => {
+  const h = harness({ ...provenance, ...overrides });
+  await responseIs(await h.get(), 409);
+  assert.equal(h.calls.uploads + h.calls.downloads, 0); untouched(h);
+});
+await test("published snapshot contract and replay never read unavailable snapshot", async () => {
+  const h = harness({ ...provenance, contract: { documentSnapshotId: "snapshot-A", signedPdfUrl: "published" }, snapshotReadError: true });
+  assert.equal((await h.get()).status, 302); await responseIs(await h.replay(), 200);
+  assert.equal(h.calls.snapshotReads + h.calls.downloads + h.calls.uploads, 0); untouched(h);
+});
+await test("snapshot contract concurrent CAS preserves winner", async () => {
+  const entered = gate(), resume = gate();
+  const h = harness({ ...provenance, differentPaths: true, beforeUpdate: async attempt => {
+    if (attempt === 1) { entered.release(); await resume.promise; }
+  } });
+  const late = h.get(); await entered.promise;
+  const winner = await h.get(); resume.release(); const loser = await late;
+  assert.equal(winner.status, 302); assert.equal(loser.status, 302);
+  assert.equal(winner.headers.get("location"), loser.headers.get("location"));
+  assert.equal(h.calls.publications, 1); assert.equal(h.calls.downloads, 0); snapshotIntact(h);
+});
+await test("legacy null uses bound fileUrl without inferring template snapshot", async () => {
+  const h = harness({ template: { documentSnapshotId: "snapshot-A" }, snapshotReadError: true });
+  assert.equal((await h.get()).status, 302);
+  assert.equal(h.calls.downloads, 1); assert.equal(h.calls.snapshotReads, 0);
+  assert.equal(h.state.contract.documentSnapshotId, null); snapshotIntact(h);
+});
+console.log(`${checks} checks passed. A-Z plus snapshot and controlled race/failure cases; no real PostgreSQL/Storage concurrency or browser claim.`);

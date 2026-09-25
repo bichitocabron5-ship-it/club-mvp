@@ -1,4 +1,5 @@
 import "server-only";
+import { verifyContractDocumentSnapshot } from "@/lib/contract-document-snapshot";
 
 import {
   createSignedUrlForAllowedStorageRef,
@@ -15,6 +16,7 @@ const SIGNED_CONTRACT_BUCKET = "signed-contracts";
 
 const PDF_ERRORS = {
   CONTRACT_NOT_FOUND: { status: 404, message: "Contrato no encontrado" },
+  CONTRACT_DOCUMENT_UNAVAILABLE: { status: 409, message: "El documento contractual no está disponible o no es coherente." },
   SIGNED_PDF_IMMUTABLE: { status: 409, message: "El PDF firmado existente no puede sustituirse." },
   CONTRACT_TEMPLATE_UNRESOLVED: { status: 409, message: "No se puede determinar de forma segura la plantilla original del contrato." },
 } as const;
@@ -116,9 +118,28 @@ async function materializeSignedContractPdf(
     throw new ContractPdfError("CONTRACT_TEMPLATE_UNRESOLVED");
   }
 
-  const { bytes: templateBytes } = await downloadAllowedStorageObject(
-    template.fileUrl
-  );
+  let templateBytes: Uint8Array;
+  if (contract.documentSnapshotId !== null) {
+    // Persisted provenance only. Never consult Storage or substitute another snapshot.
+    try {
+      if (template.documentSnapshotId !== contract.documentSnapshotId) {
+        throw new Error("Inconsistent document association");
+      }
+      const snapshot = await prisma.contractDocumentSnapshot.findUnique({
+        where: { id: contract.documentSnapshotId },
+      });
+      if (!snapshot || snapshot.id !== contract.documentSnapshotId) {
+        throw new Error("Missing contractual document");
+      }
+      templateBytes = (await verifyContractDocumentSnapshot(snapshot)).bytes;
+    } catch {
+      throw new ContractPdfError("CONTRACT_DOCUMENT_UNAVAILABLE");
+    }
+  } else {
+    // Historical null provenance only: this URL does not prove originally accepted bytes.
+    // Do not backfill or infer a snapshot from the associated template.
+    ({ bytes: templateBytes } = await downloadAllowedStorageObject(template.fileUrl));
+  }
   const pdfDoc = await PDFDocument.load(templateBytes);
   const pages = pdfDoc.getPages();
 
