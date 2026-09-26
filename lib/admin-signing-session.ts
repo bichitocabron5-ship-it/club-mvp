@@ -17,7 +17,12 @@ export function normalizeSession(session: AdminSigningSession | null, now = Date
 
 // One controller per mounted member. Epochs invalidate reads before any mutation.
 export function createSigningController(memberId: number, notify: (state: SigningState) => void,
-  transport: typeof fetch = fetch, clock = { now: Date.now, setTimeout, clearTimeout }) {
+  transport: typeof fetch = fetch, clock = {
+    now: Date.now,
+    // Native browser timers require the global receiver, not the clock object.
+    setTimeout: globalThis.setTimeout.bind(globalThis),
+    clearTimeout: globalThis.clearTimeout.bind(globalThis),
+  }) {
   let state: SigningState = { session: null, busy: false, error: "", ready: false };
   let epoch = 0, disposed = false, locked = false;
   let poll: ReturnType<typeof setTimeout> | undefined;

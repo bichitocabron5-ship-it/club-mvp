@@ -38,6 +38,27 @@ function harness(initial = pending()) {
 }
 let checks = 0;
 async function test(name, run) { await run(); checks++; console.log('PASS ' + name); }
+await test('default browser timers preserve their receiver before GET and when scheduling/disposing', async () => {
+  const receiver = {}, calls = [], timers = new Map(); let state, timerId = 0;
+  const browser = {
+    receiver,
+    clearTimeout(id) { if (this?.receiver !== receiver) throw new TypeError('Illegal invocation'); calls.push('clearTimeout'); timers.delete(id); },
+    setTimeout(fn, delay) { if (this?.receiver !== receiver) throw new TypeError('Illegal invocation'); calls.push('setTimeout'); const id = ++timerId; timers.set(id, { fn, delay }); return id; },
+    fetch: async (url) => { calls.push(url); return response(pending()); },
+  };
+  // The old default copied native methods onto clock, changing their receiver.
+  const oldClock = { clearTimeout: browser.clearTimeout, setTimeout: browser.setTimeout };
+  assert.throws(() => oldClock.clearTimeout(undefined), /Illegal invocation/);
+  assert.throws(() => oldClock.setTimeout(() => {}, 2000), /Illegal invocation/);
+  const create = loader({}, browser)('@/lib/admin-signing-session').createSigningController;
+  const controller = create(17, next => { state = next; });
+  await controller.recover();
+  assert.deepEqual(calls.slice(0, 2), ['clearTimeout', '/api/members/17/signing-sessions']);
+  assert.equal(state.ready, true); assert.equal(timers.size, 2);
+  await controller.recover();
+  assert.equal(calls.filter(c => c === '/api/members/17/signing-sessions').length, 2);
+  controller.dispose(); assert.equal(timers.size, 0);
+});
 await test('reload recovers current pending, expiry and link without POST', async () => {
   for (let i = 0; i < 2; i++) { const h = harness(); await h.controller.recover(); assert.equal(h.state.session.status, 'PENDING'); assert.ok(h.state.session.signUrl); assert.ok(h.state.session.expiresAt); assert.equal(h.calls[0].url, '/api/members/17/signing-sessions'); assert.equal(h.calls.length, 1); h.controller.dispose(); }
 });
@@ -221,7 +242,15 @@ await test('mounted panel wires guarded buttons, disabled feedback, signing call
   const nodes = node => Array.isArray(node) ? node.flatMap(nodes) : node && typeof node === 'object' ? [node, ...nodes(node.props?.children)] : [];
   const render = () => { cursor = 0; const tree = Panel({ memberId: 17, onSigned, showDocument: true }); effects.splice(0).forEach(fn => fn()); return tree; };
   const button = (tree, text) => nodes(tree).find(n => n.type === 'button' && JSON.stringify(n.props.children).includes(text));
-  render(); await tick(); let tree = render();
+  intercept = () => response(null, 500);
+  let tree = render(); assert.equal(button(tree, 'Crear').props.disabled, true);
+  await tick(); tree = render();
+  assert.equal(calls.length, 1); assert.equal(calls[0].url, '/api/members/17/signing-sessions');
+  assert.equal(button(tree, 'Crear').props.disabled, true);
+  assert.equal(slots[0].ready, false); assert.equal(slots[0].session, null); assert.ok(slots[0].error);
+  intercept = null;
+  button(tree, 'Actualizar estado').props.onClick(); await tick(); tree = render();
+  assert.equal(calls.length, 2); assert.equal(calls[1].url, '/api/members/17/signing-sessions');
   const create = button(tree, 'Crear'); assert.equal(create.props.disabled, false);
   const wait = deferred(); intercept = (_, options) => options.method === 'POST' ? wait.promise : undefined;
   create.props.onClick(); create.props.onClick(); tree = render();
