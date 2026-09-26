@@ -1,3 +1,4 @@
+import { claimSigningSession, SigningLifecycleError } from "@/lib/signing-session-lifecycle";
 import { ensureSignedContractPdf } from "@/lib/contract-pdf";
 import { getPersistedMonthlyLimitG } from "@/lib/club-settings";
 import { SigningTemplateError } from "@/lib/contract-storage";
@@ -453,20 +454,10 @@ export async function POST(
 
   try {
     session = await prisma.$transaction(async (tx) => {
-      const signedAt = new Date();
-      const updatedSession = await tx.signingSession.updateMany({
-        where: {
-          id: existingSession.id,
-          status: "PENDING",
-          memberId: existingSession.memberId,
-          contractTemplateId: contractTemplate.id,
-          documentSnapshotId: parsedBody.data.expectedDocumentSnapshotId,
-        },
-        data: {
-          status: "SIGNED",
-          signatureImage: parsedBody.data.signatureImage,
-          signedAt,
-        },
+      const updatedSession = await claimSigningSession(tx, {
+        id: existingSession.id, memberId: existingSession.memberId,
+        templateId: contractTemplate.id, documentSnapshotId: parsedBody.data.expectedDocumentSnapshotId,
+        signatureImage: parsedBody.data.signatureImage,
       });
 
       if (updatedSession.count === 0) {
@@ -564,6 +555,7 @@ export async function POST(
       };
     });
   } catch (error) {
+    if (error instanceof SigningLifecycleError) return publicSigningError(error.status);
     if (error instanceof SigningTemplateError) {
       return rejectNewSigning(templateErrorResponse(error));
     }

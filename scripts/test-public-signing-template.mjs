@@ -84,7 +84,7 @@ function creationHarness(options = {}) {
     "server-only": {},
     "next/server": { NextResponse: Response },
     "@/lib/auth-server": { requireStaffOrAdmin: async () => options.denied
-      ? { ok: false, status: 403, error: "FORBIDDEN" } : { ok: true } },
+      ? { ok: false, status: 403, error: "FORBIDDEN" } : { ok: true, session: { user: { id: "1", email: "staff@example.invalid" } } } },
     "@/lib/contract-templates": { findActiveContractTemplate: async () => { selected++; return active; } },
     "@/lib/storage": {
       isStorageUrlsDisabled: () => options.disabled ?? false,
@@ -100,15 +100,21 @@ function creationHarness(options = {}) {
     } }) } }) },
     "@/lib/prisma": { prisma: {
       async $transaction(run) {
+        const before = saved;
         try { return await run({
           $queryRaw: async (sql, id) => {
+            const query = sql.join("?");
+            if (query.includes('FROM "Member"')) return [{ id: 17 }];
+            if (query.includes('UPDATE "SigningSession"')) return [];
+            if (query.includes('clock_timestamp')) return [{ now: new Date() }];
             locked = true;
             assert.match(sql.join("?"), /WHERE "id" = \? FOR SHARE/);
             assert.equal(id, A.id);
             return options.deleted ? [] : [{ id, documentSnapshotId: options.changed ? "snapshot-b" : A.documentSnapshotId }];
           },
           signingSession: this.signingSession,
-        }); } finally { locked = false; }
+          auditLog: { create: async () => { if (options.auditError) throw options.auditError; return {}; } },
+        }); } catch (error) { saved = before; throw error; } finally { locked = false; }
       },
       member: { findUnique: async () => options.missingMember ? null : member },
       signingSession: { create: async ({ data }) => {
@@ -162,6 +168,13 @@ for (const [options, status] of [[{ denied: true }, 403], [{ missingMember: true
     assert.doesNotMatch(JSON.stringify(r.body), /PRIVATE_DB/);
   });
 }
+await test("audit FK failure is infrastructure 500, never member/template 409, and rolls back", async () => {
+  const { Prisma } = await import("@prisma/client");
+  const h = creationHarness({ auditError: new Prisma.PrismaClientKnownRequestError("PRIVATE_AUDIT_FK", { code: "P2003", clientVersion: "7.8.0" }) });
+  const r = await h.post();
+  assert.equal(r.status, 500); assert.equal(h.saved, null);
+  assert.doesNotMatch(JSON.stringify(r.body), /PRIVATE_AUDIT_FK/);
+});
 await test("creation malformed JSON", async () => { assert.equal((await creationHarness().post("{", true)).status, 400); });
 await test("creation uses snapshot even with Storage disabled; no mutable download", async () => {
   const h = creationHarness({ disabled: true });
