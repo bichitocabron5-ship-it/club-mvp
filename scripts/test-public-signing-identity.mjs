@@ -157,6 +157,20 @@ export function harness(options = {}) {
       const staged = copy(state);
       const tx = {
         async $queryRaw(strings, ...values) {
+          const sql = strings.join("?");
+          if (sql.includes('FROM "Member"')) return [{ id: 17 }];
+          if (sql.includes('FROM "SigningSession"') && sql.includes('FOR UPDATE')) return [{ id: 9 }];
+          if (sql.includes('FROM "SigningSession"') && sql.includes('clock_timestamp')) {
+            return staged.session.expiresAt <= new Date() ? [{ id: 9 }] : [];
+          }
+          if (sql.includes('UPDATE "SigningSession"')) {
+            assert.match(sql, /"expiresAt" > clock_timestamp\(\)/);
+            const [signatureImage, id, memberId, templateId, documentSnapshotId] = values;
+            const row = staged.session;
+            if (row.id !== id || row.memberId !== memberId || row.status !== "PENDING" || row.contractTemplateId !== templateId || row.documentSnapshotId !== documentSnapshotId || row.expiresAt <= new Date()) return [];
+            Object.assign(row, { status: "SIGNED", signatureImage, signedAt: new Date() });
+            return [{ id }];
+          }
           calls.settingsLocks++;
           assert.equal(staged.session.status, "SIGNED", "claim session before settings read");
           assert.match(strings.join("?"), /SELECT "defaultMonthlyLimitG" FROM "ClubSetting" WHERE "id" = 1 FOR SHARE/);
@@ -266,6 +280,7 @@ export function harness(options = {}) {
   return {
     calls, initial, pdfSources, pdfText, uploads,
     setContractSnapshotId(id) { state.contracts.find(c => c.signingSessionId === 9).documentSnapshotId = id; },
+    setExpiresAt(value) { state.session.expiresAt = value; },
     setSnapshotId(id) { state.session.documentSnapshotId = id; },
     setTemplateSnapshotId(id) { template.documentSnapshotId = id; },
     setFileUrl(url) { template.fileUrl = url; },
