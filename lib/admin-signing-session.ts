@@ -47,7 +47,7 @@ export function createSigningController(memberId: number, notify: (state: Signin
     if (res.status === 410) {
       apply(state.session ? { ...state.session, status: "EXPIRED", signUrl: null } : null); return;
     }
-    if (!res.ok) throw new Error("No se pudo recuperar la sesiÃ³n. Actualiza el estado antes de continuar.");
+    if (!res.ok) throw new Error("No se pudo recuperar la sesión. Actualiza el estado antes de continuar.");
     const data = await res.json();
     if (!disposed && version === epoch) apply(data.session);
   }
@@ -59,7 +59,7 @@ export function createSigningController(memberId: number, notify: (state: Signin
     catch (error) { if (!disposed && version === epoch) fail(error); }
   }
   function fail(error: unknown) {
-    clear(); state = { ...state, ready: false, error: error instanceof Error ? error.message : "No se pudo confirmar la operaciÃ³n" };
+    clear(); state = { ...state, ready: false, error: error instanceof Error ? error.message : "No se pudo confirmar la operación" };
     // Fail closed: links must not remain usable after a terminal read error.
     if (state.session) state.session = { ...state.session, signUrl: null, documentUrl: null };
     emit();
@@ -79,7 +79,7 @@ export function createSigningController(memberId: number, notify: (state: Signin
       if (disposed || version !== epoch) return;
       if (!res.ok) {
         if (res.status === 410 && current) { apply({ ...current, status: "EXPIRED", signUrl: null }); return; }
-        throw new Error("No se pudo confirmar la operaciÃ³n. Actualiza el estado antes de intentarlo de nuevo.");
+        throw new Error("No se pudo confirmar la operación. Actualiza el estado antes de intentarlo de nuevo.");
       }
       // Always recover authoritative state, including a concurrent signature/reissue.
       await read(version);
