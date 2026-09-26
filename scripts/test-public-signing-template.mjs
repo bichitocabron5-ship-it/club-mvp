@@ -65,11 +65,11 @@ await test("status retains token validation, missing-session rejection and GET r
   for (let i = 0; i < 121; i++) r = await h.get("?mode=status");
   assert.equal(r.status, 429);
 });
-await test("admin consumers use status mode; signer retains document GETs", async () => {
+await test("admin consumers share authenticated recovery; signer retains document GETs", async () => {
   for (const path of ["app/members/[id]/contract/page.tsx", "app/members/new/page.tsx"]) {
     const source = read(path);
-    assert.match(source, /\/api\/signing-sessions\/\$\{[^}]+\}\?mode=status/);
-    assert.match(source, /status: data.status/);
+    assert.match(source, /<AdminSigningPanel/);
+    assert.doesNotMatch(source, /mode=status/);
   }
   assert.doesNotMatch(read("app/sign/[token]/page.tsx"), /mode=status/);
 });

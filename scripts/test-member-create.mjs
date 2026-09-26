@@ -248,10 +248,10 @@ await test("unchanged permissive contracts and unknown fields", async () => {
   }
 });
 
-// Page harness renders actual JSX with persistent hook slots. Effects are not run:
-// mount reads, scanner focus and signing polling are outside CREATE's scope.
+// Page harness renders actual JSX with persistent hook slots. New-member mount
+// recovery runs; list reads and scanner effects remain outside CREATE scope.
 function pageHarness(path) {
-  const slots = []; let cursor = 0, tree;
+  const slots = [], effects = []; let cursor = 0, tree;
   const react = {
     useState(initial) {
       const index = cursor++;
@@ -259,7 +259,7 @@ function pageHarness(path) {
       return [slots[index], value => { slots[index] = typeof value === "function" ? value(slots[index]) : value; }];
     },
     useRef(initial) { const index = cursor++; return slots[index] ??= { current: initial }; },
-    useEffect() {},
+    useEffect(fn) { const index = cursor++; if (!(index in slots)) { slots[index] = true; if (path === "@/app/members/new/page") effects.push(fn); } },
   };
   const requests = []; let reply = async () => Response.json({});
   let refresh = async () => Response.json([]);
@@ -267,7 +267,7 @@ function pageHarness(path) {
   const load = loader({
     react, "react/jsx-runtime": { jsx, jsxs: jsx }, "next/link": { default: "a" },
     "@/components/ui/page-header": { PageHeader: "header" },
-  }, { fetch: async (url, options = {}) => {
+  }, { URL, queueMicrotask: fn => fn(), window: { location: { href: "https://test/members/new" }, history: { replaceState() {} } }, fetch: async (url, options = {}) => {
     requests.push({ url, ...options });
     return options.method === "POST" ? reply(url, options) : refresh();
   } });
@@ -283,7 +283,7 @@ function pageHarness(path) {
     if (node && typeof node === "object") return text(node.props?.children ?? null);
     return typeof node === "string" || typeof node === "number" ? String(node) : "";
   }
-  render();
+  render(); effects.splice(0).forEach(fn => fn()); render();
   return {
     render, requests, nodes, text,
     reply(fn) { reply = fn; }, refresh(fn) { refresh = fn; },

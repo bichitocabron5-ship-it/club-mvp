@@ -2,12 +2,8 @@
 "use client";
 
 import { PageHeader } from "@/components/ui/page-header";
-import { fetchJson } from "@/lib/fetch-json";
+import { AdminSigningPanel } from "@/components/admin-signing-session";
 import { normalizeRfidCode } from "@/lib/rfid";
-import type {
-  InternalSigningSessionData,
-  PublicSigningSessionData,
-} from "@/lib/types";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
@@ -37,24 +33,8 @@ function isCreatedMember(value: unknown): value is CreatedMember {
     (member.rfidCode === null || typeof member.rfidCode === "string");
 }
 
-function isInternalSigningSessionData(
-  value: unknown
-): value is InternalSigningSessionData {
-  const session = value as Partial<InternalSigningSessionData> | null;
-
-  return (
-    !!session &&
-    typeof session.status === "string" &&
-    typeof session.token === "string" &&
-    session.token.length > 0 &&
-    session.token !== "undefined" &&
-    typeof session.signUrl === "string" &&
-    session.signUrl.length > 0 &&
-    !session.signUrl.endsWith("/undefined")
-  );
-}
-
 export default function NewMemberPage() {
+  const [recoveringMember, setRecoveringMember] = useState(true);
   const createPendingRef = useRef(false);
   const rfidMutationRef = useRef(false);
   const rfidBlockedRef = useRef(false);
@@ -62,8 +42,6 @@ export default function NewMemberPage() {
   const rfidRef = useRef<HTMLInputElement | null>(null);
 
   const [createdMember, setCreatedMember] = useState<CreatedMember | null>(null);
-  const [signingSession, setSigningSession] =
-    useState<InternalSigningSessionData | null>(null);
   const [assigningRfid, setAssigningRfid] = useState(false);
   const [loading, setLoading] = useState(false);
   const [contractSigned, setContractSigned] = useState(false);
@@ -80,6 +58,20 @@ export default function NewMemberPage() {
     expiresAt: "",
   });
 
+  useEffect(() => {
+    let disposed = false;
+    const id = new URL(window.location.href).searchParams.get("memberId");
+    if (!id) { queueMicrotask(() => { if (!disposed) setRecoveringMember(false); }); return () => { disposed = true; }; }
+    void fetch(`/api/members/${encodeURIComponent(id)}/history`, { cache: "no-store" })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("No se pudo recuperar el socio");
+        const data = await res.json();
+        if (!isCreatedMember(data.member) || String(data.member.id) !== id) throw new Error("Socio inv?lido");
+        if (!disposed) { setCreatedMember(data.member); setRecoveringMember(false); }
+      }).catch(() => { if (!disposed) setError("No se pudo recuperar el socio. Recarga la pantalla o abre su expediente."); });
+    return () => { disposed = true; };
+  }, []);
+
   const visibleMemberNumber = createdMember?.memberNumber ?? createdMember?.id ?? null;
 
   function focusRfidInput() {
@@ -88,7 +80,7 @@ export default function NewMemberPage() {
 
   async function createMember(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (createPendingRef.current || createdMember) return;
+    if (recoveringMember || createPendingRef.current || createdMember) return;
     createPendingRef.current = true;
     setLoading(true);
     setError("");
@@ -114,6 +106,7 @@ export default function NewMemberPage() {
       }
       if (!res.ok || !isCreatedMember(member)) throw new Error("Unconfirmed create response");
       setCreatedMember(member);
+      window.history.replaceState(null, "", `/members/new?memberId=${member.id}`);
     } catch {
       setError("Resultado sin confirmar. Comprueba si el socio se creo antes de volver a intentarlo.");
     } finally {
@@ -177,77 +170,6 @@ export default function NewMemberPage() {
       focusRfidInput();
     }
   }
-
-  async function createSigningSession() {
-    if (!createdMember) return;
-    setError("");
-
-    const res = await fetch("/api/signing-sessions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        memberId: createdMember.id,
-      }),
-    });
-
-    const data: unknown = await res.json();
-
-    if (!res.ok) {
-      const error =
-        data && typeof data === "object" && "error" in data
-          ? String(data.error)
-          : "Error creando sesión de firma";
-
-      setError(error);
-      return;
-    }
-
-    if (!isInternalSigningSessionData(data)) {
-      const error =
-        "La sesión de firma se creó, pero no devolvió un enlace válido. No se abrirá /sign/undefined.";
-
-      setError(error);
-      return;
-    }
-
-    setSigningSession(data);
-    setContractSigned(data.status === "SIGNED");
-  }
-
-  const signUrl = signingSession?.signUrl ?? "";
-
-  useEffect(() => {
-    if (!signingSession?.token || contractSigned) return;
-
-    const interval = setInterval(async () => {
-      try {
-        const data = await fetchJson<Pick<PublicSigningSessionData, "status">>(
-          `/api/signing-sessions/${signingSession.token}?mode=status`,
-          { cache: "no-store" }
-        );
-
-        setSigningSession((current) =>
-          current
-            ? {
-                ...current,
-                status: data.status,
-              }
-            : current
-        );
-
-        if (data.status === "SIGNED") {
-          setContractSigned(true);
-          clearInterval(interval);
-        }
-      } catch {
-        clearInterval(interval);
-      }
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [signingSession?.token, contractSigned]);
 
   useEffect(() => {
     if (!rfidMessage) return;
@@ -504,7 +426,7 @@ export default function NewMemberPage() {
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || recoveringMember}
                 className="app-button-primary inline-flex w-full items-center justify-center rounded-xl px-5 py-3 font-bold disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
               >
                 {loading ? "Creando socio..." : "Crear socio y continuar"}
@@ -613,16 +535,12 @@ export default function NewMemberPage() {
                     className={`mt-1 text-sm font-black ${
                       contractSigned
                         ? "text-emerald-700"
-                        : signingSession
-                          ? "text-amber-800"
-                          : "text-[#201f1d]"
+                        : "text-[#201f1d]"
                     }`}
                   >
                     {contractSigned
                       ? "Firmado"
-                      : signingSession
-                        ? "Pendiente de firma"
-                        : "Sin iniciar"}
+                      : "Consultar estado de firma"}
                   </div>
                 </div>
               </div>
@@ -826,177 +744,7 @@ export default function NewMemberPage() {
             </div>
           </section>
 
-          <section
-            className={`overflow-hidden rounded-[2rem] border ${
-              contractSigned
-                ? "border-emerald-200 bg-white/82"
-                : "border-black/8 bg-white/82"
-            }`}
-          >
-            <div
-              className={`border-b px-5 py-5 sm:px-6 ${
-                contractSigned
-                  ? "border-emerald-100 bg-emerald-50/45"
-                  : "border-black/7"
-              }`}
-            >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <div className="mb-2 flex items-center gap-2">
-                    <span
-                      className={`h-[2px] w-6 rounded-full ${
-                        contractSigned ? "bg-emerald-500" : "bg-[#a7282d]"
-                      }`}
-                    />
-
-                    <span
-                      className={`text-[0.65rem] font-black uppercase tracking-[0.2em] ${
-                        contractSigned
-                          ? "text-emerald-700"
-                          : "text-[#a7282d]"
-                      }`}
-                    >
-                      {contractSigned ? "Paso 03 completado" : "Paso 03"}
-                    </span>
-                  </div>
-
-                  <h2 className="text-xl font-black tracking-[-0.02em] text-[#201f1d]">
-                    Contrato y firma
-                  </h2>
-
-                  <p className="mt-1 max-w-2xl text-sm leading-6 app-muted">
-                    {contractSigned
-                      ? "El contrato del socio ha sido firmado correctamente."
-                      : signingSession
-                        ? "La sesión está preparada. Abre el enlace en el dispositivo donde firmará el socio."
-                        : "Genera una sesión segura para formalizar el contrato del socio."}
-                  </p>
-                </div>
-
-                <span
-                  className={`rounded-full border px-3 py-1.5 text-xs font-black ${
-                    contractSigned
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                      : signingSession
-                        ? "border-amber-200 bg-amber-50 text-amber-800"
-                        : "border-[#b4a78d]/30 bg-[#f3f0e9] text-[#645b4c]"
-                  }`}
-                >
-                  {contractSigned
-                    ? "CONTRATO FIRMADO"
-                    : signingSession
-                      ? "FIRMA PENDIENTE"
-                      : "SIN INICIAR"}
-                </span>
-              </div>
-            </div>
-
-            <div className="p-5 sm:p-6">
-              {contractSigned ? (
-                <div className="rounded-[1.5rem] border border-emerald-200 bg-emerald-50/55 p-5">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 font-black text-emerald-700">
-                      ✓
-                    </div>
-
-                    <div>
-                      <div className="font-black text-[#201f1d]">
-                        Contrato formalizado
-                      </div>
-
-                      <div className="mt-0.5 text-sm text-emerald-700">
-                        La firma ya consta en el expediente.
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : signingSession ? (
-                <div className="space-y-4">
-                  <div className="overflow-hidden rounded-[1.5rem] border border-amber-200 bg-amber-50/45">
-                    <div className="border-b border-amber-200/70 px-4 py-4 sm:px-5">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                          <div className="font-black text-[#201f1d]">
-                            Esperando la firma del socio
-                          </div>
-
-                          <p className="mt-1 text-sm leading-6 app-muted">
-                            La pantalla se actualizará automáticamente cuando se complete
-                            la firma.
-                          </p>
-                        </div>
-
-                        <div className="flex items-center gap-2 text-xs font-black text-amber-800">
-                          <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-amber-500" />
-                          ESPERANDO FIRMA
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="p-4 sm:p-5">
-                      <div className="rounded-[1.25rem] border border-black/7 bg-white/80 p-4">
-                        <div className="text-[0.65rem] font-black uppercase tracking-[0.1em] app-muted">
-                          Enlace de firma
-                        </div>
-
-                        <div className="mt-2 break-all font-mono text-sm font-bold text-[#201f1d]">
-                          {signUrl}
-                        </div>
-                      </div>
-
-                      <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                        <a
-                          href={signUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="app-button-primary inline-flex min-h-11 items-center justify-center rounded-xl px-4 py-3 text-center font-bold"
-                        >
-                          Abrir pantalla de firma
-                        </a>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            void navigator.clipboard.writeText(signUrl);
-                          }}
-                          className="app-button-secondary inline-flex min-h-11 items-center justify-center rounded-xl px-4 py-3 font-bold"
-                        >
-                          Copiar enlace
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-[1.25rem] border border-[#b4a78d]/25 bg-[#f7f4ee] px-4 py-3 text-sm leading-6 app-muted">
-                    Puedes abrir este enlace en una tablet, móvil u otro dispositivo.
-                    No cierres esta pantalla: el estado se actualizará cuando el contrato
-                    quede firmado.
-                  </div>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-5 rounded-[1.5rem] border border-dashed border-[#b4a78d]/45 bg-[#f7f4ee]/55 p-5 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <div className="font-black text-[#201f1d]">
-                      Contrato pendiente
-                    </div>
-
-                    <p className="mt-1 max-w-xl text-sm leading-6 app-muted">
-                      Crea una sesión de firma para generar el enlace seguro que utilizará
-                      el socio.
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => void createSigningSession()}
-                    className="app-button-primary inline-flex min-h-11 w-full items-center justify-center rounded-xl px-5 py-3 font-bold sm:w-auto"
-                  >
-                    Crear sesión de firma
-                  </button>
-                </div>
-              )}
-            </div>
-          </section>
+          <AdminSigningPanel key={createdMember.id} memberId={createdMember.id} onSigned={setContractSigned} />
 
         {contractSigned ? (
           <section className="overflow-hidden rounded-[2rem] border border-emerald-200 bg-white/82">
