@@ -30,7 +30,7 @@ export async function GET(
 
   const contract = await prisma.memberContract.findFirst({
     where: { memberId },
-    orderBy: { signedAt: "desc" },
+    orderBy: [{ signedAt: "desc" }, { id: "desc" }],
     select: {
       id: true,
       consumptionGrams: true,

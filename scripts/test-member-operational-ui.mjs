@@ -78,10 +78,43 @@ async function listApi(override) {
   return { result: await response.json(), calls, queries, clockReads };
 }
 const api = await listApi();
+await test("tied member relation selects greater ID with take 1 and one query", async () => {
+  const candidates = [{ ...contract, id: 41 }, { ...contract, id: 43, consumptionGrams: null,
+    signingSessionId: null, contractTemplateId: null, documentSnapshotId: null }];
+  let reads = 0;
+  const load = loader({
+    "@/lib/auth-server": { requireAuth: async () => ({ ok: true }) },
+    "@/lib/prisma": { prisma: { member: { findMany: async query => {
+      reads++;
+      assert.deepEqual(plain(query), { include: { contracts: { take: 1,
+        orderBy: [{ signedAt: "desc" }, { id: "desc" }] } }, orderBy: { createdAt: "desc" } });
+      const sorted = candidates.slice().sort((a, b) => {
+        for (const clause of query.include.contracts.orderBy) {
+          const [field, direction] = Object.entries(clause)[0];
+          const delta = field === "signedAt" ? new Date(a[field]) - new Date(b[field]) : a[field] - b[field];
+          if (delta) return direction === "desc" ? -delta : delta;
+        }
+        return 0;
+      });
+      return [{ ...rows[0], contracts: sorted.slice(0, query.include.contracts.take) }];
+    } } } },
+    "@/lib/member-operational-status": { getMemberOperationalFacts: (member, selected, time) => {
+      assert.equal(selected.id, 43);
+      assert.equal(selected.consumptionGrams, null);
+      return core(member, selected, time);
+    } },
+  });
+  const response = await load("@/app/api/members/route").GET();
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.equal(result[0].hasContract, true);
+  assert.equal(Object.hasOwn(result[0], "contracts"), false);
+  assert.equal(reads, 1);
+});
 await test("GET uses core for A-L, existing query, one shared now and no N+1", () => {
   assert.equal(api.queries.length, 1);
   assert.deepEqual(plain(api.queries[0]), {
-    include: { contracts: { take: 1, orderBy: { signedAt: "desc" } } }, orderBy: { createdAt: "desc" },
+    include: { contracts: { take: 1, orderBy: [{ signedAt: "desc" }, { id: "desc" }] } }, orderBy: { createdAt: "desc" },
   });
   assert.equal(api.clockReads, 1);
   assert.equal(api.calls.length, rows.length);
@@ -212,7 +245,7 @@ const snapshot = (overrides = {}) => ({
   member: { active: false, expiresAt: "2020-01-02T12:00:00.000Z", rfidCode: "UNTRUSTED-OPERATIONAL-RFID", fullName: "Wrong name" },
   expired: true, hasContract: false, canWithdraw: true, ...overrides,
 });
-function detailHarness(initial = snapshot()) {
+function detailHarness(initial = snapshot(), contracts = [{ ...contract, signedAt: now.toISOString(), signedPdfUrl: "/pdf" }]) {
   const requests = [], pending = [], payloads = [];
   let member = plain({ ...rows[0], photoUrl: null, active: true, expiresAt: future, rfidCode: "CONFIRMED" });
   let current = initial, hold = false, failure = false, rfidConflict = false;
@@ -233,7 +266,7 @@ function detailHarness(initial = snapshot()) {
       return Response.json(member);
     }
     if (url.endsWith("/history")) return Response.json({ member, sales: [], totalSpent: 0, count: 0 });
-    if (url.endsWith("/contracts")) return Response.json([{ ...contract, signedAt: now.toISOString(), signedPdfUrl: "/pdf" }]);
+    if (url.endsWith("/contracts")) return Response.json(contracts);
     assert.ok(url.endsWith("/access-logs")); return Response.json([]);
   });
   return { page, requests, pending, payloads,
@@ -241,6 +274,19 @@ function detailHarness(initial = snapshot()) {
     set rfidConflict(value) { rfidConflict = value; },
   };
 }
+await test("tied historical cards keep their order and PDF links by contract ID", async () => {
+  const contracts = [
+    { ...contract, id: 43, fullName: "Legacy winner", signedPdfUrl: null, consumptionGrams: null,
+      signingSessionId: null, contractTemplateId: null, documentSnapshotId: null },
+    { ...contract, id: 42, fullName: "Earlier ID", signedPdfUrl: "/pdf/42" },
+  ];
+  const h = detailHarness(snapshot(), contracts); await h.page.flush();
+  const links = h.page.nodes.filter(n => /^\/api\/contracts\/\d+\/pdf$/.test(n.props?.href ?? ""));
+  assert.deepEqual(links.map(n => n.props.href), ["/api/contracts/43/pdf", "/api/contracts/42/pdf"]);
+  assert.equal(text(links[0]), "Generar PDF firmado");
+  assert.equal(text(links[1]), "Ver contrato firmado");
+  assert.ok(h.page.text.indexOf("Legacy winner") < h.page.text.indexOf("Earlier ID"));
+});
 await test("Detail keeps history/contract collection/RFID; visual facts exclusively use coherent operational snapshot", async () => {
   const h = detailHarness(); await h.page.flush();
   assert.deepEqual(h.requests.slice().sort(), ["access-logs", "contracts", "history", "operational-status"].map(s => `/api/members/1/${s}`).sort());

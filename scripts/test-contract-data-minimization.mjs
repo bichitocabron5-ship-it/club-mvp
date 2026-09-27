@@ -22,15 +22,23 @@ function harness(options = {}) {
     "next/server": { NextResponse: Response },
     "next-auth": { getServerSession: async () => options.noSession ? null : { user: { id: "1", role: "ADMIN" } } },
     "@/lib/auth": { authConfig: {} },
-    "@/lib/contract-storage": { createSignedUrlForAllowedStorageRef: async ref => ref ? "https://storage.invalid/pdf" : null },
+    "@/lib/contract-storage": { createSignedUrlForAllowedStorageRef: async ref => ref ? options.contracts ? `https://storage.invalid/${ref}` : "https://storage.invalid/pdf" : null },
     "@/lib/storage": { resolveStorageUrlForResponse: async () => null },
     "@/lib/prisma": { prisma: {
       appUser: { findUnique: async () => ({ id: 1, active: options.active ?? true, role: options.role ?? "STAFF" }) },
       memberContract: { findMany: async query => {
         reads++;
         assert.deepEqual(JSON.parse(JSON.stringify(query.where)), { memberId: 17 });
-        assert.deepEqual(JSON.parse(JSON.stringify(query.orderBy)), { signedAt: "desc" });
+        assert.deepEqual(JSON.parse(JSON.stringify(query.orderBy)), [{ signedAt: "desc" }, { id: "desc" }]);
         assert.ok(query.select && !query.select.signatureImage, "query excludes raw signature");
+        if (options.contracts) return options.contracts.filter(c => c.memberId === query.where.memberId).slice().sort((a, b) => {
+          for (const clause of query.orderBy) {
+            const [field, direction] = Object.entries(clause)[0];
+            const delta = field === "signedAt" ? new Date(a[field]) - new Date(b[field]) : a[field] - b[field];
+            if (delta) return direction === "desc" ? -delta : delta;
+          }
+          return 0;
+        });
         // Deliberately return extra sensitive fields: DTO must also be an allowlist.
         return options.empty ? [] : [{ ...contract, signatureImage, futureSignature: signatureImage,
           ...(options.legacy ? { signedPdfUrl: null, contractTemplateId: null, signingSessionId: null } : {}),
@@ -94,5 +102,23 @@ await test("empty and legacy contracts preserve HTTP shape", async () => {
   assert.deepEqual(await safeBody(await harness({ legacy: true }).get("contracts")), [{
     ...contract, signingSessionId: null, contractTemplateId: null, signedPdfUrl: null, contractTemplate: null,
   }]);
+});
+await test("tied history preserves each identity, PDF and legacy null without inferring provenance", async () => {
+  const contracts = [
+    { ...contract, signedPdfUrl: "contracts/41.pdf", documentSnapshotId: "snapshot", contractTemplate: template },
+    { ...contract, id: 42, fullName: "Legacy name", signingSessionId: null, contractTemplateId: null,
+      documentSnapshotId: null, consumptionGrams: null, signedPdfUrl: "contracts/42.pdf", contractTemplate: null },
+  ];
+  const before = structuredClone(contracts);
+  for (const input of [contracts, contracts.slice().reverse()]) {
+    const body = await safeBody(await harness({ contracts: input }).get("contracts"));
+    assert.deepEqual(body, [contracts[1], contracts[0]].map(source => {
+      const row = { ...source };
+      delete row.documentSnapshotId;
+      return { ...row, signedPdfUrl: `https://storage.invalid/${row.signedPdfUrl}`,
+        contractTemplate: row.contractTemplate ? { ...row.contractTemplate, fileUrl: null } : null };
+    }));
+  }
+  assert.deepEqual(contracts, before);
 });
 console.log(`${checks} contract minimization checks passed`);

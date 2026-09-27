@@ -274,7 +274,7 @@ await test("J: actual Sales keeps enforcing X after rejected Y and null", async 
     dayClosure: { findUnique: async () => null },
     member: { findUnique: async () => member },
     memberContract: { findFirst: async ({ where, orderBy }) => {
-      assert.equal(where.memberId, 17); assert.equal(orderBy.signedAt, "desc"); reads++; return copy(h.state.contract);
+      assert.equal(where.memberId, 17); assert.deepEqual(JSON.parse(JSON.stringify(orderBy)), [{ signedAt: "desc" }, { id: "desc" }]); reads++; return copy(h.state.contract);
     } },
     product: {
       findMany: async () => [{ id: 1, name: "Test", unit: "G", active: true, stock: 100, price: 1, averageCost: 0 }],

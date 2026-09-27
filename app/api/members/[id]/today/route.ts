@@ -65,7 +65,7 @@ export async function GET(
       getClubSettings(),
       prisma.memberContract.findFirst({
         where: { memberId },
-        orderBy: { signedAt: "desc" },
+        orderBy: [{ signedAt: "desc" }, { id: "desc" }],
         select: { consumptionGrams: true },
       }),
       prisma.sale.findMany({

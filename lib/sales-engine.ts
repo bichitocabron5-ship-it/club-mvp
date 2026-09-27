@@ -516,7 +516,7 @@ async function getSaleMemberStatusTx(
   const contract = await tx.memberContract.findFirst({
     where: { memberId },
     select: { id: true, consumptionGrams: true },
-    orderBy: { signedAt: "desc" },
+    orderBy: [{ signedAt: "desc" }, { id: "desc" }],
   });
 
   if (!member) {

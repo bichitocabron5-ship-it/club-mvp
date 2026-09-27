@@ -35,7 +35,7 @@ export async function GET(
       signedPdfUrl: true,
       contractTemplate: true,
     },
-    orderBy: { signedAt: "desc" },
+    orderBy: [{ signedAt: "desc" }, { id: "desc" }],
   });
 
   const response = await Promise.all(

@@ -38,13 +38,25 @@ function harness(options = {}) {
   const auth = { ok: true, session: { user: { id: "1", email: null } } };
   const contractQuery = async args => {
     events.push("contract");
+    const today = Object.keys(args.select).length === 1;
     assert.deepEqual(plain(args), {
-      where: { memberId: 1 }, select: { id: true, consumptionGrams: true },
-      orderBy: { signedAt: "desc" },
+      where: { memberId: 1 }, select: today ? { consumptionGrams: true } : { id: true, consumptionGrams: true },
+      orderBy: [{ signedAt: "desc" }, { id: "desc" }],
     });
+    if (options.contracts) {
+      const winner = options.contracts.filter(c => c.memberId === args.where.memberId).slice().sort((a, b) => {
+        for (const clause of args.orderBy) {
+          const [field, direction] = Object.entries(clause)[0];
+          const delta = field === "signedAt" ? new Date(a[field]) - new Date(b[field]) : a[field] - b[field];
+          if (delta) return direction === "desc" ? -delta : delta;
+        }
+        return 0;
+      })[0];
+      state.contract = winner ? { id: winner.id, consumptionGrams: winner.consumptionGrams } : null;
+    }
     // Time crosses expiry while awaiting data. An early captured now would fail.
     clock = instant;
-    return state.contract;
+    return today && state.contract ? { consumptionGrams: state.contract.consumptionGrams } : state.contract;
   };
   const memberQuery = async (args, transactional) => {
     events.push("member");
@@ -53,12 +65,13 @@ function harness(options = {}) {
         id: true, fullName: true, active: true, expiresAt: true,
         rfidCode: true, commercialProfile: true, discountPercent: true,
       },
-    } : { where: { id: 1 } });
+    } : args.select ? { where: { id: 1 }, select: { id: true } } : { where: { id: 1 } });
     return options.missingMember ? null : state.member;
   };
   const prisma = {
     member: { findUnique: args => memberQuery(args, false) },
     memberContract: { findFirst: contractQuery },
+    sale: { findMany: async () => [] },
     saleOperation: { findUnique: async ({ where }) => {
       events.push("replay");
       const scope = where.operatorUserId_idempotencyKey;
@@ -118,6 +131,7 @@ function harness(options = {}) {
         cashMove: { create: async ({ data }) => { events.push("cash"); draft.cash.push(data); } },
       };
       const result = await fn(tx);
+      draft.contract = state.contract;
       Object.assign(state, draft);
       return result;
     },
@@ -167,6 +181,9 @@ function harness(options = {}) {
     async get(id = "1") {
       return load("@/app/api/members/[id]/operational-status/route").GET(new Request("http://test/status"), { params: Promise.resolve({ id }) });
     },
+    async today() {
+      return load("@/app/api/members/[id]/today/route").GET(new Request("http://test/today"), { params: Promise.resolve({ id: "1" }) });
+    },
   };
 }
 
@@ -176,6 +193,42 @@ async function expectResponse(response, status, error, code) {
   if (error) assert.equal(body.error, error);
   if (code) assert.equal(body.code, code);
   return body;
+}
+
+for (const [name, olderLimit, winnerLimit, newerDate] of [
+  ["tie 20/50", 20, 50, false],
+  ["tie numeric/null legacy", 20, null, false],
+  ["tie null/numeric", null, 20, false],
+  ["newer date beats greater ID", 20, 50, true],
+]) {
+  await test(`contract selection: ${name} agrees across status/today/SINGLE/BULK`, async () => {
+    const contracts = [
+      { id: 10, memberId: 1, signedAt: new Date(instant + (newerDate ? 1 : 0)), consumptionGrams: olderLimit,
+        signingSessionId: 1, contractTemplateId: 3, documentSnapshotId: "snapshot" },
+      { id: 20, memberId: 1, signedAt: new Date(instant), consumptionGrams: winnerLimit,
+        signingSessionId: null, contractTemplateId: null, documentSnapshotId: null },
+      { id: 99, memberId: 2, signedAt: new Date(instant + 10), consumptionGrams: 1 },
+    ];
+    const before = plain(contracts);
+    const expected = newerDate ? olderLimit : winnerLimit;
+    for (const input of [contracts, contracts.slice().reverse()]) {
+      const h = harness({ contracts: input });
+      assert.equal((await expectResponse(await h.get(), 200)).contract.monthlyLimitG, expected);
+      assert.equal((await expectResponse(await h.today(), 200)).limits.monthlyLimitG, expected);
+      assert.equal(h.state.contract.id, newerDate ? 10 : 20);
+      for (const type of ["SINGLE", "BULK"]) {
+        for (const monthG of [29, expected === null ? 1000 : expected - 1, expected === null ? 2000 : expected]) {
+          const sale = harness({ contracts: input, monthG });
+          const rejected = expected !== null && monthG + 1 > expected;
+          await expectResponse(await sale.post(type), rejected ? 400 : 200,
+            rejected ? `Limite mensual de gramos superado (${expected} g)` : undefined);
+          assert.equal(sale.state.contract.consumptionGrams, expected);
+          assert.equal(sale.state.sales.length, rejected ? 0 : 1);
+        }
+      }
+    }
+    assert.deepEqual(plain(contracts), before, "selection never rewrites legacy provenance");
+  });
 }
 
 const salesCases = [
