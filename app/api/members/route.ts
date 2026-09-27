@@ -40,9 +40,7 @@ export async function GET() {
     include: {
       contracts: {
         take: 1,
-        orderBy: {
-          signedAt: "desc",
-        },
+        orderBy: [{ signedAt: "desc" }, { id: "desc" }],
       },
     },
     orderBy: { createdAt: "desc" },

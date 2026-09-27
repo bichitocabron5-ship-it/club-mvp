@@ -149,7 +149,7 @@ await test("AG: real Sales engine reads newly signed X and enforces its monthly 
     member: { findUnique: async () => ({ ...h.members[0], expiresAt: null }) },
     memberContract: { findFirst: async ({ where, select, orderBy }) => {
       assert.equal(where.memberId, contract.memberId);
-      assert.equal(select.consumptionGrams, true); assert.equal(orderBy.signedAt, "desc");
+      assert.equal(select.consumptionGrams, true); assert.deepEqual(JSON.parse(JSON.stringify(orderBy)), [{ signedAt: "desc" }, { id: "desc" }]);
       contractReads++; return contract;
     } },
     product: {
