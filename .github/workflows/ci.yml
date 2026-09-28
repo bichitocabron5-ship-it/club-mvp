@@ -33,6 +33,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Contract template migration (static)
+        run: npm run test:contract-template-migration
+
       - name: Typecheck
         run: npm run typecheck
 
