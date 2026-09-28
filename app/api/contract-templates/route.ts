@@ -24,7 +24,7 @@ export async function GET() {
   }
 
   const templates = await prisma.contractTemplate.findMany({
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
   });
 
   const response = await Promise.all(
