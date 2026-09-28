@@ -14,8 +14,10 @@ export class ContractTemplateCreationError extends Error {
 
 /** The only template writer. Storage and snapshot work precede the transaction. */
 export async function createContractTemplate(
-  input: { name: string; version: string; fileUrl: string; active: boolean },
-  options: { deactivateActive?: boolean } = {},
+  input: { name: string; version: string; fileUrl: string } & (
+    | { active: boolean; activation?: never }
+    | { active: true; activation: "bootstrap" }
+  ),
 ) {
   const ref = parseAllowedStorageRef(input.fileUrl);
   if (!ref) throw new ContractTemplateCreationError("TEMPLATE_STORAGE_INVALID");
@@ -27,14 +29,27 @@ export async function createContractTemplate(
   }
   const snapshot = await createOrReuseContractDocumentSnapshot(bytes);
   return prisma.$transaction(async (tx) => {
-    if (options.deactivateActive) {
+    if (input.active) {
+      // Two-int advisory namespace 1129598288 (0x43544D50, "CTMP"), key 1:
+      // reserved exclusively for global ContractTemplate activation. Transaction
+      // scoped: same connection as UPDATE/INSERT, released on commit or rollback.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(1129598288, 1)`;
+      if (input.activation === "bootstrap") {
+        const existing = await tx.contractTemplate.findFirst({
+          where: { active: true },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        });
+        // Preserve legacy too: downstream provenance checks fail closed when its
+        // snapshot is missing. Never replace or backfill it during bootstrap.
+        if (existing) return existing;
+      }
       await tx.contractTemplate.updateMany({ where: { active: true }, data: { active: false } });
     }
     return tx.contractTemplate.create({ data: {
       name: input.name, version: input.version, fileUrl: ref.storageRef,
       active: input.active, documentSnapshotId: snapshot.id,
     } });
-  });
+  }, { isolationLevel: "ReadCommitted" }); // Re-read commits made while waiting for the lock.
 }
 
 const CONTRACT_TEMPLATE_BUCKET = "contract-templates";
@@ -98,13 +113,14 @@ async function bootstrapContractTemplateFromStorage() {
     version: buildTemplateVersion(latestFile.updated_at ?? latestFile.created_at),
     fileUrl: buildStoredStorageRef(CONTRACT_TEMPLATE_BUCKET, latestFile.name),
     active: true,
-  }, { deactivateActive: true });
+    activation: "bootstrap",
+  });
 }
 
 export async function findActiveContractTemplate() {
   const existingTemplate = await prisma.contractTemplate.findFirst({
     where: { active: true },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
   });
 
   if (existingTemplate) {

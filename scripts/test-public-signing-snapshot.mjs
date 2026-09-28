@@ -43,6 +43,19 @@ await test("claim and contract use exact session snapshot", async () => {
   assert.equal(h.state.contracts[0].documentSnapshotId, snapshotId);
   assert.equal(h.state.contracts[0].contractTemplateId, h.state.session.contractTemplateId);
 });
+await test("deactivated template preserves session, contract and signed PDF snapshot provenance", async () => {
+  const h = harness();
+  const templateId = h.state.session.contractTemplateId;
+  h.setTemplateActive(false);
+  assert.deepEqual((await h.get(delivery(snapshotId))).body, Buffer.from(templateBytes));
+  assert.equal((await h.post()).status, 200);
+  for (const row of [h.state.session, h.state.contracts[0], h.pdfSources[0]]) {
+    assert.equal(row.contractTemplateId, templateId);
+    assert.equal(row.documentSnapshotId, snapshotId);
+  }
+  assert.equal(h.calls.pdfUpdates, 1);
+  assert.ok(h.uploads.length > 0);
+});
 for (const options of [{ snapshotCorrupt: true }, { snapshotMissing: true }]) await test("unverified snapshot fails closed", async () => {
   const h = harness(options);
   for (const r of [await h.get(), await h.get(delivery(snapshotId)), await h.post()]) {

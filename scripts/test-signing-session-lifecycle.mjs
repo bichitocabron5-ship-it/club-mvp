@@ -27,7 +27,8 @@ function lifecycleHarness(options = {}) {
         assert.ok(memberLocked, "Member lock precedes all lifecycle operations");
         if (sql.includes('FROM "ContractTemplate"')) {
           assert.match(sql, /FOR SHARE/);
-          return [{ id: values[0], documentSnapshotId: options.changedSnapshot ? "changed" : snapshotId }];
+          assert.doesNotMatch(sql, /\bactive\b/i, 'selected template may become inactive before session creation');
+          return [{ id: values[0], active: false, documentSnapshotId: options.changedSnapshot ? "changed" : snapshotId }];
         }
         if (sql.includes('FROM "SigningSession"') && sql.includes('FOR UPDATE')) {
           sessionLocked = true; return [{ id: values[0] }];
