@@ -11,7 +11,8 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "prisma generate && next typegen && tsc --noEmit",
-    "ci": "npm run lint && npm run typecheck && npm run build"
+    "test:contract-template-migration": "node --test scripts/test-contract-template-migration.mjs",
+    "ci": "npm run test:contract-template-migration && npm run lint && npm run typecheck && npm run build"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",

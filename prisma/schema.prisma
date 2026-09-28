@@ -363,6 +363,8 @@ model ContractTemplate {
   signingSessions SigningSession[]
 
   @@index([documentSnapshotId])
+  // DB-managed partial UNIQUE(active) WHERE active = true; do not use full @unique.
+  // See 20260928120000_contract_template_single_active and docs/contract-template-single-active-predeploy.md.
 }
 
 model MemberContract {
