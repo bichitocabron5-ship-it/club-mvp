@@ -18,14 +18,34 @@ const contract = { id: 41, memberId: 17, signingSessionId: 9, contractTemplateId
 const member = { id: 17, fullName: "Member", dni: "DOC", photoUrl: null, dniFrontUrl: null, dniBackUrl: null };
 function harness(options = {}) {
   let reads = 0;
+  const resolvedRefs = [];
+  const memberReads = [];
+  const saleReads = [];
+  const downloads = [];
+  let authReads = 0;
   const mocks = {
     "next/server": { NextResponse: Response },
-    "next-auth": { getServerSession: async () => options.noSession ? null : { user: { id: "1", role: "ADMIN" } } },
+    "next-auth": { getServerSession: async () => options.noSession ? null : { user: { id: "1", role: options.jwtRole ?? "ADMIN" } } },
     "@/lib/auth": { authConfig: {} },
     "@/lib/contract-storage": { createSignedUrlForAllowedStorageRef: async ref => ref ? options.contracts ? `https://storage.invalid/${ref}` : "https://storage.invalid/pdf" : null },
-    "@/lib/storage": { resolveStorageUrlForResponse: async () => null },
+    "@/lib/storage": { isStorageUrlsDisabled: () => false, resolveStorageUrlForResponse: async ref => {
+      resolvedRefs.push(ref);
+      return ref ? `https://storage.invalid/${ref}` : null;
+    } },
+    "@/lib/supabase-admin": { getSupabaseAdmin: () => ({ storage: { from: bucket => ({
+      download: async path => {
+        downloads.push(`${bucket}/${path}`);
+        return { data: new Blob([path], { type: "application/pdf" }), error: null };
+      },
+    }) } }) },
+    "@/lib/audit": {},
+    "@/lib/contract-pdf": { ContractPdfError: class extends Error {} },
     "@/lib/prisma": { prisma: {
-      appUser: { findUnique: async () => ({ id: 1, active: options.active ?? true, role: options.role ?? "STAFF" }) },
+      appUser: { findUnique: async query => {
+        authReads++;
+        assert.deepEqual(JSON.parse(JSON.stringify(query.where)), { id: 1 });
+        return options.missingUser ? null : { id: 1, active: options.active ?? true, role: options.role ?? "STAFF" };
+      } },
       memberContract: { findMany: async query => {
         reads++;
         assert.deepEqual(JSON.parse(JSON.stringify(query.where)), { memberId: 17 });
@@ -44,8 +64,12 @@ function harness(options = {}) {
           ...(options.legacy ? { signedPdfUrl: null, contractTemplateId: null, signingSessionId: null } : {}),
           contractTemplate: options.legacy ? null : template }];
       } },
-      member: { findUnique: async () => { reads++; return member; } },
-      sale: { findMany: async () => [] },
+      member: { findUnique: async query => {
+        reads++;
+        memberReads.push(query.where.id);
+        return options.members ? options.members.find(row => row.id === query.where.id) ?? null : member;
+      } },
+      sale: { findMany: async query => { saleReads.push(query.where.memberId); return []; } },
     } },
   };
   const cache = new Map();
@@ -59,13 +83,17 @@ function harness(options = {}) {
     const code = ts.transpileModule(readFileSync(filename, "utf8"), {
       compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
     }).outputText;
-    vm.runInNewContext(code, { exports, require: load, Response, Request, console }, { filename });
+    vm.runInNewContext(code, { exports, require: load, Response, Request, URL, console }, { filename });
     return exports;
   }
   return {
-    get: route => load(`@/app/api/members/[id]/${route}/route`).GET(
-      new Request(`http://test/api/members/17/${route}`), { params: Promise.resolve({ id: "17" }) }),
+    get: (route, id = "17") => load(`@/app/api/members/[id]/${route}/route`).GET(
+      new Request(`http://test/api/members/${id}/${route}`), { params: Promise.resolve({ id }) }),
+    call: (route, method, id, query = "side=front") => load(`@/app/api/${route}/route`)[method](
+      new Request(`http://test/api/test?${query}`, { method }), { params: Promise.resolve({ id }) }),
     reads: () => reads,
+    resolvedRefs, memberReads, saleReads, downloads,
+    authReads: () => authReads,
   };
 }
 let checks = 0;
@@ -121,4 +149,94 @@ await test("tied history preserves each identity, PDF and legacy null without in
   }
   assert.deepEqual(contracts, before);
 });
-console.log(`${checks} contract minimization checks passed`);
+// Administrative document authorization uses the real persisted-user helper.
+const documentRoutes = [
+  ["members/[id]/history", "GET"], ["members/[id]/dni", "POST"],
+  ["members/[id]/documents", "GET"], ["members/[id]/documents", "POST"],
+  ["members/[id]/photo", "POST"], ["members/[id]/contracts", "GET"],
+  ["contracts/[id]/pdf", "GET"],
+];
+for (const [route, method] of documentRoutes) {
+  for (const [options, status] of [
+    [{ noSession: true }, 401], [{ missingUser: true }, 401],
+    [{ active: false }, 401], [{ role: "MEMBER" }, 403], [{ role: "OTHER" }, 403],
+  ]) {
+    await test(`${method} ${route} rejects ${JSON.stringify(options)} before document lookup`, async () => {
+      const h = harness(options);
+      let expectedBody;
+      for (const id of ["17", "999", "invalid"]) {
+        const response = await h.call(route, method, id);
+        assert.equal(response.status, status);
+        const body = await response.json();
+        assert.deepEqual(Object.keys(body), ["error"]);
+        expectedBody ??= body;
+        assert.deepEqual(body, expectedBody, "denial does not reveal existence or ID validity");
+      }
+      assert.equal(h.reads(), 0);
+      assert.deepEqual(h.saleReads, []);
+      assert.deepEqual(h.resolvedRefs, []);
+      assert.deepEqual(h.downloads, []);
+      assert.equal(h.authReads(), options.noSession ? 0 : 3);
+    });
+  }
+}
+for (const role of ["STAFF", "ADMIN"]) {
+  await test(`history authorizes persisted ${role} despite a different JWT role; DTO and member isolation`, async () => {
+    const members = [17, 18].map(id => ({ ...member, id,
+      photoUrl: `club-uploads/members/${id}/profile.jpg`,
+      dniFrontUrl: `member-documents/members/${id}/dni-front.pdf`,
+      dniBackUrl: `member-documents/members/${id}/dni-back.png`,
+    }));
+    const h = harness({ role, jwtRole: "OTHER", members });
+    for (const row of members) {
+      assert.deepEqual(await safeBody(await h.get("history", String(row.id))), {
+        member: { ...row, photoUrl: `https://storage.invalid/${row.photoUrl}`,
+          dniFrontUrl: `https://storage.invalid/${row.dniFrontUrl}`,
+          dniBackUrl: `https://storage.invalid/${row.dniBackUrl}` },
+        sales: [], totalSpent: 0, count: 0,
+      });
+    }
+    assert.deepEqual(h.memberReads, [17, 18]);
+    assert.deepEqual(h.saleReads, [17, 18]);
+    assert.deepEqual(h.resolvedRefs, members.flatMap(row => [row.photoUrl, row.dniFrontUrl, row.dniBackUrl]));
+    assert.equal(h.authReads(), 2);
+  });
+}
+await test("history rejects invalid IDs before Prisma and returns 404 for absent member", async () => {
+  const h = harness({ members: [] });
+  for (const id of ["", "0", "-1", "1.5", "NaN", "Infinity", "2147483648", "9007199254740993", "1e2", " 17", "017"]) {
+    assert.equal((await h.get("history", id)).status, 400);
+  }
+  assert.equal(h.reads(), 0);
+  assert.equal((await h.get("history", "999")).status, 404);
+  assert.deepEqual(h.memberReads, [999]);
+  assert.deepEqual(h.saleReads, []);
+  assert.deepEqual(h.resolvedRefs, []);
+});
+await test("history rechecks persisted authority on the next request", async () => {
+  const options = { role: "ADMIN" };
+  const h = harness(options);
+  assert.equal((await h.get("history")).status, 200);
+  options.role = "MEMBER";
+  assert.equal((await h.get("history")).status, 403);
+  options.role = "STAFF";
+  options.active = false;
+  assert.equal((await h.get("history")).status, 401);
+  assert.equal(h.reads(), 1);
+  assert.equal(h.authReads(), 3);
+});
+await test("DNI delivery selects only the route member and validated side, ignoring client references", async () => {
+  const h = harness({ members: [17, 18].map(id => ({ ...member, id,
+    dniFrontUrl: `member-documents/members/${id}/dni-front.pdf`,
+    dniBackUrl: `member-documents/members/${id}/dni-back.pdf`,
+  })) });
+  for (const side of ["front", "back"]) {
+    const response = await h.call("members/[id]/documents", "GET", "17",
+      `side=${side}&memberId=18&path=members/18/dni-front.pdf&dniFrontUrl=member-documents/members/18/dni-front.pdf`);
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), `members/17/dni-${side}.pdf`);
+  }
+  assert.equal((await h.call("members/[id]/documents", "GET", "17", "side=../18/dni-front.pdf")).status, 400);
+  assert.deepEqual(h.downloads, ["member-documents/members/17/dni-front.pdf", "member-documents/members/17/dni-back.pdf"]);
+});
+console.log(`${checks} contract minimization and document authorization checks passed`);
