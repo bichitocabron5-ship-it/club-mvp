@@ -1,7 +1,7 @@
 import "server-only";
 
 import { createHash, randomUUID } from "node:crypto";
-import { PDFDict, PDFDocument, PDFName } from "pdf-lib";
+import { PDFArray, PDFDict, PDFDocument, PDFName, PDFRef, PDFStream } from "pdf-lib";
 import sharp from "sharp";
 import { prisma } from "@/lib/prisma";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
@@ -54,17 +54,56 @@ export async function validateMemberDocumentUpload(form: FormData) {
       const pdf = await PDFDocument.load(bytes, { updateMetadata: false, throwOnInvalidObject: true });
       if (pdf.getPageCount() < 1) throw new Error();
       // Inspect decoded names, including compressed objects and escaped PDF names.
-      // Reject actions, scripts, attachments and rich media; this is not antivirus.
+      // Reject actions structurally, including unknown action types. /S also has
+      // static uses (tagged structure, borders, transparency and soft masks).
+      // Only those explicit non-action contexts are allowed; this is not antivirus.
       const forbidden = new Set(["JS", "JavaScript", "AA", "OpenAction", "Launch", "EmbeddedFiles",
         "EmbeddedFile", "Filespec", "RichMedia", "XFA", "SubmitForm", "ImportData", "GoToR", "GoToE", "URI"]);
+      const staticAnnotations = new Set(["Text", "Link", "FreeText", "Line", "Square", "Circle",
+        "Polygon", "PolyLine", "Highlight", "Underline", "Squiggly", "StrikeOut", "Stamp",
+        "Caret", "Ink", "Popup", "Watermark", "Redact"]);
+      const name = (value: unknown) => value instanceof PDFName ? value.decodeText() : undefined;
+      const annotation = (value: unknown) => {
+        if (!(value instanceof PDFDict) || !staticAnnotations.has(name(value.lookup(PDFName.of("Subtype"))) ?? "")) throw new Error();
+      };
       const seen = new Set<object>();
       const inspect = (value: unknown): void => {
+        if (value instanceof PDFRef) {
+          const resolved = pdf.context.lookup(value);
+          if (!resolved) throw new Error();
+          inspect(resolved);
+          return;
+        }
         if (value instanceof PDFName && forbidden.has(value.decodeText())) throw new Error();
         if (!value || typeof value !== "object" || seen.has(value)) return;
         seen.add(value);
-        if (value instanceof PDFDict) for (const [key, item] of value.entries()) { inspect(key); inspect(item); }
-        else if ("asArray" in value && typeof value.asArray === "function") for (const item of value.asArray()) inspect(item);
-        else if ("dict" in value) inspect(value.dict);
+        if (value instanceof PDFDict) {
+          const type = name(value.lookup(PDFName.of("Type")));
+          const style = name(value.lookup(PDFName.of("S")));
+          if (type === "Action") throw new Error();
+          if (value.has(PDFName.of("S"))) {
+            const staticStyle = (type === "StructElem" && style !== undefined) ||
+              (type === "Group" && style === "Transparency") ||
+              ((type === undefined || type === "Border") && ["S", "D", "B", "I", "U"].includes(style ?? "")) ||
+              ((type === undefined || type === "Mask") && ["Alpha", "Luminosity"].includes(style ?? "") && value.has(PDFName.of("G")));
+            if (!staticStyle) throw new Error();
+          }
+          if (type === "Annot") annotation(value);
+          for (const [key, item] of value.entries()) {
+            const keyName = key.decodeText();
+            // /A is an action entry except for structure-element attributes.
+            if ((keyName === "A" && type !== "StructElem") || keyName === "PA" || keyName === "Trans") throw new Error();
+            // Embedded/associated files can omit the optional /Type /Filespec.
+            if (keyName === "EF" || keyName === "AF") throw new Error();
+            if (keyName === "Annots") {
+              const annots = value.lookup(key);
+              if (!(annots instanceof PDFArray)) throw new Error();
+              for (const entry of annots.asArray()) annotation(pdf.context.lookup(entry));
+            }
+            inspect(key); inspect(item);
+          }
+        } else if (value instanceof PDFArray) for (const item of value.asArray()) inspect(item);
+        else if (value instanceof PDFStream) inspect(value.dict);
       };
       for (const [, object] of pdf.context.enumerateIndirectObjects()) inspect(object);
     } else {
