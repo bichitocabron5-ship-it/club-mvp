@@ -765,3 +765,15 @@ export type InventoryCountDetail = {
     pendingItems: number;
   };
 };
+
+// Internal classification for new general member documents; not a public DTO.
+export const MEMBER_DOCUMENT_TYPE_VALUES = [
+  "ID_FRONT",
+  "ID_BACK",
+  "AUTHORIZATION",
+  "PROOF",
+  "ANNEX",
+  "OTHER",
+] as const;
+
+export type MemberDocumentType = (typeof MEMBER_DOCUMENT_TYPE_VALUES)[number];
