@@ -12,7 +12,8 @@
     "lint": "eslint",
     "typecheck": "prisma generate && next typegen && tsc --noEmit",
     "test:contract-template-migration": "node --test scripts/test-contract-template-migration.mjs",
-    "ci": "npm run test:member-document-core && npm run test:contract-template-migration && npm run lint && npm run typecheck && npm run build",
+    "ci": "npm run test:member-document-core && npm run test:member-document-writer && npm run test:contract-template-migration && npm run lint && npm run typecheck && npm run build",
+    "test:member-document-writer": "node --test scripts/test-member-document-writer.mjs",
     "test:member-document-core": "node --test scripts/test-member-document-core.mjs"
   },
   "dependencies": {
