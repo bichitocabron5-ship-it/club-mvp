@@ -33,6 +33,7 @@ model Member {
 
   sales           Sale[]
   saleOperations  SaleOperation[]
+  documents       MemberDocument[]
   contracts       MemberContract[]
   signingSessions SigningSession[]
   accessLogs      AccessLog[]
@@ -76,6 +77,7 @@ model AppUser {
   cancelledPurchases        Purchase[]           @relation("PurchaseCancelledByUser")
   createdOperationalTasks   OperationalTask[]    @relation("OperationalTaskCreatedByUser")
   completedOperationalTasks OperationalTask[]    @relation("OperationalTaskCompletedByUser")
+  createdMemberDocuments    MemberDocument[]     @relation("MemberDocumentCreatedByUser")
   dashboardPreference       DashboardPreference?
 }
 
@@ -481,4 +483,25 @@ model PurchaseItem {
   averageCostAfter   Float?
   unitCost           Float
   lineTotal          Float
+}
+
+// Application contract: all scalar fields are immutable after creation.
+// Replacements create new rows; no update/delete API or DB immutability trigger yet.
+model MemberDocument {
+  id              Int      @id @default(autoincrement())
+  memberId        Int
+  type            String   // ID_FRONT | ID_BACK | AUTHORIZATION | PROOF | ANNEX | OTHER
+  originalName    String
+  mimeType        String
+  byteLength      Int
+  sha256          String   @db.VarChar(64)
+  storageBucket   String
+  storageKey      String
+  createdAt       DateTime @default(now())
+  createdByUserId Int
+
+  member        Member  @relation(fields: [memberId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdByUser AppUser @relation("MemberDocumentCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([memberId, createdAt])
 }
