@@ -124,6 +124,84 @@ test("PDF header, structure, EOF and active content; images fully decoded", asyn
     assert.equal((await h.post(form(bytes.subarray(0, Math.floor(bytes.length / 2)), mime))).status, 400);
   }
 });
+// Low-level fixtures deliberately omit optional /Type entries and use both
+// compressed indirect objects and inline dictionaries. All call the real writer.
+const pdfActions = ["JavaScript", "Sound", "Movie", "Rendition", "Launch", "URI", "SubmitForm",
+  "ImportData", "GoToR", "GoToE", "GoTo", "Named", "SetOCGState", "Hide", "ResetForm", "UnknownFutureAction"];
+for (const action of pdfActions) {
+  test(`PDF rejects standalone /S /${action} without relying on an action-name blacklist`, async () => {
+    const doc = await PDFDocument.create(); doc.addPage();
+    doc.context.register(doc.context.obj({ S: action }));
+    const h = harness();
+    await assert.rejects(h.writer.validateMemberDocumentUpload(form(await doc.save(), "application/pdf")),
+      error => error.code === "INVALID_DOCUMENT_BYTES");
+  });
+}
+for (const subtype of ["Sound", "Movie", "Screen", "RichMedia", "3D", "FileAttachment", "Widget", "UnknownFutureAnnotation"]) {
+  for (const indirect of [false, true]) {
+    test(`PDF rejects ${subtype} annotation, indirect=${indirect}, without /Type`, async () => {
+      const doc = await PDFDocument.create(); const page = doc.addPage();
+      const annot = doc.context.obj({ Subtype: subtype, Rect: [0, 0, 20, 20] });
+      page.node.set(PDFName.of("Annots"), doc.context.obj([indirect ? doc.context.register(annot) : annot]));
+      const h = harness();
+      assert.equal((await h.post(form(await doc.save({ useObjectStreams: indirect }), "application/pdf"))).status, 400);
+      assert.equal(h.uploads.length, 0); assert.equal(h.transactions, 0);
+    });
+  }
+}
+const activePdfFixtures = {
+  OpenAction: d => d.catalog.set(PDFName.of("OpenAction"), d.context.obj([d.getPage(0).ref, "Fit"])),
+  AA: d => d.getPage(0).node.set(PDFName.of("AA"), d.context.obj({ O: { S: "Sound" } })),
+  JavaScript: d => d.catalog.set(PDFName.of("Names"), d.context.obj({ JavaScript: { Names: [PDFString.of("script"), { JS: PDFString.of("alert(1)") }] } })),
+  EmbeddedFile: d => d.context.register(d.context.stream("payload", { Type: "EmbeddedFile" })),
+  Filespec: d => d.catalog.set(PDFName.of("AF"), d.context.obj([{ Type: "Filespec", F: PDFString.of("active.bin"), EF: { F: d.context.register(d.context.stream("payload")) } }])),
+  untypedFilespec: d => d.context.register(d.context.obj({ F: PDFString.of("active.bin"), EF: { F: d.context.register(d.context.stream("payload")) } })),
+  XFA: d => d.catalog.set(PDFName.of("AcroForm"), d.context.obj({ XFA: PDFString.of("<xfa/>") })),
+  typedAction: d => d.context.register(d.context.obj({ Type: "Action" })),
+  annotationAction: d => d.getPage(0).node.set(PDFName.of("Annots"), d.context.obj([{ Subtype: "Text", A: { S: "UnknownFutureAction" } }])),
+  annotationAA: d => d.getPage(0).node.set(PDFName.of("Annots"), d.context.obj([{ Subtype: "Link", AA: { E: { S: "Sound" } } }])),
+  disguisedAction: d => d.getPage(0).node.set(PDFName.of("Annots"), d.context.obj([{ Subtype: "Link", A: { Type: "StructElem", S: "Sound" } }])),
+  streamDictionaryAction: d => d.context.register(d.context.stream("payload", { S: "UnknownFutureAction" })),
+  indirectActionName: d => d.context.register(d.context.obj({ S: d.context.register(PDFName.of("Sound")) })),
+  malformedAnnots: d => d.getPage(0).node.set(PDFName.of("Annots"), d.context.obj([42])),
+  typedMovieOutsideAnnots: d => d.context.register(d.context.obj({ Type: "Annot", Subtype: "Movie" })),
+};
+for (const [label, mutate] of Object.entries(activePdfFixtures)) {
+  test(`PDF rejects ${label} via productive validator`, async () => {
+    const doc = await PDFDocument.create(); doc.addPage(); mutate(doc);
+    const h = harness();
+    await assert.rejects(h.writer.validateMemberDocumentUpload(form(await doc.save(), "application/pdf")),
+      error => error.code === "INVALID_DOCUMENT_BYTES");
+  });
+}
+test("PDF rejects escaped action keys parsed from actual PDF bytes", async () => {
+  const doc = await PDFDocument.create(); doc.addPage(); doc.context.register(doc.context.obj({ S: "Sound" }));
+  const bytes = Buffer.from(await doc.save({ useObjectStreams: false })).toString("latin1").replace("/S /Sound", "/#53 /So#75nd");
+  const parsed = await PDFDocument.load(Buffer.from(bytes, "latin1"), { throwOnInvalidObject: true });
+  assert.ok(parsed.context.enumerateIndirectObjects().some(([, object]) => object.toString().includes("/S /Sound")));
+  await assert.rejects(harness().writer.validateMemberDocumentUpload(form(Buffer.from(bytes, "latin1"), "application/pdf")),
+    error => error.code === "INVALID_DOCUMENT_BYTES");
+});
+for (const variant of ["simple", "text", "multipage", "metadata", "image", "static annotations", "static S dictionaries"]) {
+  test(`PDF accepts ${variant} and preserves original bytes`, async () => {
+    const doc = await PDFDocument.create(); const page = doc.addPage();
+    if (variant === "text") page.drawText("Normal static document: Sound Movie JavaScript");
+    if (variant === "multipage") { doc.addPage().drawText("Second page"); doc.addPage(); }
+    if (variant === "metadata") { doc.setTitle("Sound Movie /S /JavaScript"); doc.setAuthor("Normal author"); doc.setSubject("Static document"); }
+    if (variant === "image") page.drawImage(await doc.embedPng(png), { x: 20, y: 20, width: 40, height: 40 });
+    if (variant === "static annotations") page.node.set(PDFName.of("Annots"), doc.context.obj(
+      ["Text", "Highlight", "Stamp", "Ink", "Link"].map(Subtype => ({ Type: "Annot", Subtype, Rect: [0, 0, 20, 20],
+        Contents: PDFString.of("Static note"), BS: { S: "D", W: 1 } }))));
+    if (variant === "static S dictionaries") {
+      for (const obj of [{ Type: "StructElem", S: "P", A: { O: "Layout" } }, { Type: "Group", S: "Transparency" },
+        { Type: "Mask", S: "Alpha", G: doc.context.register(doc.context.stream("", { Type: "XObject", Subtype: "Form", BBox: [0, 0, 10, 10] })) }]) doc.context.register(doc.context.obj(obj));
+    }
+    const bytes = await doc.save();
+    const result = await harness().writer.validateMemberDocumentUpload(form(bytes, "application/pdf"));
+    assert.deepEqual(result.bytes, Buffer.from(bytes));
+  });
+}
+
 test("private bucket checked; public/unknown configuration fails closed", async () => {
   for (const options of [{ public: true }, { bucketFail: {} }]) { const h = harness(options); assert.equal((await h.post()).status, 503); assert.equal(h.uploads.length, 0); }
 });
