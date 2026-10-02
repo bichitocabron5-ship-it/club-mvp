@@ -24,11 +24,14 @@ function harness(options = {}) {
   const downloads = [];
   let authReads = 0;
   const mocks = {
+    "server-only": {},
     "next/server": { NextResponse: Response },
     "next-auth": { getServerSession: async () => options.noSession ? null : { user: { id: "1", role: options.jwtRole ?? "ADMIN" } } },
     "@/lib/auth": { authConfig: {} },
     "@/lib/contract-storage": { createSignedUrlForAllowedStorageRef: async ref => ref ? options.contracts ? `https://storage.invalid/${ref}` : "https://storage.invalid/pdf" : null },
-    "@/lib/storage": { isStorageUrlsDisabled: () => false, resolveStorageUrlForResponse: async ref => {
+    "@/lib/storage": { STORAGE_BUCKET: "club-uploads",
+      parseStorageUrl: ref => ref ? { bucket: ref.split("/")[0], path: ref.split("/").slice(1).join("/") } : null,
+      isStorageUrlsDisabled: () => false, resolveStorageUrlForResponse: async ref => {
       resolvedRefs.push(ref);
       return ref ? `https://storage.invalid/${ref}` : null;
     } },
@@ -41,6 +44,7 @@ function harness(options = {}) {
     "@/lib/audit": {},
     "@/lib/contract-pdf": { ContractPdfError: class extends Error {} },
     "@/lib/prisma": { prisma: {
+      memberDocument: { findFirst: async () => null },
       appUser: { findUnique: async query => {
         authReads++;
         assert.deepEqual(JSON.parse(JSON.stringify(query.where)), { id: 1 });
@@ -191,14 +195,14 @@ for (const role of ["STAFF", "ADMIN"]) {
     for (const row of members) {
       assert.deepEqual(await safeBody(await h.get("history", String(row.id))), {
         member: { ...row, photoUrl: `https://storage.invalid/${row.photoUrl}`,
-          dniFrontUrl: `https://storage.invalid/${row.dniFrontUrl}`,
-          dniBackUrl: `https://storage.invalid/${row.dniBackUrl}` },
+          dniFrontUrl: `/api/members/${row.id}/documents?side=front`,
+          dniBackUrl: `/api/members/${row.id}/documents?side=back` },
         sales: [], totalSpent: 0, count: 0,
       });
     }
     assert.deepEqual(h.memberReads, [17, 18]);
     assert.deepEqual(h.saleReads, [17, 18]);
-    assert.deepEqual(h.resolvedRefs, members.flatMap(row => [row.photoUrl, row.dniFrontUrl, row.dniBackUrl]));
+    assert.deepEqual(h.resolvedRefs, members.map(row => row.photoUrl));
     assert.equal(h.authReads(), 2);
   });
 }
