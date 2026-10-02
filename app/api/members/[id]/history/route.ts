@@ -2,6 +2,7 @@
 import { requireStaffOrAdmin } from "@/lib/auth-server";
 import { prisma } from "@/lib/prisma";
 import { resolveStorageUrlForResponse } from "@/lib/storage";
+import { memberDniUrls } from "@/lib/member-dni";
 import { NextResponse } from "next/server";
 
 export async function GET(
@@ -53,15 +54,10 @@ export async function GET(
       photoUrl: await resolveStorageUrlForResponse(member.photoUrl, {
         context: "api/members/[id]/history:photoUrl",
       }),
-      dniFrontUrl: await resolveStorageUrlForResponse(member.dniFrontUrl, {
-        context: "api/members/[id]/history:dniFrontUrl",
-      }),
-      dniBackUrl: await resolveStorageUrlForResponse(member.dniBackUrl, {
-        context: "api/members/[id]/history:dniBackUrl",
-      }),
+      ...await memberDniUrls(member),
     },
     sales,
     totalSpent,
     count: activeSales.length,
-  });
+  }, { headers: { "Cache-Control": "private, no-store" } });
 }
