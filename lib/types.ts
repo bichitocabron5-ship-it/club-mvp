@@ -777,3 +777,18 @@ export const MEMBER_DOCUMENT_TYPE_VALUES = [
 ] as const;
 
 export type MemberDocumentType = (typeof MEMBER_DOCUMENT_TYPE_VALUES)[number];
+
+export type MemberDocumentListItem = {
+  id: number;
+  type: MemberDocumentType;
+  originalName: string;
+  mimeType: string;
+  byteLength: number;
+  createdAt: string;
+  isCurrent: boolean;
+};
+
+export type MemberDocumentListResponse = {
+  items: MemberDocumentListItem[];
+  nextCursor: string | null;
+};
