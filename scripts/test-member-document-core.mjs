@@ -102,10 +102,11 @@ test("legacy Member fields and complete contract/snapshot models match the pre-s
   }
 });
 
-test("only the explicitly isolated writer is added; existing endpoints do not expose the model", () => {
+test("only the explicit document endpoints are added; existing endpoints do not expose the model", () => {
   const paths = readdirSync(join(root, "app/api"), { recursive: true })
     .filter(p => statSync(join(root, "app/api", p)).isFile()).map(p => p.replaceAll("\\", "/")).sort();
-  assert.deepEqual(paths, [...baseline.apiFiles, "members/[id]/member-documents/route.ts"].sort());
+  assert.deepEqual(paths, [...baseline.apiFiles, "members/[id]/member-documents/route.ts",
+    "members/[id]/member-documents/[documentId]/content/route.ts"].sort());
   for (const path of baseline.apiFiles) assert.doesNotMatch(read(`app/api/${path}`), /\.memberDocument\b|\bMemberDocumentType\b|\bMEMBER_DOCUMENT_TYPE_VALUES\b/);
 });
 
