@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { readVerifiedMemberDocument, memberDocumentReadExtension } from "@/lib/member-document-reader";
 import { requireStaffOrAdmin } from "@/lib/auth-server";
 import { resolveMemberDni } from "@/lib/member-dni";
 import { prisma } from "@/lib/prisma";
@@ -7,7 +7,6 @@ import { isStorageUrlsDisabled } from "@/lib/storage";
 
 export const runtime = "nodejs";
 const headers = { "Cache-Control": "private, no-store, max-age=0", "X-Content-Type-Options": "nosniff" };
-const formats: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "application/pdf": "pdf" };
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -24,17 +23,24 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const document = await resolveMemberDni(memberId, side, side === "front" ? member.dniFrontUrl : member.dniBackUrl);
     if (!document) return Response.json({ error: "DOCUMENT_NOT_FOUND" }, { status: 404, headers });
     if (isStorageUrlsDisabled()) return Response.json({ error: "STORAGE_UNAVAILABLE" }, { status: 503, headers });
-    const download = await getSupabaseAdmin().storage.from(document.storageBucket).download(document.storageKey);
-    if (download.error || !download.data) throw new Error();
-    const bytes = await download.data.arrayBuffer();
-    // Never fall back to legacy on corruption or a missing canonical object.
-    const mime = document.source === "new" ? document.mimeType : download.data.type;
-    if (!Object.hasOwn(formats, mime)) throw new Error();
-    if (document.source === "new" && (bytes.byteLength !== document.byteLength ||
-        createHash("sha256").update(Buffer.from(bytes)).digest("hex") !== document.sha256)) throw new Error();
+    // A failed canonical read must never enter the legacy branch.
+    let bytes: ArrayBuffer;
+    let mime: string;
+    let extension: string | null;
+    if (document.source === "new") {
+      const verified = await readVerifiedMemberDocument(document);
+      ({ bytes, mimeType: mime, extension } = verified);
+    } else {
+      const download = await getSupabaseAdmin().storage.from(document.storageBucket).download(document.storageKey);
+      if (download.error || !download.data) throw new Error();
+      bytes = await download.data.arrayBuffer();
+      mime = download.data.type;
+      extension = memberDocumentReadExtension(mime);
+      if (!extension) throw new Error();
+    }
     return new Response(bytes, { headers: { ...headers,
       "Content-Type": mime,
-      "Content-Disposition": `inline; filename="dni-${side}.${formats[mime]}"`,
+      "Content-Disposition": `inline; filename="dni-${side}.${extension}"`,
       "Content-Security-Policy": "sandbox",
     } });
   } catch {
