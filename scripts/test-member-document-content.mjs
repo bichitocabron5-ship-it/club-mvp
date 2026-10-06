@@ -11,6 +11,7 @@ import ts from "typescript";
 const require = createRequire(import.meta.url);
 const route = "app/api/members/[id]/member-documents/[documentId]/content/route.ts";
 const read = path => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+const reader = "lib/member-document-reader.ts";
 const cache = "private, no-store, max-age=0";
 const bytes = Buffer.from([0, 255, 13, 10, 42, 128]);
 const hash = data => createHash("sha256").update(data).digest("hex");
@@ -35,7 +36,7 @@ function harness(options = {}, mutation) {
     member: guard({}, "member"), auditLog: guard({}, "auditLog"),
   }, "prisma");
   const mocks = {
-    "@/lib/prisma": { prisma }, "@/lib/auth": { authConfig: {} },
+    "server-only": {}, "@/lib/prisma": { prisma }, "@/lib/auth": { authConfig: {} },
     "next-auth": { getServerSession: async () => options.noSession ? null : { user: { id: "7", role: "ADMIN" } } },
     "@/lib/storage": { isStorageUrlsDisabled: () => !!options.disabled },
     "@/lib/supabase-admin": { getSupabaseAdmin: () => {
@@ -56,10 +57,10 @@ function harness(options = {}, mutation) {
   };
   function load(path) {
     let source = read(path);
-    if (path === route && mutation) source = source.replace(mutation.from, mutation.to);
+    if (path === (mutation?.path ?? route) && mutation) source = source.replace(mutation.from, mutation.to);
     const exports = {};
     vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText,
-      { exports, Buffer, Response, URL, require: name => mocks[name] ?? (name === "@/lib/auth-server" ? load("lib/auth-server.ts") : name === "node:crypto" ? require(name) : deny(name)) });
+      { exports, Buffer, Response, URL, require: name => mocks[name] ?? (name === "@/lib/member-document-reader" ? load(reader) : name === "@/lib/auth-server" ? load("lib/auth-server.ts") : name === "node:crypto" ? require(name) : deny(name)) });
     return exports;
   }
   const handlers = load(route);
@@ -186,17 +187,17 @@ const mutations = [
     await error(h, 403, "FORBIDDEN"); assert.deepEqual(h.calls, ["auth"]);
   } },
   { name: "remove ownership", from: 'id: Number(documentId), memberId: Number(id)', to: 'id: Number(documentId)', check: ownership },
-  { name: "Storage before ownership", from: 'const document = await prisma', to: 'getSupabaseAdmin(); const document = await prisma', check: ownership },
-  { name: "remove hash", from: 'createHash("sha256").update(Buffer.from(bytes)).digest("hex") !== document.sha256', to: 'false', check: m => unavailable({ row: { sha256: "bad" } }, m) },
-  { name: "remove length", from: 'bytes.byteLength !== document.byteLength', to: 'false', check: m => unavailable({ row: { byteLength: 999 } }, m) },
-  { name: "trust Blob.type", from: 'const mime = document.mimeType;', to: 'const mime = download.data.type;', check: m => content(harness({}, m)) },
-  { name: "originalName filename", from: 'document-${document.id}.${formats[mime]}', to: '${document.originalName}', check: m => content(harness({}, m)) },
-  { name: "signed URL", from: 'const bytes = await download.data.arrayBuffer();', to: 'await getSupabaseAdmin().storage.from(document.storageBucket).createSignedUrl(document.storageKey, 60); const bytes = await download.data.arrayBuffer();', check: m => content(harness({}, m)) },
+  { name: "Storage before ownership", from: 'const document = await prisma', to: 'await readVerifiedMemberDocument({}); const document = await prisma', check: ownership },
+  { path: reader, name: "remove hash", from: 'createHash("sha256").update(Buffer.from(bytes)).digest("hex") !== document.sha256', to: 'false', check: m => unavailable({ row: { sha256: "bad" } }, m) },
+  { path: reader, name: "remove length", from: 'bytes.byteLength !== document.byteLength', to: 'false', check: m => unavailable({ row: { byteLength: 999 } }, m) },
+  { path: reader, name: "trust Blob.type", from: 'const mimeType = document.mimeType;', to: 'const mimeType = download.data.type;', check: m => content(harness({}, m)) },
+  { name: "originalName filename", from: 'document-${document.id}.${extension}', to: '${document.originalName}', check: m => content(harness({}, m)) },
+  { path: reader, name: "signed URL", from: 'const bytes = await download.data.arrayBuffer();', to: 'await getSupabaseAdmin().storage.from(document.storageBucket).createSignedUrl(document.storageKey, 60); const bytes = await download.data.arrayBuffer();', check: m => content(harness({}, m)) },
   { name: "redirect", from: 'return new Response(bytes,', to: 'return Response.redirect("https://storage.invalid/private"); return new Response(bytes,', check: m => content(harness({}, m)) },
   { name: "legacy fallback", from: 'if (!document) return failure', to: 'if (!document) await prisma.member.findUnique({ where: { id: Number(id) }, select: { dniFrontUrl: true } }); if (!document) return failure', check: ownership },
-  { name: "storageKey error leak", from: 'if (download.error || !download.data) return failure("DOCUMENT_UNAVAILABLE", 503);', to: 'if (download.error || !download.data) return failure(document.storageKey, 503);', check: m => unavailable({ absent: true }, m) },
+  { name: "storageKey error leak", from: 'const { bytes, mimeType: mime, byteLength, extension } = await readVerifiedMemberDocument(document);', to: 'return failure(document.storageKey, 503);', check: m => unavailable({ absent: true }, m) },
 ];
 for (const mutation of mutations) test(`sensitivity: ${mutation.name}`, async () => {
-  assert.ok(read(route).includes(mutation.from), `Missing mutation target: ${mutation.name}`);
+  assert.ok(read(mutation.path ?? route).includes(mutation.from), `Missing mutation target: ${mutation.name}`);
   await assert.rejects(() => mutation.check(mutation), { name: "AssertionError" });
 });

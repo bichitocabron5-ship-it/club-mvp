@@ -20,7 +20,7 @@ const url = side => `/api/members/17/documents?side=${side}`;
 function form(side = "front", bytes = png, mime = "image/png") {
   const f = new FormData(); f.set("side", side); f.set("image", new File([bytes], "id.png", { type: mime })); return f;
 }
-function harness(options = {}) {
+function harness(options = {}, mutation) {
   const member = { id: 17, dniFrontUrl: "club-uploads/members/17/dni-front-123.png",
     dniBackUrl: "member-documents/members/17/dni-back.pdf", photoUrl: null, ...options.member };
   const rows = [], objects = new Map(), audits = [], removals = [], queries = [], uploads = [];
@@ -94,7 +94,7 @@ function harness(options = {}) {
   function load(path) {
     if (cache[path]) return cache[path];
     const exports = {}; cache[path] = exports;
-    vm.runInNewContext(ts.transpileModule(read(path), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText,
+    vm.runInNewContext(ts.transpileModule(mutation?.path === path ? read(path).replace(mutation.from, mutation.to) : read(path), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText,
       { exports, Buffer, File, FormData, Response, Request, URL, Uint8Array,
         process: { env: { STORAGE_BUCKET: "custom-uploads", SUPABASE_URL: "https://project.supabase.co" } },
         console: { error() {}, info() {} },
@@ -317,4 +317,34 @@ test("real card: legacy/mixed/new sides, replacements, refresh, and failed uploa
   assert.deepEqual(sources(), before); assert.equal(refreshes, 3); assert.equal(state[5], "UPLOAD_FAILED");
   assert.equal(h.member.dniFrontUrl, "club-uploads/members/17/dni-front-123.png");
   assert.equal(h.member.dniBackUrl, "member-documents/members/17/dni-back.pdf");
+});
+
+const readerPath = "lib/member-document-reader.ts";
+test("canonical empty DNI with matching length/hash rejects without legacy fallback", async () => {
+  const mutation = { path: readerPath, from: "bytes.byteLength === 0", to: "false" };
+  assert.ok(read(readerPath).includes(mutation.from));
+  async function check(m) {
+    for (const side of ["front", "back"]) {
+      const h = harness({}, m);
+      h.add(side, 1, "2026-10-01", Buffer.alloc(0));
+      const response = await h.get(side);
+      assert.equal(response.status, 503);
+      assert.deepEqual(await response.json(), { error: "DOCUMENT_UNAVAILABLE" });
+    }
+  }
+  await check();
+  await assert.rejects(() => check(mutation), { name: "AssertionError" });
+});
+for (const mutation of [
+  { path: readerPath, from: 'createHash("sha256").update(Buffer.from(bytes)).digest("hex") !== document.sha256', to: 'false' },
+  { path: "app/api/members/[id]/documents/route.ts", from: 'const verified = await readVerifiedMemberDocument(document);',
+    to: 'const verified = await readVerifiedMemberDocument(document).catch(async () => { const data = await getSupabaseAdmin().storage.from("club-uploads").download("members/17/dni-front-123.png"); return { bytes: await data.data.arrayBuffer(), mimeType: "image/png", extension: "png" }; });' },
+]) test(`sensitivity: DNI canonical corruption ${mutation.path}`, async () => {
+  assert.ok(read(mutation.path).includes(mutation.from));
+  async function check(m) {
+    const h = harness({}, m); h.add("front", 1, "2026-10-01").sha256 = "bad";
+    assert.equal((await h.get()).status, 503);
+  }
+  await check();
+  await assert.rejects(() => check(mutation), { name: "AssertionError" });
 });
