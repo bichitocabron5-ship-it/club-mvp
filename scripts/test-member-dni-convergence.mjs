@@ -75,6 +75,10 @@ function harness(options = {}, mutation) {
   const storage = {
     getBucket: async () => ({ data: { public: false } }),
     from: bucket => ({
+      createSignedUrl: async (key, ttl) => {
+        assert.equal(ttl, 900);
+        return { data: { signedUrl: `https://project.supabase.co/storage/v1/object/sign/${bucket}/${key}?token=temporary` } };
+      },
       upload: async (key, bytes, settings) => {
         assert.equal(settings.upsert, false); assert.equal(objects.has(`${bucket}/${key}`), false);
         uploads.push({ bucket, key }); objects.set(`${bucket}/${key}`, new Blob([bytes], { type: settings.contentType }));
@@ -273,7 +277,15 @@ test("legacy attack matrix: encoding, traversal, deceptive origins and query iso
     { bucket: "member-documents", path: "members/17/dni-front.pdf" });
 });
 
-test("real card: canonical current after general upload, legacy stays informational", async () => {
+test("history preserves existing photograph with temporary signed URL independently of DNI", async () => {
+  const h = harness({ member: { photoUrl: "club-uploads/members/17/profile-123.png" } });
+  const payload = await (await h.history()).json();
+  assert.equal(payload.member.photoUrl, "https://project.supabase.co/storage/v1/object/sign/club-uploads/members/17/profile-123.png?token=temporary");
+  assert.equal(h.rows.length, 0);
+  assert.equal(h.member.photoUrl, "club-uploads/members/17/profile-123.png");
+});
+
+test("real card: canonical current after DNI upload replaces visible legacy", async () => {
   const { uiHarness } = await import("./fixtures/member-document-ui-harness.mjs");
   const h = harness(); let refreshes = 0, fail = false;
   const history = await (await h.history()).json();
@@ -291,10 +303,12 @@ test("real card: canonical current after general upload, legacy stays informatio
     });
     return Response.json({ items, nextCursor: null });
   } });
-  await ui.flush(); assert.match(ui.text, /DNI de compatibilidad/);
+  await ui.flush(); assert.match(ui.text, /DNI anterior · compatibilidad/);
   assert.equal(ui.nodes.filter(n => n.type === "img").length, 0);
   async function upload(side) {
-    ui.nodes.find(n => n.type === "select").props.onChange({ target: { value: side === "front" ? "ID_FRONT" : "ID_BACK" } });
+    const slot = ui.nodes.filter(n => n.type === "article")[side === "front" ? 0 : 1];
+    const { nodes } = await import("./fixtures/member-document-ui-harness.mjs");
+    nodes(slot).find(n => n.type === "button").props.onClick();
     ui.nodes.find(n => n.type === "input").props.onChange({
       target: { files: [new File([png], "id.png", { type: "image/png" })], value: "" },
     });
@@ -307,7 +321,7 @@ test("real card: canonical current after general upload, legacy stays informatio
   }
   await upload("front"); await upload("back"); await upload("front");
   assert.equal(h.rows.length, 3); assert.equal(refreshes, 4);
-  assert.match(ui.text, /DNI: ambas caras adjuntadas/); assert.doesNotMatch(ui.text, /compatibilidad/);
+  assert.match(ui.text, /DNI: ambas caras disponibles/); assert.doesNotMatch(ui.text, /compatibilidad/);
   assert.deepEqual(ui.nodes.filter(n => n.type === "img").map(n => n.props.src),
     [3, 2].map(id => `/api/members/17/member-documents/${id}/content?disposition=inline`));
   fail = true; await upload("front"); assert.equal(refreshes, 4); assert.equal(h.rows.length, 3);
