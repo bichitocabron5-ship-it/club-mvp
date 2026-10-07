@@ -10,14 +10,19 @@ type Props = {
   initialBackUrl: string | null;
   canUpload?: boolean;
 };
-type Side = "front" | "back";
+const acceptedMime = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
 const labels = ["DNI frontal", "DNI reverso", "Autorización", "Justificante", "Anexo", "Otro"];
 const rejected: Record<string, string> = {
-  DOCUMENT_TOO_LARGE: "La imagen supera el máximo de 5 MiB.",
-  REQUEST_TOO_LARGE: "La imagen supera el máximo de 5 MiB.",
-  UNSUPPORTED_MIME: "Selecciona una imagen JPG, PNG o WEBP.",
-  INVALID_DOCUMENT_BYTES: "El archivo no es una imagen válida.",
-  DOCUMENT_EMPTY: "Selecciona una imagen que no esté vacía.",
+  INVALID_DOCUMENT_TYPE: "Selecciona un tipo de documento válido.",
+  DOCUMENT_TOO_LARGE: "El archivo supera el máximo de 5 MiB.",
+  REQUEST_TOO_LARGE: "El archivo supera el máximo de 5 MiB.",
+  UNSUPPORTED_MIME: "Selecciona un archivo JPEG, PNG, WEBP o PDF.",
+  INVALID_DOCUMENT_BYTES: "El archivo no es una imagen o PDF válido.",
+  DOCUMENT_EMPTY: "Selecciona un archivo que no esté vacío.",
+  STORAGE_UNAVAILABLE: "El almacenamiento no está disponible. Inténtalo más tarde.",
+  PRIVATE_STORAGE_REQUIRED: "El almacenamiento no está disponible. Inténtalo más tarde.",
+  STORAGE_UPLOAD_FAILED: "No se pudo guardar el archivo. Inténtalo más tarde.",
+  MEMBER_NOT_FOUND: "No se ha encontrado el socio.",
   UNAUTHORIZED: "La sesión ha caducado. Inicia sesión de nuevo.",
   FORBIDDEN: "No tienes permiso para incorporar documentos.",
 };
@@ -65,7 +70,13 @@ function CurrentDocuments({ memberId, initialFrontUrl, initialBackUrl, canUpload
   const [items, setItems] = useState<MemberDocumentListItem[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [uploading, setUploading] = useState<Side | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [documentType, setDocumentType] = useState("");
+  const selectedType = useRef("");
+  const selectedFile = useRef<File | null>(null);
+  const fileInput = useRef<HTMLInputElement | null>(null);
+  const uncertain = useRef(false);
+  const [needsRefresh, setNeedsRefresh] = useState(false);
   const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null);
   const generation = useRef(0);
   const controller = useRef<AbortController | null>(null);
@@ -125,10 +136,12 @@ function CurrentDocuments({ memberId, initialFrontUrl, initialBackUrl, canUpload
       });
       setNextCursor(result.nextCursor);
       setHistoryStatus("loaded");
+      return true;
     } catch {
       if (!active()) return;
       if (cursor === null) setHistoryStatus("error");
       else setPageError(true);
+      return false;
     } finally {
       if (active()) {
         historyLock.current = false;
@@ -156,19 +169,39 @@ function CurrentDocuments({ memberId, initialFrontUrl, initialBackUrl, canUpload
     };
   }, [refresh]);
 
-  async function upload(side: Side, file: File) {
+  function chooseType(type: string) {
+    if (uploadLock.current) return;
+    selectedType.current = type;
+    setDocumentType(type);
+  }
+
+  async function upload() {
     if (uploadLock.current || !canUpload || !mounted.current) return;
+    if (uncertain.current) return;
+    const type = selectedType.current;
+    const file = selectedFile.current;
+    const validation = !MEMBER_DOCUMENT_TYPE_VALUES.some(value => value === type) ? rejected.INVALID_DOCUMENT_TYPE
+      : !file ? "Selecciona un archivo."
+      : file.size === 0 ? rejected.DOCUMENT_EMPTY
+      : file.size > 5 * 1024 * 1024 ? rejected.DOCUMENT_TOO_LARGE
+      : !acceptedMime.includes(file.type) ? rejected.UNSUPPORTED_MIME : null;
+    if (validation || !file) {
+      setNotice({ error: true, text: validation ?? "Selecciona un archivo." });
+      return;
+    }
     uploadLock.current = true;
-    setUploading(side);
+    setUploading(true);
     setNotice(null);
     const form = new FormData();
-    form.set("side", side);
-    form.set("image", file);
+    form.set("type", type);
+    form.set("file", file);
     try {
       let response: Response;
       try {
-        response = await fetch(`/api/members/${memberId}/dni`, { method: "POST", body: form });
+        response = await fetch(`/api/members/${memberId}/member-documents`, { method: "POST", body: form });
       } catch {
+        uncertain.current = true;
+        if (mounted.current) setNeedsRefresh(true);
         if (mounted.current) setNotice({ error: true, text: "No se pudo confirmar la incorporación. Actualiza la documentación antes de repetir." });
         return;
       }
@@ -176,17 +209,20 @@ function CurrentDocuments({ memberId, initialFrontUrl, initialBackUrl, canUpload
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
         if (mounted.current) setNotice({ error: true, text: rejected[payload?.error] ??
-          (response.status >= 500 ? "No se pudo confirmar la incorporación. Actualiza la documentación antes de repetir." : "No se pudo incorporar el documento. Revisa el archivo y tus permisos.") });
+          (response.status === 401 ? rejected.UNAUTHORIZED : response.status === 403 ? rejected.FORBIDDEN : "No se pudo incorporar el documento.") });
         return;
       }
-      // HTTP success confirms the write; the adapter URL is not a visual source.
+      // HTTP success confirms the write independently of subsequent reads.
+      selectedFile.current = null;
+      if (fileInput.current) fileInput.current.value = "";
       setNotice({ error: false, text: "Documento incorporado." });
-      if (historyRequested.current) void loadHistory(null, true);
+      const historyRefresh = historyRequested.current ? loadHistory(null, true) : Promise.resolve(true);
       const refreshed = await refresh();
-      if (mounted.current && !refreshed) setNotice({ error: true, text: "Documento incorporado. No se pudo actualizar el listado." });
+      const historyRefreshed = await historyRefresh;
+      if (mounted.current && (!refreshed || !historyRefreshed)) setNotice({ error: false, text: "Documento incorporado. No se pudo actualizar el listado." });
     } finally {
       uploadLock.current = false;
-      if (mounted.current) setUploading(null);
+      if (mounted.current) setUploading(false);
     }
   }
 
@@ -194,13 +230,16 @@ function CurrentDocuments({ memberId, initialFrontUrl, initialBackUrl, canUpload
   const back = items?.some(item => item.type === "ID_BACK");
   const legacy = items !== null && ((!front && initialFrontUrl) || (!back && initialBackUrl));
   return (
-    <section className="app-panel mt-6 rounded-[2rem] p-4 sm:p-6" aria-busy={loading || uploading !== null}>
+    <section className="app-panel mt-6 rounded-[2rem] p-4 sm:p-6" aria-busy={loading || uploading}>
       <h2 className="text-xl font-black">Expediente documental</h2>
       <h3 className="mt-4 font-bold">Documentación actual</h3>
       <p className="mt-2 text-sm app-muted">Actual indica el último documento incorporado de cada tipo. No implica validación ni obligatoriedad.</p>
       {loading && <p role="status" className="mt-4">Cargando documentación…</p>}
       {error && <p role="alert" className="mt-4">No se pudo cargar la documentación.{items !== null && " Se muestran los últimos datos cargados."}</p>}
-      <button type="button" className="app-button-secondary mt-3 min-h-11 px-4" disabled={loading || uploading !== null} onClick={() => { void refresh(); }}>
+      <button type="button" className="app-button-secondary mt-3 min-h-11 px-4" disabled={loading || uploading} onClick={async () => {
+        const confirmsUncertain = uncertain.current;
+        if (await refresh() && mounted.current && confirmsUncertain) { uncertain.current = false; setNeedsRefresh(false); }
+      }}>
         {error ? "Reintentar" : "Actualizar documentación"}
       </button>
       {items !== null && <>
@@ -214,21 +253,36 @@ function CurrentDocuments({ memberId, initialFrontUrl, initialBackUrl, canUpload
             return <article key={type} className="min-w-0 rounded-2xl border border-black/10 p-4">
               <h4 className="font-bold">{labels[index]}</h4>
               {item ? <MemberDocumentItem key={`${memberId}:${item.id}`} memberId={memberId} item={item} label={labels[index]} /> : !loading && !error && <p className="mt-2 app-muted">Sin documento incorporado</p>}
-              {side && canUpload && <div className="mt-4">
-                <label className="block text-sm font-semibold" htmlFor={`dni-${memberId}-${side}`}>Incorporar imagen de {labels[index]}</label>
-                <p id={`dni-help-${memberId}-${side}`} className="text-sm app-muted">JPG, PNG o WEBP, hasta 5 MiB. Se conservarán los documentos anteriores.</p>
-                <input id={`dni-${memberId}-${side}`} aria-describedby={`dni-help-${memberId}-${side}`} type="file" accept=".jpg,.jpeg,.png,.webp" disabled={uploading !== null}
-                  className="mt-2 block w-full min-w-0 text-sm" onChange={event => {
-                    const file = event.target.files?.[0];
-                    event.target.value = "";
-                    if (file) void upload(side, file);
-                  }} />
-                {uploading === side && <p role="status">Incorporando imagen de {labels[index]}…</p>}
-              </div>}
+              {side && canUpload && <button type="button" disabled={uploading || needsRefresh}
+                className="app-button-secondary mt-4 min-h-11 px-4" onClick={() => {
+                  if (uploadLock.current || uncertain.current) return;
+                  chooseType(type);
+                  fileInput.current?.focus();
+                }}>{item && !error && !loading ? "Incorporar nueva versión" : side === "front" ? "Incorporar frontal" : "Incorporar reverso"}</button>}
             </article>;
           })}
         </div>
       </>}
+      {canUpload && <form className="mt-6 min-w-0 space-y-3" aria-busy={uploading} noValidate
+        onSubmit={event => { event.preventDefault(); void upload(); }}>
+        <h3 className="font-bold">Incorporar documento</h3>
+        <label className="block text-sm font-semibold" htmlFor={`document-type-${memberId}`}>Tipo de documento</label>
+        <select id={`document-type-${memberId}`} required disabled={uploading || needsRefresh} value={documentType}
+          aria-describedby={`document-help-${memberId}`} className="block w-full min-w-0 rounded border p-2"
+          onChange={event => chooseType(event.target.value)}>
+          <option value="">Selecciona un tipo</option>
+          {MEMBER_DOCUMENT_TYPE_VALUES.map((type, index) => <option key={type} value={type}>{labels[index]}</option>)}
+        </select>
+        <label className="block text-sm font-semibold" htmlFor={`document-file-${memberId}`}>Archivo</label>
+        <input ref={fileInput} id={`document-file-${memberId}`} type="file" required
+          accept="image/jpeg,image/png,image/webp,application/pdf" disabled={uploading || needsRefresh}
+          aria-describedby={`document-help-${memberId}`} className="block w-full min-w-0 overflow-hidden text-sm"
+          onChange={event => { if (!uploadLock.current && !uncertain.current) selectedFile.current = event.target.files?.[0] ?? null; }} />
+        <p id={`document-help-${memberId}`} className="text-sm app-muted">Formatos admitidos: JPEG, PNG, WEBP y PDF. Tamaño máximo: 5 MiB.</p>
+        {!loading && !error && items?.some(item => item.type === documentType) && <p className="text-sm">Se conservarán los documentos anteriores.</p>}
+        <button type="submit" disabled={uploading || needsRefresh} className="app-button-primary min-h-11 w-full px-4 sm:w-auto">Incorporar documento</button>
+        {uploading && <p role="status">Incorporando documento…</p>}
+      </form>}
       <h3 className="mt-6 font-bold">Histórico documental</h3>
       <button type="button" className="app-button-secondary mt-3 min-h-11 px-4"
         aria-expanded={historyOpen} aria-controls={`document-history-${memberId}`} onClick={() => {

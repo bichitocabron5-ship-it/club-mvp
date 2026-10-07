@@ -107,6 +107,7 @@ function harness(options = {}, mutation) {
   const context = id => ({ params: Promise.resolve({ id }) });
   return { member, rows, objects, audits, removals, queries, uploads, add,
     resolver: load("lib/member-dni.ts"),
+    canonical: body => load("app/api/members/[id]/member-documents/route.ts").POST(new Request("http://local/member-documents", { method: "POST", body }), context("17")),
     post: (body = form(), id = "17", headers) => dni.POST(new Request("http://local/dni", { method: "POST", body, headers }), context(id)),
     get: (side = "front", id = "17", extra = "") => documents.GET(new Request(`http://local/documents?side=${side}${extra}`), context(id)),
     retired: () => documents.POST(),
@@ -272,15 +273,15 @@ test("legacy attack matrix: encoding, traversal, deceptive origins and query iso
     { bucket: "member-documents", path: "members/17/dni-front.pdf" });
 });
 
-test("real card: canonical current after adapter upload, legacy stays informational", async () => {
+test("real card: canonical current after general upload, legacy stays informational", async () => {
   const { uiHarness } = await import("./fixtures/member-document-ui-harness.mjs");
   const h = harness(); let refreshes = 0, fail = false;
   const history = await (await h.history()).json();
   const ui = uiHarness({ props: { memberId: 17, initialFrontUrl: history.member.dniFrontUrl,
     initialBackUrl: history.member.dniBackUrl, canUpload: true }, fetch: async (path, options) => {
     if (options.method === "POST") {
-      assert.equal(path, "/api/members/17/dni");
-      return fail ? Response.json({ error: "UNSUPPORTED_MIME" }, { status: 415 }) : h.post(options.body);
+      assert.equal(path, "/api/members/17/member-documents");
+      return fail ? Response.json({ error: "UNSUPPORTED_MIME" }, { status: 415 }) : h.canonical(options.body);
     }
     assert.equal(path, "/api/members/17/member-documents?view=current"); refreshes++;
     const items = ["ID_FRONT", "ID_BACK"].flatMap(type => {
@@ -293,9 +294,11 @@ test("real card: canonical current after adapter upload, legacy stays informatio
   await ui.flush(); assert.match(ui.text, /DNI de compatibilidad/);
   assert.equal(ui.nodes.filter(n => n.type === "img").length, 0);
   async function upload(side) {
-    ui.nodes.filter(n => n.type === "input")[side === "front" ? 0 : 1].props.onChange({
+    ui.nodes.find(n => n.type === "select").props.onChange({ target: { value: side === "front" ? "ID_FRONT" : "ID_BACK" } });
+    ui.nodes.find(n => n.type === "input").props.onChange({
       target: { files: [new File([png], "id.png", { type: "image/png" })], value: "" },
     });
+    ui.nodes.find(n => n.type === "form").props.onSubmit({ preventDefault() {} });
     for (let i = 0; i < 100; i++) {
       await new Promise(resolve => setTimeout(resolve, 5)); await ui.flush();
       if (ui.nodes.filter(n => n.type === "input").every(n => !n.props.disabled)) return;
@@ -308,7 +311,7 @@ test("real card: canonical current after adapter upload, legacy stays informatio
   assert.deepEqual(ui.nodes.filter(n => n.type === "img").map(n => n.props.src),
     [3, 2].map(id => `/api/members/17/member-documents/${id}/content?disposition=inline`));
   fail = true; await upload("front"); assert.equal(refreshes, 4); assert.equal(h.rows.length, 3);
-  assert.match(ui.text, /Selecciona una imagen JPG/);
+  assert.match(ui.text, /Selecciona un archivo JPEG/);
   assert.equal(h.member.dniFrontUrl, "club-uploads/members/17/dni-front-123.png");
   assert.equal(h.member.dniBackUrl, "member-documents/members/17/dni-back.pdf");
 });

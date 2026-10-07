@@ -9,10 +9,142 @@ const list = items => Response.json({ items, nextCursor: null });
 const props = { memberId: 17, initialFrontUrl: null, initialBackUrl: null, canUpload: true };
 const start = fetch => uiHarness({ props, fetch });
 const inputs = h => h.nodes.filter(n => n.type === "input" && n.props.type === "file");
-const send = (input) => input.props.onChange({ target: { files: [new File(["x"], "id.png", { type: "image/png" })], value: "id.png" } });
+const submit = h => h.nodes.find(n => n.type === "form" && n.props.onSubmit).props.onSubmit({ preventDefault() {} });
+const send = (h, side = "front") => {
+  h.nodes.find(n => n.type === "select" && n.props.id === "document-type-17").props.onChange({ target: { value: side === "front" ? "ID_FRONT" : "ID_BACK" } });
+  inputs(h)[0].props.onChange({ target: { files: [new File(["x"], "id.png", { type: "image/png" })], value: "id.png" } });
+  submit(h);
+};
 const history = h => h.nodes.find(n => n.props?.id === `document-history-17`);
 const page = (items, nextCursor = null) => Response.json({ items, nextCursor });
 const openHistory = h => { h.button("Ver histórico").props.onClick(); h.render(); };
+
+test("pre-upload refresh cannot unlock a later uncertain POST", async () => {
+  const old = deferred(); let gets = 0, posts = 0;
+  const h = start(async (url, options) => {
+    if (options.method === "POST") { posts++; throw new Error("network"); }
+    return ++gets === 2 ? old.promise : list([]);
+  }); await h.flush();
+  h.button("Actualizar documentación").props.onClick(); send(h); await h.flush();
+  old.resolve(list([])); await h.flush();
+  assert.equal(h.button("Incorporar documento").props.disabled, true);
+  h.button("Incorporar reverso").props.onClick(); submit(h); await h.flush(); assert.equal(posts, 1);
+  await h.button("Actualizar documentación").props.onClick(); await h.flush();
+  assert.equal(h.button("Incorporar documento").props.disabled, false);
+});
+
+test("file DOM reset permits selecting the same file again", async () => {
+  let posts = 0;
+  const h = start(async (url, options) => { if (options.method === "POST") posts++; return list([]); }); await h.flush();
+  const dom = { value: "", focus() {} }, file = new File(["x"], "same.png", { type: "image/png" });
+  inputs(h)[0].props.ref.current = dom;
+  h.nodes.find(n => n.type === "select").props.onChange({ target: { value: "OTHER" } });
+  function selectSameFile() {
+    // Model native change suppression when the same selected path is retained.
+    if (dom.value === "same.png") return;
+    dom.value = "same.png";
+    inputs(h)[0].props.onChange({ target: { files: [file] } });
+  }
+  selectSameFile(); submit(h); await h.flush(); assert.equal(dom.value, "");
+  selectSameFile(); submit(h); await h.flush(); assert.equal(posts, 2); assert.equal(dom.value, "");
+});
+
+test("general form render labels help six types available on current failure", async () => {
+  const h = start(async () => new Response(null, { status: 500 })); await h.flush();
+  const select = h.nodes.find(n => n.type === "select"), input = inputs(h)[0];
+  assert.equal(inputs(h).length, 1);
+  assert.deepEqual(h.nodes.filter(n => n.type === "option" && n.props.value).map(n => n.props.value), types);
+  assert.equal(input.props.accept, "image/jpeg,image/png,image/webp,application/pdf");
+  for (const control of [select, input]) {
+    assert.equal(control.props.required, true);
+    assert.ok(h.nodes.some(n => n.type === "label" && n.props.htmlFor === control.props.id));
+    assert.ok(h.nodes.some(n => n.props?.id === control.props["aria-describedby"]));
+  }
+  assert.match(h.text, /Formatos admitidos: JPEG, PNG, WEBP y PDF. Tamaño máximo: 5 MiB./);
+  assert.equal(h.button("Incorporar documento").props.type, "submit");
+  assert.doesNotMatch(h.text, /Se conservarán/);
+});
+
+for (const [type, size, mime, message] of [
+  ["", 1, "image/png", /tipo de documento/], ["FAKE", 1, "image/png", /tipo de documento/],
+  ["OTHER", null, "image/png", /Selecciona un archivo/], ["OTHER", 0, "image/png", /vacío/],
+  ["OTHER", 5 * 1024 * 1024 + 1, "image/png", /supera/], ["OTHER", 1, "text/plain", /JPEG/],
+  ["OTHER", 1, "", /JPEG/],
+]) test(`general validation ${type} ${size} ${mime}`, async () => {
+  let posts = 0;
+  const h = start(async (url, options) => { if (options.method === "POST") posts++; return list([]); }); await h.flush();
+  h.nodes.find(n => n.type === "select").props.onChange({ target: { value: type } });
+  if (size !== null) inputs(h)[0].props.onChange({ target: { files: [new File([new Uint8Array(size)], "file.png", { type: mime })] } });
+  submit(h); await h.flush(); assert.equal(posts, 0);
+  assert.ok(h.nodes.some(n => n.props?.role === "alert" && message.test(text(n))));
+});
+
+for (const mime of ["image/jpeg", "image/png", "image/webp", "application/pdf"]) test(`general exact 5 MiB canonical payload ${mime}`, async () => {
+  let posts = 0; const pending = deferred();
+  const h = start(async (url, options) => {
+    if (options.method !== "POST") return list([]);
+    posts++; assert.equal(url, "/api/members/17/member-documents");
+    assert.deepEqual([...options.body.keys()], ["type", "file"]);
+    assert.equal(options.body.get("type"), "OTHER"); assert.equal(options.body.get("file").size, 5 * 1024 * 1024);
+    return pending.promise;
+  }); await h.flush();
+  h.nodes.find(n => n.type === "select").props.onChange({ target: { value: "OTHER" } });
+  inputs(h)[0].props.onChange({ target: { files: [new File([new Uint8Array(5 * 1024 * 1024)], "file", { type: mime })] } });
+  assert.equal(posts, 0); submit(h); submit(h); h.render(); assert.equal(posts, 1);
+  assert.equal(h.nodes.find(n => n.type === "form").props["aria-busy"], true);
+  assert.equal(h.nodes.filter(n => n.type === "a").length, 0);
+  pending.resolve(new Response(null, { status: 201 })); await h.flush();
+  assert.equal(h.nodes.find(n => n.type === "select").props.value, "OTHER");
+  submit(h); await h.flush(); assert.equal(posts, 1); assert.match(h.text, /Selecciona un archivo/);
+});
+
+test("quick actions common form synchronous selection focus lock and append-only", async () => {
+  const pending = deferred(); let posts = 0;
+  const h = start(async (url, options) => { if (options.method === "POST") { posts++; assert.equal(options.body.get("type"), "ID_BACK"); return pending.promise; } return list([row()]); }); await h.flush();
+  let focused = 0; const dom = { value: "file.png", focus() { focused++; } }; inputs(h)[0].props.ref.current = dom;
+  h.button("Incorporar nueva versión").props.onClick(); h.render();
+  assert.equal(h.nodes.find(n => n.type === "select").props.value, "ID_FRONT");
+  assert.match(h.text, /Se conservarán los documentos anteriores\./); assert.doesNotMatch(h.text, /reemplazar|sobrescribir/i);
+  const quick = h.button("Incorporar reverso"); assert.equal(quick.props.type, "button"); quick.props.onClick();
+  inputs(h)[0].props.onChange({ target: { files: [new File(["x"], "file.png", { type: "image/png" })] } });
+  submit(h); quick.props.onClick(); submit(h);
+  h.nodes.find(n => n.type === "select").props.onChange({ target: { value: "OTHER" } });
+  inputs(h)[0].props.onChange({ target: { files: [] } }); h.render();
+  assert.equal(focused, 2); assert.equal(posts, 1); assert.equal(inputs(h).length, 1);
+  assert.equal(h.nodes.find(n => n.type === "select").props.value, "ID_BACK");
+  assert.ok(h.nodes.filter(n => n.type === "select" || n.type === "input").every(n => n.props.disabled));
+  pending.resolve(new Response(null, { status: 201 })); await h.flush(); assert.equal(dom.value, "");
+});
+
+for (const code of ["INVALID_DOCUMENT_TYPE", "DOCUMENT_EMPTY", "DOCUMENT_TOO_LARGE", "UNSUPPORTED_MIME", "INVALID_DOCUMENT_BYTES", "STORAGE_UNAVAILABLE", "PRIVATE_STORAGE_REQUIRED", "STORAGE_UPLOAD_FAILED", "MEMBER_NOT_FOUND", "UNAUTHORIZED", "FORBIDDEN", "UNKNOWN"]) test(`backend rejection ${code} preserves selection`, async () => {
+  let posts = 0;
+  const h = start(async (url, options) => { if (options.method === "POST") { posts++; return Response.json({ error: code }, { status: 400 }); } return list([]); });
+  await h.flush(); send(h); await h.flush();
+  assert.ok(h.nodes.some(n => n.props?.role === "alert")); assert.doesNotMatch(h.text, /No se pudo confirmar|Documento incorporado/);
+  const expected = {
+    INVALID_DOCUMENT_TYPE: /tipo de documento válido/, DOCUMENT_EMPTY: /no esté vacío/,
+    DOCUMENT_TOO_LARGE: /supera el máximo de 5 MiB/, UNSUPPORTED_MIME: /JPEG, PNG, WEBP o PDF/,
+    INVALID_DOCUMENT_BYTES: /imagen o PDF válido/, STORAGE_UNAVAILABLE: /almacenamiento no está disponible/,
+    PRIVATE_STORAGE_REQUIRED: /almacenamiento no está disponible/, STORAGE_UPLOAD_FAILED: /No se pudo guardar/,
+    MEMBER_NOT_FOUND: /No se ha encontrado el socio/, UNAUTHORIZED: /sesión ha caducado/,
+    FORBIDDEN: /No tienes permiso/, UNKNOWN: /No se pudo incorporar el documento\./,
+  };
+  assert.match(h.text, expected[code]);
+  assert.equal(h.nodes.find(n => n.type === "select").props.value, "ID_FRONT");
+  submit(h); await h.flush(); assert.equal(posts, 2);
+});
+
+for (const outcome of ["success", "http", "network"]) test(`unmount pending POST ${outcome} never aborts or updates state`, async () => {
+  const pending = deferred(); let calls = 0;
+  const h = start((url, options) => {
+    calls++;
+    if (options.method === "POST") { assert.equal(options.signal, undefined); return pending.promise; }
+    return Promise.resolve(list([]));
+  }); await h.flush(); send(h); h.unmount();
+  if (outcome === "network") pending.reject(new Error("offline"));
+  else pending.resolve(new Response(null, { status: outcome === "success" ? 201 : 403 }));
+  await tick(); assert.equal(h.lateUpdates, 0); assert.equal(calls, 2);
+});
 
 test("history lazy, cached reopen, loading, empty, initial error retry and a11y", async () => {
   const pending = deferred(); const calls = [];
@@ -96,7 +228,7 @@ for (const additional of [false, true]) test(`history newest markers survive lat
   });
   await h.flush(); openHistory(h); await h.flush();
   if (additional) { h.button("Cargar más").props.onClick(); h.render(); }
-  send(inputs(h)[0]); await h.flush();
+  send(h); await h.flush();
   const expected = [{ id: 2, current: true, previous: false }, { id: 1, current: false, previous: true }];
   assert.deepEqual(historyLabels(h), expected);
   old.resolve(page([a, { ...b, isCurrent: false }], "stale")); await h.flush();
@@ -137,7 +269,7 @@ for (const additional of [false, true]) for (const outcome of ["success", "error
     return gets === (additional ? 2 : 1) ? old.promise : fresh.promise;
   }); await h.flush(); openHistory(h); await h.flush();
   if (additional) { h.button("Cargar más").props.onClick(); h.render(); }
-  h.button("Cerrar histórico").props.onClick(); h.render(); send(inputs(h)[0]); await h.flush();
+  h.button("Cerrar histórico").props.onClick(); h.render(); send(h); await h.flush();
   assert.equal(gets, additional ? 3 : 2); assert.equal(signals.at(-2).aborted, true);
   assert.equal(history(h).props.hidden, true); assert.equal(nodes(history(h)).filter(n => n.type === "li").length, 0);
   openHistory(h); assert.equal(gets, additional ? 3 : 2);
@@ -161,7 +293,7 @@ for (const additional of [false, true]) for (const freshFails of [false, true]) 
     return Promise.resolve(freshFails ? new Response(null, { status: 500 }) : page([row("OTHER", 99)], "fresh-cursor"));
   }); await h.flush(); openHistory(h); await h.flush();
   if (additional) { h.button("Cargar más").props.onClick(); h.render(); }
-  send(inputs(h)[0]); await h.flush();
+  send(h); await h.flush();
   h.button("Cerrar histórico").props.onClick(); h.render();
   const before = text(history(h));
   assert.equal(history(h).props["aria-busy"], false);
@@ -180,10 +312,10 @@ for (const additional of [false, true]) for (const freshFails of [false, true]) 
 test("history refresh failure preserves upload success and resets loaded sequence", async () => {
   let gets = 0;
   const h = start(async url => !url.includes("view=all") ? list([]) : ++gets === 1 ? page([row()], "cursor") : new Response(null, { status: 500 }));
-  await h.flush(); openHistory(h); await h.flush(); send(inputs(h)[0]); await h.flush();
+  await h.flush(); openHistory(h); await h.flush(); send(h); await h.flush();
   assert.match(h.text, /Documento incorporado\./); assert.match(text(history(h)), /No se pudo cargar el histórico documental\./);
   assert.equal(nodes(history(h)).filter(n => n.type === "li").length, 0); assert.equal(h.button("Cargar más"), undefined);
-  assert.ok(h.nodes.some(n => n.props?.role === "status" && text(n) === "Documento incorporado."));
+  assert.ok(h.nodes.some(n => n.props?.role === "status" && text(n) === "Documento incorporado. No se pudo actualizar el listado."));
 });
 
 for (const additional of [false, true]) for (const reject of [false, true]) test(`history member change unmount ${additional} ${reject}`, async () => {
@@ -255,11 +387,11 @@ test("legacy signals follow props and remain informational only", async () => {
 for (const side of ["front", "back"]) test(`upload ${side}: synchronous lock, both disabled, only local refresh`, async () => {
   const pending = deferred(); const calls = []; let items = [];
   const h = start(async (url, options) => { calls.push(url); if (options.method === "POST") {
-    assert.equal(url, "/api/members/17/dni"); assert.equal(options.body.get("side"), side);
-    assert.deepEqual([...options.body.keys()], ["side", "image"]); return pending.promise;
+    assert.equal(url, "/api/members/17/member-documents"); assert.equal(options.body.get("type"), side === "front" ? "ID_FRONT" : "ID_BACK");
+    assert.deepEqual([...options.body.keys()], ["type", "file"]); return pending.promise;
   } return list(items); }); await h.flush();
-  const files = inputs(h); send(files[side === "front" ? 0 : 1]); send(files[0]); send(files[1]);
-  h.render(); assert.ok(inputs(h).every(n => n.props.disabled)); assert.equal(calls.filter(u => u.endsWith("/dni")).length, 1);
+  send(h, side); submit(h); send(h, "back");
+  h.render(); assert.ok(inputs(h).every(n => n.props.disabled)); assert.equal(calls.filter(u => u.endsWith("/member-documents")).length, 1);
   items = [row(side === "front" ? "ID_FRONT" : "ID_BACK")]; pending.resolve(new Response(null, { status: 200 })); await h.flush();
   assert.match(h.text, /Documento incorporado\./); assert.equal(h.nodes.filter(n => n.type === "a").length, 2);
   assert.equal(calls.length, 3); assert.ok(calls.every(u => !/history|contracts/.test(u)));
@@ -270,8 +402,8 @@ for (const mode of ["rejected", "uncertain", "refreshFailed"]) test(`upload ${mo
   const h = start(async (url, options) => {
     if (options.method === "POST") { posts++; if (mode === "uncertain") throw new Error("network"); return mode === "rejected" ? Response.json({ error: "UNSUPPORTED_MIME" }, { status: 415 }) : list([]); }
     if (++gets > 1 && mode === "refreshFailed") throw new Error("refresh"); return list([]);
-  }); await h.flush(); send(inputs(h)[0]); await h.flush();
-  assert.match(h.text, mode === "rejected" ? /Selecciona una imagen JPG, PNG o WEBP/ : mode === "uncertain" ? /No se pudo confirmar la incorporación. Actualiza la documentación antes de repetir./ : /Documento incorporado. No se pudo actualizar el listado./);
+  }); await h.flush(); send(h); await h.flush();
+  assert.match(h.text, mode === "rejected" ? /Selecciona un archivo JPEG, PNG, WEBP o PDF/ : mode === "uncertain" ? /No se pudo confirmar la incorporación. Actualiza la documentación antes de repetir./ : /Documento incorporado. No se pudo actualizar el listado./);
   assert.doesNotMatch(h.text, /No se pudo subir/); assert.equal(posts, 1); await h.flush(); assert.equal(posts, 1);
   assert.ok(h.nodes.some(n => n.props?.role === "alert"));
 });
@@ -279,7 +411,7 @@ for (const mode of ["rejected", "uncertain", "refreshFailed"]) test(`upload ${mo
 for (const oldError of [false, true]) test(`stale ${oldError ? "error" : "response"} and finally cannot clear new loading`, async () => {
   const old = deferred(), fresh = deferred(); let gets = 0; const signals = [];
   const h = start((url, options) => { if (options.method === "POST") return Promise.resolve(list([])); signals.push(options.signal); return ++gets === 1 ? Promise.resolve(list([])) : gets === 2 ? old.promise : fresh.promise; });
-  await h.flush(); h.button("Actualizar documentación").props.onClick(); send(inputs(h)[0]); await tick(); h.render();
+  await h.flush(); h.button("Actualizar documentación").props.onClick(); send(h); await tick(); h.render();
   assert.equal(signals[1].aborted, true);
   if (oldError) old.reject(new Error("old")); else old.resolve(list([row("OTHER", 88)]));
   await h.flush(); assert.match(h.text, /Cargando documentación…/); assert.doesNotMatch(h.text, /No se pudo cargar la documentación/);
@@ -290,15 +422,15 @@ for (const oldError of [false, true]) test(`stale ${oldError ? "error" : "respon
 test("older success arriving after newest response is ignored", async () => {
   const old = deferred(); let gets = 0;
   const h = start((url, options) => options.method === "POST" ? Promise.resolve(list([])) : ++gets === 1 ? Promise.resolve(list([])) : gets === 2 ? old.promise : Promise.resolve(list([row("ID_BACK", 42)])));
-  await h.flush(); h.button("Actualizar documentación").props.onClick(); send(inputs(h)[0]); await h.flush(); old.resolve(list([])); await h.flush();
+  await h.flush(); h.button("Actualizar documentación").props.onClick(); send(h); await h.flush(); old.resolve(list([])); await h.flush();
   assert.ok(h.nodes.some(n => n.props?.href?.includes("/42/content")));
 });
 
 test("member change/unmount abort and isolate reads and pending POST callbacks", async () => {
   const pending = deferred(), upload = deferred(); const calls = [], signals = [];
   const h = start((url, options) => { calls.push(url); signals.push(options.signal); return options.method === "POST" ? upload.promise : url.includes("/18/") ? pending.promise : Promise.resolve(list([])); });
-  await h.flush(); send(inputs(h)[0]); h.render({ ...props, memberId: 18 });
-  upload.resolve(list([])); await h.flush(); assert.equal(calls.filter(u => u.includes("/17/member-documents")).length, 1);
+  await h.flush(); send(h); h.render({ ...props, memberId: 18 });
+  upload.resolve(list([])); await h.flush(); assert.equal(calls.filter(u => u.includes("/17/member-documents")).length, 2);
   h.unmount(); assert.equal(signals.at(-1).aborted, true); pending.reject(new Error("late")); await tick();
 });
 
@@ -334,7 +466,7 @@ test("document source has no legacy URL state, general upload/history or sensiti
 test("confirmed upload followed by failed current must not claim old absences", async () => {
   let gets = 0;
   const h = start(async (url, options) => options.method === "POST" ? new Response(null, { status: 200 }) : ++gets === 1 ? list([]) : Response.json({ error: "failed" }, { status: 500 }));
-  await h.flush(); send(inputs(h)[0]); await h.flush();
+  await h.flush(); send(h); await h.flush();
   assert.match(h.text, /Documento incorporado. No se pudo actualizar el listado./);
   assert.doesNotMatch(h.text, /No hay documentos incorporados|Sin documento incorporado/);
 });
@@ -347,7 +479,7 @@ test("legacy alone never counts towards canonical DNI copy", async () => {
 for (const abort of [false, true]) test(`old ${abort ? "AbortError" : "error"} after new success is ignored`, async () => {
   let gets = 0; const old = deferred();
   const h = start((url, options) => options.method === "POST" ? Promise.resolve(list([])) : ++gets === 1 ? Promise.resolve(list([])) : gets === 2 ? old.promise : Promise.resolve(list([row("ID_FRONT", 44)])));
-  await h.flush(); h.button("Actualizar documentación").props.onClick(); send(inputs(h)[0]); await h.flush();
+  await h.flush(); h.button("Actualizar documentación").props.onClick(); send(h); await h.flush();
   old.reject(Object.assign(new Error("old"), { name: abort ? "AbortError" : "Error" })); await h.flush();
   assert.doesNotMatch(h.text, /No se pudo cargar la documentación|Cargando documentación/);
   assert.ok(h.nodes.some(n => n.props?.href?.includes("/44/content")));
@@ -366,9 +498,10 @@ for (const mode of ["success", "rejected", "uncertain", "refreshFailed"]) test(`
   const h = start(async (url, options) => {
     if (options.method === "POST") { posts++; if (mode === "uncertain") throw new Error("network"); return mode === "rejected" ? Response.json({ error: "UNSUPPORTED_MIME" }, { status: 415 }) : new Response(null, { status: 200 }); }
     return ++gets > 1 && mode === "refreshFailed" ? Response.json({ error: "failed" }, { status: 500 }) : list([]);
-  }); await h.flush(); send(inputs(h)[0]); await h.flush();
+  }); await h.flush(); send(h); await h.flush();
+  if (mode === "uncertain") { assert.ok(inputs(h).every(n => n.props.disabled)); submit(h); await h.flush(); assert.equal(posts, 1); h.button("Actualizar documentación").props.onClick(); await h.flush(); }
   assert.ok(inputs(h).every(n => !n.props.disabled)); assert.equal(posts, 1);
-  send(inputs(h)[1]); await h.flush(); assert.equal(posts, 2);
+  send(h, "back"); await h.flush(); assert.equal(posts, 2);
 });
 
 test("whole page upload preserves unrelated state and never calls general refresh", async () => {
@@ -386,7 +519,7 @@ test("whole page upload preserves unrelated state and never calls general refres
     return url.includes("member-documents?") ? list([]) : Response.json([]);
   } }); await h.flush();
   h.button("Editar socio").props.onClick(); h.render(); assert.ok(h.button("Guardar cambios"));
-  const before = calls.length; send(inputs(h)[0]); await h.flush();
-  assert.deepEqual(calls.slice(before), ["/api/members/17/dni", "/api/members/17/member-documents?view=current"]);
+  const before = calls.length; send(h); await h.flush();
+  assert.deepEqual(calls.slice(before), ["/api/members/17/member-documents", "/api/members/17/member-documents?view=current"]);
   assert.ok(h.button("Guardar cambios"));
 });
