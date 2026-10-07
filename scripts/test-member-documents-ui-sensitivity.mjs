@@ -6,6 +6,15 @@ const card = "components/member-documents-card.tsx";
 const item = "components/member-document-item.tsx";
 const page = "app/members/[id]/page.tsx";
 const mutations = [
+  { name: "old refresh unlocks uncertain POST", fails: "pre-upload refresh", edits: [{ file: card, from: 'const confirmsUncertain = uncertain.current;', to: 'const confirmsUncertain = true;' }] },
+  { name: "file DOM reset removed", fails: "file DOM reset", edits: [{ file: card, from: 'if (fileInput.current) fileInput.current.value = "";', to: '' }] },
+  { name: "DNI endpoint returns", fails: "general exact 5 MiB", edits: [{ file: card, from: '`/api/members/${memberId}/member-documents`, { method: "POST"', to: '`/api/members/${memberId}/dni`, { method: "POST"' }] },
+  { name: "extra memberId field", fails: "general exact 5 MiB", edits: [{ file: card, from: 'form.set("type", type);', to: 'form.set("type", type); form.set("memberId", String(memberId));' }] },
+  { name: "oversize permitted", fails: "general validation OTHER 5242881", edits: [{ file: card, from: 'file.size > 5 * 1024 * 1024', to: 'false' }] },
+  { name: "destructive copy", fails: "quick actions common form", edits: [{ file: card, from: 'Se conservarán los documentos anteriores.', to: 'reemplazar' }] },
+  { name: "separate quick uploader", fails: "quick actions common form", edits: [{ file: card, from: 'fileInput.current?.focus();', to: 'void upload();' }] },
+  { name: "optimistic fabricated item", fails: "general exact 5 MiB", edits: [{ file: card, from: 'setUploading(true);', to: 'setUploading(true); setItems([{ id: 999, type: "OTHER", mimeType: "application/pdf", originalName: "fake", byteLength: 1, createdAt: "2026-10-01", isCurrent: true }]);' }] },
+  { name: "automatic POST retry", fails: "upload uncertain:", edits: [{ file: card, from: 'uncertain.current = true;', to: 'void fetch(`/api/members/${memberId}/member-documents`, { method: "POST", body: form }).catch(() => {}); uncertain.current = true;' }] },
   { name: "cached current IDs override history markers", fails: "history honors newer B", edits: [{ file: card, from: 'const current = item.isCurrent;', to: 'const current = items !== null && !loading && !error ? items.some(document => document.id === item.id) : item.isCurrent;' }] },
   { name: "history pages retain conflicting current markers", fails: "history pagination reconciles", edits: [{ file: card, from: 'currentTypes.has(item.type)', to: 'false' }] },
   { name: "history duplicate keeps old marker", fails: "history pagination reconciles", edits: [{ file: card, from: 'incoming.get(item.id) ??', to: '' }] },
@@ -16,8 +25,8 @@ const mutations = [
   { name: "history double page request", fails: "history pagination", edits: [{ file: card, from: '(historyLock.current && !reset)', to: 'false' }] },
   { name: "history duplicate IDs", fails: "history pagination", edits: [{ file: card, from: 'if (seen.has(item.id)) return false;', to: 'if (false) return false;' }] },
   { name: "history stale page after upload", fails: "history stale upload reset", edits: [{ file: card, from: 'mounted.current && historyGeneration.current === version', to: 'mounted.current' }] },
-  { name: "upload eagerly loads history", fails: "upload front: synchronous lock", edits: [{ file: card, from: 'if (historyRequested.current) void loadHistory(null, true);', to: 'void loadHistory(null, true);' }] },
-  { name: "upload fails to refresh requested history", fails: "history stale upload reset", edits: [{ file: card, from: 'if (historyRequested.current) void loadHistory(null, true);', to: '' }] },
+  { name: "upload eagerly loads history", fails: "upload front: synchronous lock", edits: [{ file: card, from: 'const historyRefresh = historyRequested.current ? loadHistory(null, true) : Promise.resolve(true);', to: 'const historyRefresh = loadHistory(null, true);' }] },
+  { name: "upload fails to refresh requested history", fails: "history stale upload reset", edits: [{ file: card, from: 'const historyRefresh = historyRequested.current ? loadHistory(null, true) : Promise.resolve(true);', to: 'const historyRefresh = Promise.resolve(true);' }] },
   { name: "legacy leaks into history", fails: "history metadata", edits: [{ file: card, from: '<ul className="mt-3 grid min-w-0 gap-3">', to: '<p>{initialBackUrl}</p><ul className="mt-3 grid min-w-0 gap-3">' }] },
   { name: "history image preview", fails: "history metadata", edits: [{ file: item, from: '!compact && (image ?', to: 'true && (image ?' }] },
   { name: "PDF becomes img", fails: "all types ordered", edits: [{ file: item, from: 'const image = ["image/jpeg", "image/png", "image/webp"].includes(item.mimeType);', to: 'const image = true;' }] },
