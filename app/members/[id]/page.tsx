@@ -117,6 +117,10 @@ function MemberDetailContent({ id }: { id: string }) {
     commercialNotes: "",
   });
 
+  const [initialError, setInitialError] = useState("");
+  const [contractsError, setContractsError] = useState(false);
+  const [accessError, setAccessError] = useState(false);
+
   function focusRfidInput() {
     setTimeout(() => rfidRef.current?.focus(), 0);
   }
@@ -156,6 +160,7 @@ function MemberDetailContent({ id }: { id: string }) {
     if (contractsRes.ok) {
       const contractsData: MemberContractRecord[] = await contractsRes.json();
       setContracts(contractsData);
+      setContractsError(false);
     }
   }
 
@@ -167,20 +172,32 @@ function MemberDetailContent({ id }: { id: string }) {
     const rfidVersion = rfidVersionRef.current;
 
     void Promise.all([
-      fetch(`/api/members/${id}/contracts`, { cache: "no-store" }),
+      fetch(`/api/members/${id}/contracts`, { cache: "no-store" }).then(async res => {
+        if (!res.ok) throw new Error("Contracts unavailable");
+        const result = await res.json();
+        if (!Array.isArray(result)) throw new Error("Invalid contracts");
+        return result as MemberContractRecord[];
+      }).catch(() => null),
       fetch(`/api/members/${id}/history`, { cache: "no-store" }),
-      fetch(`/api/members/${id}/access-logs`, { cache: "no-store" }),
-    ]).then(async ([contractsRes, historyRes, accessRes]) => {
-      const contractsData: MemberContractRecord[] = await contractsRes.json();
+      fetch(`/api/members/${id}/access-logs`, { cache: "no-store" }).then(async res => {
+        if (!res.ok) throw new Error("Access unavailable");
+        const result = await res.json();
+        if (!Array.isArray(result)) throw new Error("Invalid access logs");
+        return result as AccessLogRecord[];
+      }).catch(() => null),
+    ]).then(async ([contractsData, historyRes, accessData]) => {
+      if (!historyRes.ok) throw new Error("Member unavailable");
       const historyData: MemberHistoryData = await historyRes.json();
-      const accessData: AccessLogRecord[] = await accessRes.json();
+      if (!historyData?.member || !Array.isArray(historyData.sales)) throw new Error("Invalid member history");
 
       if (!cancelled && requestVersion === historyRequestRef.current) {
-        setContracts(contractsData);
+        setContractsError(contractsData === null);
+        if (contractsData !== null) setContracts(contractsData);
+        setAccessError(accessData === null);
         setData((current) => mergeMemberHistory(
           current, historyData, rfidVersionRef.current !== rfidVersion
         ));
-        setAccessLogs(accessData);
+        if (accessData !== null) setAccessLogs(accessData);
 
         if (historyData.member) {
           setEditForm((current) => rfidVersionRef.current !== rfidVersion ? current : ({
@@ -201,6 +218,10 @@ function MemberDetailContent({ id }: { id: string }) {
           }));
         }
       }
+    }).catch(() => {
+      if (!cancelled && requestVersion === historyRequestRef.current) {
+        setInitialError("No se pudo cargar la ficha del socio. Vuelve a abrir la ficha para reintentar.");
+      }
     });
 
     return () => {
@@ -215,7 +236,9 @@ function MemberDetailContent({ id }: { id: string }) {
     return () => clearTimeout(timeout);
   }, [rfidMessage]);
 
-  if (!data) return <div className="p-6 app-muted">Cargando...</div>;
+  if (!data) return initialError
+    ? <div className="p-6" role="alert">{initialError}</div>
+    : <div className="p-6 app-muted" role="status" aria-busy="true">Cargando...</div>;
 
   const authReady = status !== "loading";
   const visibleMemberNumber = data.member.memberNumber ?? data.member.id;
@@ -1213,7 +1236,7 @@ function MemberDetailContent({ id }: { id: string }) {
         memberId={id}
         initialFrontUrl={data.member.dniFrontUrl}
         initialBackUrl={data.member.dniBackUrl}
-        onUploaded={refreshMember}
+        canUpload={Boolean(authReady && canUploadPhoto)}
       />
 
       <section className="app-panel mt-6 overflow-hidden rounded-[2rem]">
@@ -1238,13 +1261,13 @@ function MemberDetailContent({ id }: { id: string }) {
             </div>
 
             <span className="rounded-full border border-[#b4a78d]/30 bg-[#f3f0e9] px-3 py-1.5 text-xs font-bold text-[#6d6860]">
-              {contracts.length} contrato{contracts.length === 1 ? "" : "s"}
+              {contractsError ? "No disponibles" : `${contracts.length} contrato${contracts.length === 1 ? "" : "s"}`}
             </span>
           </div>
         </div>
 
         <div className="space-y-4 p-5 sm:p-6">
-          {contracts.length === 0 ? (
+          {contractsError ? <p role="alert">No se pudieron cargar los contratos.</p> : contracts.length === 0 ? (
             <div className="rounded-[1.5rem] border border-black/8 bg-white/70 p-6 text-center">
               <div className="font-black text-[#201f1d]">
                 No hay contratos firmados
@@ -1431,8 +1454,7 @@ function MemberDetailContent({ id }: { id: string }) {
             </div>
 
             <span className="rounded-full border border-[#b4a78d]/30 bg-[#f3f0e9] px-3 py-1.5 text-xs font-bold text-[#6d6860]">
-              {accessLogs.length} acceso
-              {accessLogs.length === 1 ? "" : "s"}
+              {accessError ? "No disponibles" : `${accessLogs.length} acceso${accessLogs.length === 1 ? "" : "s"}`}
             </span>
           </div>
         </div>
@@ -1447,7 +1469,7 @@ function MemberDetailContent({ id }: { id: string }) {
               </div>
 
               <div className="mt-2 text-3xl font-black tracking-[-0.04em] text-[#201f1d]">
-                {accessLogs.length}
+                {accessError ? "No disponibles" : accessLogs.length}
               </div>
             </div>
 
@@ -1487,7 +1509,7 @@ function MemberDetailContent({ id }: { id: string }) {
               </h3>
             </div>
 
-            {accessLogs.length === 0 ? (
+            {accessError ? <p role="alert">No se pudieron cargar los accesos.</p> : accessLogs.length === 0 ? (
               <div className="rounded-[1.5rem] border border-black/8 bg-white/70 p-6 text-center">
                 <div className="font-black text-[#201f1d]">
                   Sin accesos registrados
