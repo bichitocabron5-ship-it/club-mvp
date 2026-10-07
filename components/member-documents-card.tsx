@@ -210,6 +210,14 @@ function CurrentDocuments({ memberId, initialFrontUrl, initialBackUrl, canUpload
       if (!mounted.current) return;
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
+        // A generic server/proxy error can follow a committed write. Only
+        // explicit pre-write failures are safe to retry without reconciliation.
+        if (response.status >= 500 && !["STORAGE_UNAVAILABLE", "PRIVATE_STORAGE_REQUIRED", "STORAGE_UPLOAD_FAILED"].includes(payload?.error)) {
+          uncertain.current = true;
+          if (mounted.current) setNeedsRefresh(true);
+          if (mounted.current) setNotice({ error: true, text: "No se pudo confirmar la incorporación. Actualiza la documentación antes de repetir." });
+          return;
+        }
         if (mounted.current) setNotice({ error: true, text: rejected[payload?.error] ??
           (response.status === 401 ? rejected.UNAUTHORIZED : response.status === 403 ? rejected.FORBIDDEN : "No se pudo incorporar el documento.") });
         return;

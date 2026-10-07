@@ -331,7 +331,7 @@ for (const [name, options, hasContract, expired, canWithdraw, inactive] of statu
   await test(`Operational-status ${name}: exact DTO`, async () => {
     const h = harness(options);
     assert.deepEqual(await expectResponse(await h.get(), 200), {
-      member: plain(h.state.member), hasContract,
+      member: { ...plain(h.state.member), dniFrontUrl: null, dniBackUrl: null }, hasContract,
       contract: hasContract ? { monthlyLimitG: options.contract === undefined ? 30 : options.contract.consumptionGrams } : null,
       expired, canWithdraw, reasons: { inactive, noContract: !hasContract, expired },
     });
