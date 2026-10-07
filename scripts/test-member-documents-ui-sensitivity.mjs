@@ -32,7 +32,7 @@ const mutations = [
   { name: "history image preview", fails: "history metadata", edits: [{ file: item, from: '!compact && (image ?', to: 'true && (image ?' }] },
   { name: "PDF becomes img", fails: "all types ordered", edits: [{ file: item, from: 'const image = ["image/jpeg", "image/png", "image/webp"].includes(item.mimeType);', to: 'const image = true;' }] },
   ...["AUTHORIZATION", "PROOF", "ANNEX", "OTHER"].map(type => ({ name: `extra UI type ${type}`, fails: "DNI form only two slots", edits: [{ file: card, from: 'const dniTypes = ["ID_FRONT", "ID_BACK"] as const;', to: `const dniTypes = ["ID_FRONT", "ID_BACK", "${type}"] as const;` }] })),
-  { name: "general selector returns", fails: "DNI form only two slots", edits: [{ file: card, from: '<h3 className="font-bold">Incorporar documento</h3>', to: '<h3 className="font-bold">Incorporar documento</h3><select><option>Otro</option></select>' }] },
+  { name: "general selector returns", fails: "DNI form only two slots", edits: [{ file: card, from: '<label className="block text-sm font-semibold"', to: '<select><option>Otro</option></select><label className="block text-sm font-semibold"' }] },
   { name: "legacy disappears", fails: "legacy visible authenticated", edits: [{ file: card, from: 'const legacyAvailable = !item', to: 'const legacyAvailable = false && !item' }] },
   { name: "legacy overrides canonical", fails: "preview image/png", edits: [
     { file: card, from: 'const legacyAvailable = !item', to: 'const legacyAvailable = true' },

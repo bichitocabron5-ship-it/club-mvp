@@ -84,6 +84,37 @@ test("DNI form only two slots and no general selector", async () => {
   assert.match(h.text, /Formatos admitidos: JPEG, PNG, WEBP y PDF. Tamaño máximo: 5 MiB./);
 });
 
+for (const state of ["canonical-image", "canonical-pdf", "legacy", "absent"]) {
+  test(`DNI presentation semantics and actions: ${state}`, async () => {
+    const canonical = state.startsWith("canonical");
+    const h = uiHarness({ props: { ...props, initialFrontUrl: state === "legacy" ? "/legacy-reference" : null },
+      fetch: async () => list(canonical ? [row("ID_FRONT", 1, state === "canonical-pdf" ? "application/pdf" : "image/png")] : []) });
+    await h.flush();
+    assert.ok(h.nodes.some(n => n.type === "h2" && text(n) === "Documento de identidad"));
+    const cards = h.nodes.filter(n => n.type === "article");
+    assert.equal(cards.length, 2);
+    const front = nodes(cards[0]), back = nodes(cards[1]);
+    assert.match(text(cards[0]), /ANVERSO.*DNI frontal/);
+    assert.match(text(cards[1]), /REVERSO.*DNI reverso.*SIN DOCUMENTO.*Sin documento incorporado/);
+    assert.doesNotMatch(cards.map(text).join(" "), /Pendiente|Completo|Válido|Aprobado|Vigente|DOCUMENTACIÓN COMPLETA/i);
+    assert.ok(front.some(n => n.type === "span" && text(n) === (canonical ? "INCORPORADO" : state === "legacy" ? "ANTERIOR" : "SIN DOCUMENTO")));
+    assert.deepEqual(front.filter(n => n.type === "a").map(text), canonical ? ["Abrir", "Descargar"] : state === "legacy" ? ["Abrir"] : []);
+    assert.equal(front.find(n => n.type === "button").props.children, state === "absent" ? "Incorporar frontal" : "Incorporar nueva versión");
+    assert.equal(back.find(n => n.type === "button").props.children, "Incorporar reverso");
+    assert.equal(front.filter(n => n.type === "img").length, state === "canonical-image" ? 1 : 0);
+    assert.equal(front.filter(n => ["iframe", "object"].includes(n.type)).length, 0);
+    if (state === "canonical-pdf") assert.match(text(cards[0]), /Documento PDF/);
+    if (state === "absent") assert.doesNotMatch(h.text, /DNI: .*disponible/);
+    else assert.match(h.text, /DNI: una cara disponible/);
+    assert.equal(history(h).props.hidden, true);
+    assert.equal(h.nodes.filter(n => n.type === "form").length, 1);
+    for (const [side, title] of [["front", "Incorporar DNI frontal"], ["back", "Incorporar DNI reverso"]]) {
+      choose(h, side); h.render();
+      assert.ok(nodes(h.nodes.find(n => n.type === "form")).some(n => n.type === "h3" && text(n) === title));
+    }
+  });
+}
+
 for (const [type, size, mime, message] of [
   ["", 1, "image/png", /tipo de documento/],
   ["ID_FRONT", null, "image/png", /Selecciona un archivo/], ["ID_FRONT", 0, "image/png", /vacío/],
@@ -371,7 +402,7 @@ test("current loading, error, retry, empty and two neutral slots", async () => {
 test("all types ordered, MIME determines preview, real canonical links and accessible labels", async () => {
   const rows = types.map((type, i) => row(type, i + 1, i % 2 ? "application/pdf" : "image/png"));
   const h = start(async () => list([...rows].reverse())); await h.flush();
-  assert.deepEqual(h.nodes.filter(n => n.type === "h4").map(n => n.props.children), labels.slice(0, 2));
+  assert.deepEqual(h.nodes.filter(n => n.type === "article").flatMap(nodes).filter(n => n.type === "h3").map(n => n.props.children), labels.slice(0, 2));
   assert.equal(h.nodes.filter(n => n.type === "img").length, 1);
   assert.match(h.text, /DNI: ambas caras disponibles/);
   for (const document of rows.slice(0, 2)) {
@@ -401,7 +432,8 @@ for (const side of ["front", "back"]) test(`legacy visible authenticated endpoin
   h.render({ ...props, [side === "front" ? "initialFrontUrl" : "initialBackUrl"]: "https://storage.invalid/private?token=secret" });
   assert.match(h.text, /DNI anterior · compatibilidad/);
   assert.match(h.text, /DNI: una cara disponible/);
-  assert.equal(h.nodes.find(n => n.type === "object").props.data, `/api/members/17/documents?side=${side}`);
+  assert.match(h.text, /Documento anterior/);
+  assert.equal(h.nodes.filter(n => ["img", "iframe", "object"].includes(n.type)).length, 0);
   assert.equal(h.nodes.find(n => n.type === "a").props.href, `/api/members/17/documents?side=${side}`);
   assert.ok(h.nodes.every(n => !JSON.stringify(n.props).includes("storage.invalid")));
   assert.equal(h.nodes.filter(n => n.type === "time").length, 0);
