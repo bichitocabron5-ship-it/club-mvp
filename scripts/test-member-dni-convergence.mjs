@@ -77,6 +77,7 @@ function harness(options = {}, mutation) {
     from: bucket => ({
       createSignedUrl: async (key, ttl) => {
         assert.equal(ttl, 900);
+        if (options.signError) return { data: null, error: options.signError };
         return { data: { signedUrl: `https://project.supabase.co/storage/v1/object/sign/${bucket}/${key}?token=temporary` } };
       },
       upload: async (key, bytes, settings) => {
@@ -101,7 +102,7 @@ function harness(options = {}, mutation) {
     vm.runInNewContext(ts.transpileModule(mutation?.path === path ? read(path).replace(mutation.from, mutation.to) : read(path), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText,
       { exports, Buffer, File, FormData, Response, Request, URL, Uint8Array,
         process: { env: { STORAGE_BUCKET: "custom-uploads", SUPABASE_URL: "https://project.supabase.co" } },
-        console: { error() {}, info() {} },
+        console: { error() {}, info() {}, warn() {} },
         require: name => mocks[name] ?? (name.startsWith("@/") ? load(`${name.slice(2)}.ts`) : require(name)),
       });
     return exports;
@@ -167,6 +168,33 @@ test("new wins over legacy; timestamp then ID, scoped member and side", async ()
     assert.equal(actual.source, "new"); assert.equal(actual.storageKey, winner.storageKey);
   }
 });
+test("incident 358: persisted legacy references resolve exactly despite a different configured bucket", () => {
+  const { parseLegacyDniRef: parse } = harness().resolver;
+  for (const [side, timestamp] of [["front", "1787249029007"], ["back", "1787249046207"]]) {
+    const path = `members/358/dni-${side}-${timestamp}.jpg`;
+    assert.deepEqual(plain(parse(`club-uploads/${path}`, 358, side)), { bucket: "club-uploads", path });
+    assert.equal(parse(`club-uploads/${path}`, 359, side), null);
+    assert.equal(parse(`club-uploads/${path}`, 358, side === "front" ? "back" : "front"), null);
+  }
+});
+
+test("storage quota rejection reproduces legacy unavailable and persisted photograph resolving to null", async () => {
+  const error = { name: "StorageApiError", status: 402, statusCode: "402",
+    message: "exceed_storage_size_quota" };
+  const photoUrl = "club-uploads/members/17/profile-1787249068296.jpg";
+  const h = harness({ member: { photoUrl }, downloadFail: error, signError: error });
+  const history = await (await h.history()).json();
+  assert.equal(history.member.photoUrl, null, "characterizes current response on failed signing, not absent DB data");
+  assert.equal(h.member.photoUrl, photoUrl);
+  for (const side of ["front", "back"]) {
+    assert.equal(history.member[side === "front" ? "dniFrontUrl" : "dniBackUrl"], url(side));
+    const response = await h.get(side);
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: "DOCUMENT_UNAVAILABLE" });
+  }
+  assert.equal(h.uploads.length + h.removals.length + h.audits.length, 0);
+});
+
 test("legacy known formats: both buckets, bare paths, public/signed URLs and configured bucket", () => {
   const { parseLegacyDniRef: parse } = harness().resolver;
   for (const [bucket, path] of [

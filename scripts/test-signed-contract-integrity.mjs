@@ -139,6 +139,8 @@ function harness(options = {}) {
       async createSignedUrlForAllowedStorageRef(ref) {
         calls.urls++; urlRefs.push(ref);
         if (options.urlError) throw new Error("PRIVATE_URL_TOKEN");
+        // Real storage resolver returns null when createSignedUrl receives HTTP 402.
+        if (options.storageQuotaRestricted) return null;
         // Simulate the resolver returning null after Storage reports a missing object.
         if (options.publishedObjectMissing && ref === "published") return null;
         return ref ? `https://storage.invalid/${encodeURIComponent(ref)}` : null;
@@ -447,6 +449,19 @@ for (const [options, id, force, status] of [[{ missing: true }, "41", false, 404
     const h = harness(options); await responseIs(await h.get(force, id), status); untouched(h);
   });
 }
+await test("incident 367: restricted Storage blocks existing legacy PDF without regeneration or mutation", async () => {
+  const signedPdfUrl = "signed-contracts/contracts/member-358/contract-367.pdf";
+  const h = harness({ storageQuotaRestricted: true, contract: {
+    id: 367, memberId: 358, signingSessionId: 487, contractTemplateId: 1,
+    documentSnapshotId: null, signedPdfUrl,
+  }, template: { id: 1, documentSnapshotId: null } });
+  const body = await responseIs(await h.get(false, "367"), 500);
+  assert.equal(body.error, "No se pudo obtener el PDF firmado");
+  assert.deepEqual(h.urlRefs, [signedPdfUrl]);
+  assert.equal(h.calls.uploads + h.calls.downloads + h.calls.renders + h.calls.snapshotReads, 0);
+  untouched(h);
+});
+
 await test("member UI offers initial generation or existing PDF, never contract editing", async () => {
   const source = readFileSync(resolve(root, "app/members/[id]/page.tsx"), "utf8");
   assert.doesNotMatch(source, /updateContractMonthlyLimit|savingContractId|Regenerar PDF|force=true/);
