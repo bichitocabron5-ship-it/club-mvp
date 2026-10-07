@@ -7,7 +7,7 @@ import ts from "typescript";
 import sharp from "sharp";
 import { PDFDocument } from "pdf-lib";
 
-const source = readFileSync(new URL("../lib/member-document-reader.ts", import.meta.url), "utf8");
+const source = readFileSync(new URL("../lib/member-document-reader.ts", import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const hash = bytes => createHash("sha256").update(bytes).digest("hex");
 const sample = Buffer.from([0, 255, 10, 13, 128, 42]);
 function harness(options = {}, mutation) {

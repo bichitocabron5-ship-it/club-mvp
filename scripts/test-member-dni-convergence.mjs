@@ -272,49 +272,43 @@ test("legacy attack matrix: encoding, traversal, deceptive origins and query iso
     { bucket: "member-documents", path: "members/17/dni-front.pdf" });
 });
 
-test("real card: legacy/mixed/new sides, replacements, refresh, and failed upload keep correct state", async () => {
-  const h = harness();
-  const state = []; let index = 0, refreshes = 0, fail = false;
-  const exports = {};
-  const react = {
-    useRef: value => { const i = index++; return state[i] ??= { current: value }; },
-    useState: initial => { const i = index++; if (!(i in state)) state[i] = initial;
-      return [state[i], value => { state[i] = typeof value === "function" ? value(state[i]) : value; }]; },
-  };
-  vm.runInNewContext(ts.transpileModule(read("components/member-documents-card.tsx"), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
-  }).outputText, { exports, FormData, console,
-    require: name => name === "react" ? react : require(name),
-    fetch: async (path, options) => {
-      assert.equal(path, "/api/members/17/dni"); assert.equal(options.method, "POST");
-      assert.deepEqual([...options.body.keys()].sort(), ["image", "side"]);
-      return fail ? Response.json({ error: "UPLOAD_FAILED" }, { status: 503 }) : h.post(options.body);
-    },
-  });
+test("real card: canonical current after adapter upload, legacy stays informational", async () => {
+  const { uiHarness } = await import("./fixtures/member-document-ui-harness.mjs");
+  const h = harness(); let refreshes = 0, fail = false;
   const history = await (await h.history()).json();
-  const props = { memberId: 17, initialFrontUrl: history.member.dniFrontUrl, initialBackUrl: history.member.dniBackUrl,
-    onUploaded: async () => { const dto = await (await h.history()).json();
-      assert.equal(dto.member.dniFrontUrl, url("front")); assert.equal(dto.member.dniBackUrl, url("back")); refreshes++; } };
-  function nodes(n) { return Array.isArray(n) ? n.flatMap(nodes) :
-    n && typeof n === "object" ? [n, ...nodes(n.props?.children)] : []; }
-  function render() { index = 0; return nodes(exports.MemberDocumentsCard(props)); }
-  const sources = () => render().filter(n => n.type === "img").map(n => n.props.src);
-  assert.deepEqual(sources(), [url("front"), url("back")]);
-  assert.deepEqual(render().filter(n => n.type === "a").map(n => n.props.href), [url("front"), url("back")]);
-  async function upload(side) {
-    render().filter(n => n.type === "input")[side === "front" ? 0 : 1].props.onChange({
-      target: { files: [new File([png], "id.png", { type: "image/png" })] },
+  const ui = uiHarness({ props: { memberId: 17, initialFrontUrl: history.member.dniFrontUrl,
+    initialBackUrl: history.member.dniBackUrl, canUpload: true }, fetch: async (path, options) => {
+    if (options.method === "POST") {
+      assert.equal(path, "/api/members/17/dni");
+      return fail ? Response.json({ error: "UNSUPPORTED_MIME" }, { status: 415 }) : h.post(options.body);
+    }
+    assert.equal(path, "/api/members/17/member-documents?view=current"); refreshes++;
+    const items = ["ID_FRONT", "ID_BACK"].flatMap(type => {
+      const row = h.rows.filter(r => r.type === type).sort((a, b) => b.createdAt - a.createdAt || b.id - a.id)[0];
+      return row ? [{ id: row.id, type, originalName: row.originalName, mimeType: row.mimeType,
+        byteLength: row.byteLength, createdAt: row.createdAt.toISOString(), isCurrent: true }] : [];
     });
-    // Wait for the production async callback's finally, which clears uploadingSide.
-    for (let i = 0; i < 100 && state[4] !== null; i++) await new Promise(resolve => setTimeout(resolve, 5));
-    assert.equal(state[4], null);
+    return Response.json({ items, nextCursor: null });
+  } });
+  await ui.flush(); assert.match(ui.text, /DNI de compatibilidad/);
+  assert.equal(ui.nodes.filter(n => n.type === "img").length, 0);
+  async function upload(side) {
+    ui.nodes.filter(n => n.type === "input")[side === "front" ? 0 : 1].props.onChange({
+      target: { files: [new File([png], "id.png", { type: "image/png" })], value: "" },
+    });
+    for (let i = 0; i < 100; i++) {
+      await new Promise(resolve => setTimeout(resolve, 5)); await ui.flush();
+      if (ui.nodes.filter(n => n.type === "input").every(n => !n.props.disabled)) return;
+    }
+    assert.fail("Upload did not settle");
   }
-  await upload("front"); assert.deepEqual(sources(), [url("front") + "&revision=1", url("back")]);
-  await upload("back"); assert.deepEqual(sources(), [url("front") + "&revision=1", url("back") + "&revision=2"]);
-  await upload("front"); assert.deepEqual(sources(), [url("front") + "&revision=3", url("back") + "&revision=2"]);
-  assert.equal(refreshes, 3); assert.equal(h.rows.length, 3);
-  const before = sources(); fail = true; await upload("front");
-  assert.deepEqual(sources(), before); assert.equal(refreshes, 3); assert.equal(state[5], "UPLOAD_FAILED");
+  await upload("front"); await upload("back"); await upload("front");
+  assert.equal(h.rows.length, 3); assert.equal(refreshes, 4);
+  assert.match(ui.text, /DNI: ambas caras adjuntadas/); assert.doesNotMatch(ui.text, /compatibilidad/);
+  assert.deepEqual(ui.nodes.filter(n => n.type === "img").map(n => n.props.src),
+    [3, 2].map(id => `/api/members/17/member-documents/${id}/content?disposition=inline`));
+  fail = true; await upload("front"); assert.equal(refreshes, 4); assert.equal(h.rows.length, 3);
+  assert.match(ui.text, /Selecciona una imagen JPG/);
   assert.equal(h.member.dniFrontUrl, "club-uploads/members/17/dni-front-123.png");
   assert.equal(h.member.dniBackUrl, "member-documents/members/17/dni-back.pdf");
 });
