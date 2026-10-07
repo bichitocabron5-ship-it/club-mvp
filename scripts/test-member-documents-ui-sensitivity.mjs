@@ -6,6 +6,10 @@ const card = "components/member-documents-card.tsx";
 const item = "components/member-document-item.tsx";
 const page = "app/members/[id]/page.tsx";
 const mutations = [
+  { name: "cached current IDs override history markers", fails: "history honors newer B", edits: [{ file: card, from: 'const current = item.isCurrent;', to: 'const current = items !== null && !loading && !error ? items.some(document => document.id === item.id) : item.isCurrent;' }] },
+  { name: "history pages retain conflicting current markers", fails: "history pagination reconciles", edits: [{ file: card, from: 'currentTypes.has(item.type)', to: 'false' }] },
+  { name: "history duplicate keeps old marker", fails: "history pagination reconciles", edits: [{ file: card, from: 'incoming.get(item.id) ??', to: '' }] },
+  { name: "old history overwrites newest markers", fails: "history newest markers survive", edits: [{ file: card, from: 'mounted.current && historyGeneration.current === version', to: 'mounted.current' }] },
   { name: "history eager mount", fails: "history lazy", edits: [{ file: card, from: 'void refresh();', to: 'void refresh(); void loadHistory();' }] },
   { name: "history reopen refetch", fails: "history lazy", edits: [{ file: card, from: '!historyOpen && !historyRequested.current', to: '!historyOpen' }] },
   { name: "history cursor lost on error", fails: "history pagination", edits: [{ file: card, from: 'else setPageError(true);', to: 'else { setPageError(true); setNextCursor(null); }' }] },

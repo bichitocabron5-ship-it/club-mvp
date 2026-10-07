@@ -30,7 +30,7 @@ test("history lazy, cached reopen, loading, empty, initial error retry and a11y"
   h.button("Cerrar histórico").props.onClick(); h.render(); openHistory(h); await h.flush(); assert.equal(calls.length, 2);
 });
 
-for (const currentAvailable of [true, false]) test(`history metadata, no preview or legacy, current precedence ${currentAvailable}`, async () => {
+for (const currentAvailable of [true, false]) test(`history metadata, no preview or legacy, own markers ${currentAvailable}`, async () => {
   const documents = [row("ID_FRONT", 81), { ...row("OTHER", 82, "application/pdf"), isCurrent: false }];
   const h = uiHarness({ props: { ...props, initialBackUrl: "https://legacy.invalid/secret" }, fetch: async url => url.includes("view=all") ? list(documents) : currentAvailable ? list([documents[1]]) : new Response(null, { status: 500 }) });
   await h.flush(); openHistory(h); await h.flush();
@@ -39,9 +39,69 @@ for (const currentAvailable of [true, false]) test(`history metadata, no preview
   assert.equal(nodes(panel).filter(n => n.type === "img" || n.type === "iframe").length, 0);
   assert.match(text(entries[0]), /DNI frontal.*<b>document.pdf<\/b>.*PNG.*KiB.*Incorporado:/);
   assert.match(text(entries[1]), /Otro.*PDF/);
-  assert.match(text(entries[currentAvailable ? 1 : 0]), /Actual · último incorporado/);
-  assert.match(text(entries[currentAvailable ? 0 : 1]), /Versión anterior/);
+  assert.match(text(entries[0]), /Actual · último incorporado/);
+  assert.match(text(entries[1]), /Versión anterior/);
   assert.deepEqual(nodes(panel).filter(n => n.type === "a").map(n => n.props.href), documents.flatMap(d => ["inline", "attachment"].map(disposition => `/api/members/17/member-documents/${d.id}/content?disposition=${disposition}`)));
+});
+
+const historyLabels = h => nodes(history(h)).filter(n => n.type === "li").map(entry => ({
+  id: Number(nodes(entry).find(n => n.type === "a").props.href.match(/documents\/(\d+)/)[1]),
+  current: text(entry).includes("Actual · último incorporado"),
+  previous: text(entry).includes("Versión anterior"),
+}));
+
+test("history honors newer B current marker over cached current A", async () => {
+  const a = row("ID_FRONT", 1), b = row("ID_FRONT", 2);
+  const h = start(async url => url.includes("view=all") ? list([b, { ...a, isCurrent: false }]) : list([a]));
+  await h.flush(); openHistory(h); await h.flush();
+  assert.deepEqual(historyLabels(h), [
+    { id: 2, current: true, previous: false }, { id: 1, current: false, previous: true },
+  ]);
+  const principal = h.nodes.filter(n => n.type === "article").flatMap(nodes);
+  assert.ok(principal.some(n => n.props?.href?.includes("/1/content")));
+  assert.ok(!principal.some(n => n.props?.href?.includes("/2/content")));
+  h.button("Actualizar documentación").props.onClick(); await h.flush();
+  assert.equal(historyLabels(h)[0].current, true);
+  assert.equal(historyLabels(h)[1].previous, true);
+});
+
+test("history pagination reconciles explicit newer markers without guessing a current", async () => {
+  let gets = 0;
+  const h = start(async url => !url.includes("view=all") ? list([]) : ++gets === 1
+    ? page([row("OTHER", 9), row("ID_FRONT", 4)], "second")
+    : gets === 2 ? page([row("OTHER", 7), { ...row("ID_FRONT", 3), isCurrent: false }], "third")
+    : page([{ ...row("OTHER", 7), isCurrent: false }]));
+  await h.flush(); openHistory(h); await h.flush();
+  h.button("Cargar más").props.onClick(); await h.flush();
+  assert.deepEqual(historyLabels(h), [
+    { id: 9, current: false, previous: true }, { id: 4, current: true, previous: false },
+    { id: 7, current: true, previous: false }, { id: 3, current: false, previous: true },
+  ]);
+  h.button("Cargar más").props.onClick(); await h.flush();
+  assert.deepEqual(historyLabels(h), [
+    { id: 9, current: false, previous: true }, { id: 4, current: true, previous: false },
+    { id: 7, current: false, previous: true }, { id: 3, current: false, previous: true },
+  ]);
+});
+
+for (const additional of [false, true]) test(`history newest markers survive late old snapshot ${additional}`, async () => {
+  const old = deferred(); let gets = 0;
+  const a = row("ID_FRONT", 1), b = row("ID_FRONT", 2);
+  const h = start(async (url, options) => {
+    if (options.method === "POST") return new Response(null, { status: 200 });
+    if (!url.includes("view=all")) return list([a]);
+    if (additional && ++gets === 1) return page([a], "old-page");
+    if (!additional) gets++;
+    return gets === (additional ? 2 : 1) ? old.promise : page([b, { ...a, isCurrent: false }]);
+  });
+  await h.flush(); openHistory(h); await h.flush();
+  if (additional) { h.button("Cargar más").props.onClick(); h.render(); }
+  send(inputs(h)[0]); await h.flush();
+  const expected = [{ id: 2, current: true, previous: false }, { id: 1, current: false, previous: true }];
+  assert.deepEqual(historyLabels(h), expected);
+  old.resolve(page([a, { ...b, isCurrent: false }], "stale")); await h.flush();
+  assert.deepEqual(historyLabels(h), expected);
+  assert.equal(h.button("Cargar más"), undefined);
 });
 
 test("history pagination opaque cursor, lock, error retains cursor, dedup order and end", async () => {

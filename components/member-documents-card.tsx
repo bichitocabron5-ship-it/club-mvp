@@ -109,7 +109,13 @@ function CurrentDocuments({ memberId, initialFrontUrl, initialBackUrl, canUpload
       if (!Array.isArray(result.items) || !(result.nextCursor === null || typeof result.nextCursor === "string")) throw new Error("Invalid history");
       if (!active()) return;
       setHistoryItems(previous => {
-        const merged = cursor === null ? result.items : [...previous, ...result.items];
+        // Pages are independent snapshots. New explicit markers supersede older
+        // evidence; an absent current in this page does not identify a replacement.
+        const incoming = new Map(result.items.map(item => [item.id, item]));
+        const currentTypes = new Set(result.items.filter(item => item.isCurrent).map(item => item.type));
+        const retained = previous.map(item => incoming.get(item.id) ??
+          (currentTypes.has(item.type) ? { ...item, isCurrent: false } : item));
+        const merged = cursor === null ? result.items : [...retained, ...result.items];
         const seen = new Set<number>();
         return merged.filter(item => {
           if (seen.has(item.id)) return false;
@@ -239,7 +245,7 @@ function CurrentDocuments({ memberId, initialFrontUrl, initialBackUrl, canUpload
         <ul className="mt-3 grid min-w-0 gap-3">
           {historyItems.map(item => {
             const label = labels[MEMBER_DOCUMENT_TYPE_VALUES.indexOf(item.type)];
-            const current = items !== null && !loading && !error ? items.some(document => document.id === item.id) : item.isCurrent;
+            const current = item.isCurrent;
             return <li key={item.id} className="min-w-0 rounded-xl border border-black/10 p-3">
               <h4 className="font-bold">{label}</h4>
               <p className="text-sm">{current ? "Actual · último incorporado" : "Versión anterior"}</p>
