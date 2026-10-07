@@ -16,7 +16,7 @@ const labels = ["DNI frontal", "DNI reverso"];
 const isDni = (item: MemberDocumentListItem) => item.type === "ID_FRONT" || item.type === "ID_BACK";
 const rejected: Record<string, string> = {
   INVALID_DOCUMENT_TYPE: "Selecciona un tipo de documento válido.",
-  DOCUMENT_TOO_LARGE: "El archivo supera el máximo de 5 MiB.",
+  DOCUMENT_TOO_LARGE: "El archivo supera el tamaño máximo permitido de 5 MiB.",
   REQUEST_TOO_LARGE: "El archivo supera el máximo de 5 MiB.",
   UNSUPPORTED_MIME: "Selecciona un archivo JPEG, PNG, WEBP o PDF.",
   INVALID_DOCUMENT_BYTES: "El archivo no es una imagen o PDF válido.",
@@ -297,7 +297,16 @@ function CurrentDocuments({ memberId, initialFrontUrl, initialBackUrl, canUpload
         <input ref={fileInput} id={`document-file-${memberId}`} type="file" required
           accept="image/jpeg,image/png,image/webp,application/pdf" disabled={uploading || needsRefresh}
           aria-describedby={`document-help-${memberId}`} className="block w-full min-w-0 overflow-hidden text-sm"
-          onChange={event => { if (!uploadLock.current && !uncertain.current) selectedFile.current = event.target.files?.[0] ?? null; }} />
+          onChange={event => {
+            if (uploadLock.current || uncertain.current) return;
+            const file = event.target.files?.[0] ?? null;
+            selectedFile.current = file;
+            if (file && file.size > 5 * 1024 * 1024) {
+              setNotice({ error: true, text: rejected.DOCUMENT_TOO_LARGE });
+            } else if (file && file.size > 0 && acceptedMime.includes(file.type)) {
+              setNotice(null);
+            }
+          }} />
         <p id={`document-help-${memberId}`} className="text-sm app-muted">Formatos admitidos: JPEG, PNG, WEBP y PDF. Tamaño máximo: 5 MiB.</p>
         {!loading && !error && items?.some(item => item.type === documentType) && <p className="text-sm">Se conservarán los documentos anteriores.</p>}
         <button type="submit" disabled={uploading || needsRefresh} className="app-button-primary min-h-11 w-full px-4 sm:w-auto">Incorporar documento</button>

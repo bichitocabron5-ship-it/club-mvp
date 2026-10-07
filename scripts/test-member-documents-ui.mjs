@@ -197,6 +197,41 @@ for (const [type, size, mime, message] of [
   assert.ok(h.nodes.some(n => n.props?.role === "alert" && message.test(text(n))));
 });
 
+for (const size of [1, 5 * 1024 * 1024]) test(`oversized selection alert and recovery with ${size} bytes`, async () => {
+  let posts = 0;
+  const h = start(async (url, options) => {
+    if (options.method === "POST") {
+      posts++;
+      assert.equal(options.body.get("file").size, size);
+      return new Response(null, { status: 201 });
+    }
+    return list([]);
+  });
+  await h.flush(); choose(h);
+  const select = bytes => inputs(h)[0].props.onChange({ target: {
+    files: [new File([new Uint8Array(bytes)], "file.png", { type: "image/png" })],
+  } });
+  const message = "El archivo supera el tamaño máximo permitido de 5 MiB.";
+  select(5 * 1024 * 1024 + 1); await h.flush();
+  assert.ok(h.nodes.some(n => n.props?.role === "alert" && text(n) === message));
+  assert.equal(posts, 0);
+  submit(h); await h.flush();
+  assert.equal(posts, 0);
+  assert.ok(h.nodes.some(n => n.props?.role === "alert" && text(n) === message));
+  assert.equal(h.nodes.find(n => n.type === "form").props["aria-busy"], false);
+  assert.equal(h.nodes.find(n => n.type === "section").props["aria-busy"], false);
+  assert.equal(inputs(h)[0].props.disabled, false);
+  assert.equal(h.button("Incorporar documento").props.disabled, false);
+  assert.doesNotMatch(h.text, /Incorporando documento/);
+  select(size); await h.flush();
+  assert.equal(h.nodes.some(n => n.props?.role === "alert"), false);
+  assert.equal(posts, 0);
+  submit(h); await h.flush();
+  assert.equal(posts, 1);
+  assert.match(h.text, /Documento incorporado\./);
+  h.unmount();
+});
+
 for (const mime of ["image/jpeg", "image/png", "image/webp", "application/pdf"]) test(`general exact 5 MiB canonical payload ${mime}`, async () => {
   let posts = 0; const pending = deferred();
   const h = start(async (url, options) => {
@@ -241,7 +276,7 @@ for (const code of ["INVALID_DOCUMENT_TYPE", "DOCUMENT_EMPTY", "DOCUMENT_TOO_LAR
   assert.ok(h.nodes.some(n => n.props?.role === "alert")); assert.doesNotMatch(h.text, /No se pudo confirmar|Documento incorporado/);
   const expected = {
     INVALID_DOCUMENT_TYPE: /tipo de documento válido/, DOCUMENT_EMPTY: /no esté vacío/,
-    DOCUMENT_TOO_LARGE: /supera el máximo de 5 MiB/, UNSUPPORTED_MIME: /JPEG, PNG, WEBP o PDF/,
+    DOCUMENT_TOO_LARGE: /supera el tamaño máximo permitido de 5 MiB/, UNSUPPORTED_MIME: /JPEG, PNG, WEBP o PDF/,
     INVALID_DOCUMENT_BYTES: /imagen o PDF válido/, STORAGE_UNAVAILABLE: /almacenamiento no está disponible/,
     PRIVATE_STORAGE_REQUIRED: /almacenamiento no está disponible/, STORAGE_UPLOAD_FAILED: /No se pudo guardar/,
     MEMBER_NOT_FOUND: /No se ha encontrado el socio/, UNAUTHORIZED: /sesión ha caducado/,
