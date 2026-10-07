@@ -118,6 +118,7 @@ function MemberDetailContent({ id }: { id: string }) {
   });
 
   const [initialError, setInitialError] = useState("");
+  const [historyRefreshError, setHistoryRefreshError] = useState("");
   const [contractsError, setContractsError] = useState(false);
   const [accessError, setAccessError] = useState(false);
 
@@ -148,6 +149,7 @@ function MemberDetailContent({ id }: { id: string }) {
     }
 
     const historyData: MemberHistoryData = await historyRes.json();
+    if (!historyData?.member || !Array.isArray(historyData.sales)) throw new Error("Invalid member history");
     if (requestVersion !== historyRequestRef.current) return;
     setData((current) => mergeMemberHistory(
       current, historyData, rfidVersionRef.current !== rfidVersion
@@ -269,14 +271,23 @@ function MemberDetailContent({ id }: { id: string }) {
 
     const requestVersion = ++historyRequestRef.current;
     const rfidVersion = rfidVersionRef.current;
-    const historyRes = await fetch(`/api/members/${id}/history`, {
-      cache: "no-store",
-    });
-    const historyData: MemberHistoryData = await historyRes.json();
-    if (requestVersion !== historyRequestRef.current) return;
-    setData((current) => mergeMemberHistory(
-      current, historyData, rfidVersionRef.current !== rfidVersion
-    ));
+    try {
+      const historyRes = await fetch(`/api/members/${id}/history`, {
+        cache: "no-store",
+      });
+      if (!historyRes.ok) throw new Error("Member unavailable");
+      const historyData: MemberHistoryData = await historyRes.json();
+      if (!historyData?.member || !Array.isArray(historyData.sales)) throw new Error("Invalid member history");
+      if (requestVersion !== historyRequestRef.current) return;
+      setData((current) => mergeMemberHistory(
+        current, historyData, rfidVersionRef.current !== rfidVersion
+      ));
+      setHistoryRefreshError("");
+    } catch {
+      if (requestVersion === historyRequestRef.current) {
+        setHistoryRefreshError("No se pudo actualizar la ficha. Se conservan los últimos datos cargados.");
+      }
+    }
   }
 
   function changeEditing(next: boolean) {
@@ -455,6 +466,7 @@ function MemberDetailContent({ id }: { id: string }) {
 
   return (
     <main className="mx-auto max-w-7xl p-4 md:p-6">
+      {historyRefreshError && <p role="alert">{historyRefreshError}</p>}
       <PageHeader
         title="Ficha del socio"
         description="Identificación, membresía, documentación y actividad del socio."
@@ -472,6 +484,7 @@ function MemberDetailContent({ id }: { id: string }) {
 
             <div className="flex flex-col gap-5 md:flex-row md:items-center">
               <MemberPhotoCard
+                key={`${id}:${data.member.photoUrl ?? ""}`}
                 memberId={id}
                 initialPhotoUrl={data.member.photoUrl}
                 canUpload={Boolean(authReady && canUploadPhoto)}

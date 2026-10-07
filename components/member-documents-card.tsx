@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction, type RefObject } from "react";
-import { MEMBER_DOCUMENT_TYPE_VALUES, type MemberDocumentListItem, type MemberDocumentListResponse } from "@/lib/types";
+import { type MemberDocumentListItem, type MemberDocumentListResponse } from "@/lib/types";
 import { MemberDocumentItem } from "@/components/member-document-item";
 
 type Props = {
@@ -11,7 +11,9 @@ type Props = {
   canUpload?: boolean;
 };
 const acceptedMime = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
-const labels = ["DNI frontal", "DNI reverso", "Autorización", "Justificante", "Anexo", "Otro"];
+const dniTypes = ["ID_FRONT", "ID_BACK"] as const;
+const labels = ["DNI frontal", "DNI reverso"];
+const isDni = (item: MemberDocumentListItem) => item.type === "ID_FRONT" || item.type === "ID_BACK";
 const rejected: Record<string, string> = {
   INVALID_DOCUMENT_TYPE: "Selecciona un tipo de documento válido.",
   DOCUMENT_TOO_LARGE: "El archivo supera el máximo de 5 MiB.",
@@ -128,7 +130,7 @@ function CurrentDocuments({ memberId, initialFrontUrl, initialBackUrl, canUpload
           (currentTypes.has(item.type) ? { ...item, isCurrent: false } : item));
         const merged = cursor === null ? result.items : [...retained, ...result.items];
         const seen = new Set<number>();
-        return merged.filter(item => {
+        return merged.filter(isDni).filter(item => {
           if (seen.has(item.id)) return false;
           seen.add(item.id);
           return true;
@@ -180,7 +182,7 @@ function CurrentDocuments({ memberId, initialFrontUrl, initialBackUrl, canUpload
     if (uncertain.current) return;
     const type = selectedType.current;
     const file = selectedFile.current;
-    const validation = !MEMBER_DOCUMENT_TYPE_VALUES.some(value => value === type) ? rejected.INVALID_DOCUMENT_TYPE
+    const validation = !dniTypes.some(value => value === type) ? rejected.INVALID_DOCUMENT_TYPE
       : !file ? "Selecciona un archivo."
       : file.size === 0 ? rejected.DOCUMENT_EMPTY
       : file.size > 5 * 1024 * 1024 ? rejected.DOCUMENT_TOO_LARGE
@@ -226,9 +228,8 @@ function CurrentDocuments({ memberId, initialFrontUrl, initialBackUrl, canUpload
     }
   }
 
-  const front = items?.some(item => item.type === "ID_FRONT");
-  const back = items?.some(item => item.type === "ID_BACK");
-  const legacy = items !== null && ((!front && initialFrontUrl) || (!back && initialBackUrl));
+  const front = items?.some(item => item.type === "ID_FRONT") || Boolean(initialFrontUrl);
+  const back = items?.some(item => item.type === "ID_BACK") || Boolean(initialBackUrl);
   return (
     <section className="app-panel mt-6 rounded-[2rem] p-4 sm:p-6" aria-busy={loading || uploading}>
       <h2 className="text-xl font-black">Expediente documental</h2>
@@ -243,22 +244,29 @@ function CurrentDocuments({ memberId, initialFrontUrl, initialBackUrl, canUpload
         {error ? "Reintentar" : "Actualizar documentación"}
       </button>
       {items !== null && <>
-        {!loading && !error && items.length === 0 && <p className="mt-4">No hay documentos incorporados al expediente.</p>}
-        {!loading && !error && (front || back) && <p className="mt-4 font-semibold">{front && back ? "DNI: ambas caras adjuntadas" : "DNI: una cara adjuntada"}</p>}
-        {!loading && !error && legacy && <p className="mt-4 text-sm">Hay un DNI de compatibilidad que todavía no está incorporado al expediente.</p>}
+        {!loading && !error && !front && !back && <p className="mt-4">No hay documentos incorporados al expediente.</p>}
+        {!loading && !error && (front || back) && <p className="mt-4 font-semibold">{front && back ? "DNI: ambas caras disponibles" : "DNI: una cara disponible"}</p>}
         <div className="mt-4 grid min-w-0 gap-4 md:grid-cols-2">
-          {MEMBER_DOCUMENT_TYPE_VALUES.map((type, index) => {
+          {dniTypes.map((type, index) => {
             const item = items.find(document => document.type === type);
-            const side = type === "ID_FRONT" ? "front" : type === "ID_BACK" ? "back" : null;
+            const side = type === "ID_FRONT" ? "front" : "back";
+            const legacyAvailable = !item && !loading && !error && Boolean(side === "front" ? initialFrontUrl : initialBackUrl);
+            const legacyUrl = `/api/members/${memberId}/documents?side=${side}`;
             return <article key={type} className="min-w-0 rounded-2xl border border-black/10 p-4">
               <h4 className="font-bold">{labels[index]}</h4>
-              {item ? <MemberDocumentItem key={`${memberId}:${item.id}`} memberId={memberId} item={item} label={labels[index]} /> : !loading && !error && <p className="mt-2 app-muted">Sin documento incorporado</p>}
+              {item ? <MemberDocumentItem key={`${memberId}:${item.id}`} memberId={memberId} item={item} label={labels[index]} /> : legacyAvailable ? <>
+                <p className="mt-2 text-sm">DNI anterior · compatibilidad</p>
+                <object data={legacyUrl} aria-label={`Vista previa de ${labels[index]} anterior`} className="mt-3 h-56 w-full">
+                  <p>Vista previa no disponible. Utiliza Abrir.</p>
+                </object>
+                <a href={legacyUrl} target="_blank" rel="noopener noreferrer" className="app-button-secondary mt-3 inline-flex min-h-11 items-center px-3" aria-label={`Abrir ${labels[index]} anterior`}>Abrir</a>
+              </> : !loading && !error && <p className="mt-2 app-muted">Sin documento incorporado</p>}
               {side && canUpload && <button type="button" disabled={uploading || needsRefresh}
                 className="app-button-secondary mt-4 min-h-11 px-4" onClick={() => {
                   if (uploadLock.current || uncertain.current) return;
                   chooseType(type);
                   fileInput.current?.focus();
-                }}>{item && !error && !loading ? "Incorporar nueva versión" : side === "front" ? "Incorporar frontal" : "Incorporar reverso"}</button>}
+                }}>{(item || legacyAvailable) && !error && !loading ? "Incorporar nueva versión" : side === "front" ? "Incorporar frontal" : "Incorporar reverso"}</button>}
             </article>;
           })}
         </div>
@@ -266,13 +274,7 @@ function CurrentDocuments({ memberId, initialFrontUrl, initialBackUrl, canUpload
       {canUpload && <form className="mt-6 min-w-0 space-y-3" aria-busy={uploading} noValidate
         onSubmit={event => { event.preventDefault(); void upload(); }}>
         <h3 className="font-bold">Incorporar documento</h3>
-        <label className="block text-sm font-semibold" htmlFor={`document-type-${memberId}`}>Tipo de documento</label>
-        <select id={`document-type-${memberId}`} required disabled={uploading || needsRefresh} value={documentType}
-          aria-describedby={`document-help-${memberId}`} className="block w-full min-w-0 rounded border p-2"
-          onChange={event => chooseType(event.target.value)}>
-          <option value="">Selecciona un tipo</option>
-          {MEMBER_DOCUMENT_TYPE_VALUES.map((type, index) => <option key={type} value={type}>{labels[index]}</option>)}
-        </select>
+        <p className="text-sm font-semibold">{documentType === "ID_FRONT" ? "DNI frontal" : documentType === "ID_BACK" ? "DNI reverso" : "Elige Incorporar frontal o Incorporar reverso."}</p>
         <label className="block text-sm font-semibold" htmlFor={`document-file-${memberId}`}>Archivo</label>
         <input ref={fileInput} id={`document-file-${memberId}`} type="file" required
           accept="image/jpeg,image/png,image/webp,application/pdf" disabled={uploading || needsRefresh}
@@ -298,7 +300,7 @@ function CurrentDocuments({ memberId, initialFrontUrl, initialBackUrl, canUpload
         {historyStatus === "loaded" && historyItems.length === 0 && <p className="mt-3">El histórico documental está vacío.</p>}
         <ul className="mt-3 grid min-w-0 gap-3">
           {historyItems.map(item => {
-            const label = labels[MEMBER_DOCUMENT_TYPE_VALUES.indexOf(item.type)];
+            const label = item.type === "ID_FRONT" ? labels[0] : labels[1];
             const current = item.isCurrent;
             return <li key={item.id} className="min-w-0 rounded-xl border border-black/10 p-3">
               <h4 className="font-bold">{label}</h4>

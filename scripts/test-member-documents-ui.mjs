@@ -10,8 +10,12 @@ const props = { memberId: 17, initialFrontUrl: null, initialBackUrl: null, canUp
 const start = fetch => uiHarness({ props, fetch });
 const inputs = h => h.nodes.filter(n => n.type === "input" && n.props.type === "file");
 const submit = h => h.nodes.find(n => n.type === "form" && n.props.onSubmit).props.onSubmit({ preventDefault() {} });
+const choose = (h, side = "front") => {
+  const slot = h.nodes.filter(n => n.type === "article")[side === "front" ? 0 : 1];
+  nodes(slot).find(n => n.type === "button").props.onClick();
+};
 const send = (h, side = "front") => {
-  h.nodes.find(n => n.type === "select" && n.props.id === "document-type-17").props.onChange({ target: { value: side === "front" ? "ID_FRONT" : "ID_BACK" } });
+  choose(h, side);
   inputs(h)[0].props.onChange({ target: { files: [new File(["x"], "id.png", { type: "image/png" })], value: "id.png" } });
   submit(h);
 };
@@ -38,7 +42,7 @@ test("file DOM reset permits selecting the same file again", async () => {
   const h = start(async (url, options) => { if (options.method === "POST") posts++; return list([]); }); await h.flush();
   const dom = { value: "", focus() {} }, file = new File(["x"], "same.png", { type: "image/png" });
   inputs(h)[0].props.ref.current = dom;
-  h.nodes.find(n => n.type === "select").props.onChange({ target: { value: "OTHER" } });
+  choose(h);
   function selectSameFile() {
     // Model native change suppression when the same selected path is retained.
     if (dom.value === "same.png") return;
@@ -49,31 +53,28 @@ test("file DOM reset permits selecting the same file again", async () => {
   selectSameFile(); submit(h); await h.flush(); assert.equal(posts, 2); assert.equal(dom.value, "");
 });
 
-test("general form render labels help six types available on current failure", async () => {
-  const h = start(async () => new Response(null, { status: 500 })); await h.flush();
-  const select = h.nodes.find(n => n.type === "select"), input = inputs(h)[0];
+test("DNI form only two slots and no general selector", async () => {
+  const h = start(async () => list(types.map((type, i) => row(type, i + 1)))); await h.flush();
+  assert.equal(h.nodes.filter(n => n.type === "article").length, 2);
+  assert.equal(h.nodes.filter(n => n.type === "select").length, 0);
+  assert.doesNotMatch(h.text, /Autorización|Justificante|Anexo|Otro/);
+  const input = inputs(h)[0];
   assert.equal(inputs(h).length, 1);
-  assert.deepEqual(h.nodes.filter(n => n.type === "option" && n.props.value).map(n => n.props.value), types);
   assert.equal(input.props.accept, "image/jpeg,image/png,image/webp,application/pdf");
-  for (const control of [select, input]) {
-    assert.equal(control.props.required, true);
-    assert.ok(h.nodes.some(n => n.type === "label" && n.props.htmlFor === control.props.id));
-    assert.ok(h.nodes.some(n => n.props?.id === control.props["aria-describedby"]));
-  }
+  assert.equal(input.props.required, true);
+  assert.ok(h.nodes.some(n => n.type === "label" && n.props.htmlFor === input.props.id));
   assert.match(h.text, /Formatos admitidos: JPEG, PNG, WEBP y PDF. Tamaño máximo: 5 MiB./);
-  assert.equal(h.button("Incorporar documento").props.type, "submit");
-  assert.doesNotMatch(h.text, /Se conservarán/);
 });
 
 for (const [type, size, mime, message] of [
-  ["", 1, "image/png", /tipo de documento/], ["FAKE", 1, "image/png", /tipo de documento/],
-  ["OTHER", null, "image/png", /Selecciona un archivo/], ["OTHER", 0, "image/png", /vacío/],
-  ["OTHER", 5 * 1024 * 1024 + 1, "image/png", /supera/], ["OTHER", 1, "text/plain", /JPEG/],
-  ["OTHER", 1, "", /JPEG/],
+  ["", 1, "image/png", /tipo de documento/],
+  ["ID_FRONT", null, "image/png", /Selecciona un archivo/], ["ID_FRONT", 0, "image/png", /vacío/],
+  ["ID_FRONT", 5 * 1024 * 1024 + 1, "image/png", /supera/], ["ID_FRONT", 1, "text/plain", /JPEG/],
+  ["ID_FRONT", 1, "", /JPEG/],
 ]) test(`general validation ${type} ${size} ${mime}`, async () => {
   let posts = 0;
   const h = start(async (url, options) => { if (options.method === "POST") posts++; return list([]); }); await h.flush();
-  h.nodes.find(n => n.type === "select").props.onChange({ target: { value: type } });
+  if (type) choose(h);
   if (size !== null) inputs(h)[0].props.onChange({ target: { files: [new File([new Uint8Array(size)], "file.png", { type: mime })] } });
   submit(h); await h.flush(); assert.equal(posts, 0);
   assert.ok(h.nodes.some(n => n.props?.role === "alert" && message.test(text(n))));
@@ -85,16 +86,16 @@ for (const mime of ["image/jpeg", "image/png", "image/webp", "application/pdf"])
     if (options.method !== "POST") return list([]);
     posts++; assert.equal(url, "/api/members/17/member-documents");
     assert.deepEqual([...options.body.keys()], ["type", "file"]);
-    assert.equal(options.body.get("type"), "OTHER"); assert.equal(options.body.get("file").size, 5 * 1024 * 1024);
+    assert.equal(options.body.get("type"), "ID_FRONT"); assert.equal(options.body.get("file").size, 5 * 1024 * 1024);
     return pending.promise;
   }); await h.flush();
-  h.nodes.find(n => n.type === "select").props.onChange({ target: { value: "OTHER" } });
+  choose(h);
   inputs(h)[0].props.onChange({ target: { files: [new File([new Uint8Array(5 * 1024 * 1024)], "file", { type: mime })] } });
   assert.equal(posts, 0); submit(h); submit(h); h.render(); assert.equal(posts, 1);
   assert.equal(h.nodes.find(n => n.type === "form").props["aria-busy"], true);
   assert.equal(h.nodes.filter(n => n.type === "a").length, 0);
   pending.resolve(new Response(null, { status: 201 })); await h.flush();
-  assert.equal(h.nodes.find(n => n.type === "select").props.value, "OTHER");
+  assert.match(h.text, /DNI frontal/);
   submit(h); await h.flush(); assert.equal(posts, 1); assert.match(h.text, /Selecciona un archivo/);
 });
 
@@ -103,15 +104,15 @@ test("quick actions common form synchronous selection focus lock and append-only
   const h = start(async (url, options) => { if (options.method === "POST") { posts++; assert.equal(options.body.get("type"), "ID_BACK"); return pending.promise; } return list([row()]); }); await h.flush();
   let focused = 0; const dom = { value: "file.png", focus() { focused++; } }; inputs(h)[0].props.ref.current = dom;
   h.button("Incorporar nueva versión").props.onClick(); h.render();
-  assert.equal(h.nodes.find(n => n.type === "select").props.value, "ID_FRONT");
+  assert.match(h.text, /DNI frontal/);
   assert.match(h.text, /Se conservarán los documentos anteriores\./); assert.doesNotMatch(h.text, /reemplazar|sobrescribir/i);
   const quick = h.button("Incorporar reverso"); assert.equal(quick.props.type, "button"); quick.props.onClick();
   inputs(h)[0].props.onChange({ target: { files: [new File(["x"], "file.png", { type: "image/png" })] } });
   submit(h); quick.props.onClick(); submit(h);
-  h.nodes.find(n => n.type === "select").props.onChange({ target: { value: "OTHER" } });
+  choose(h);
   inputs(h)[0].props.onChange({ target: { files: [] } }); h.render();
   assert.equal(focused, 2); assert.equal(posts, 1); assert.equal(inputs(h).length, 1);
-  assert.equal(h.nodes.find(n => n.type === "select").props.value, "ID_BACK");
+  assert.match(h.text, /DNI reverso/);
   assert.ok(h.nodes.filter(n => n.type === "select" || n.type === "input").every(n => n.props.disabled));
   pending.resolve(new Response(null, { status: 201 })); await h.flush(); assert.equal(dom.value, "");
 });
@@ -130,7 +131,7 @@ for (const code of ["INVALID_DOCUMENT_TYPE", "DOCUMENT_EMPTY", "DOCUMENT_TOO_LAR
     FORBIDDEN: /No tienes permiso/, UNKNOWN: /No se pudo incorporar el documento\./,
   };
   assert.match(h.text, expected[code]);
-  assert.equal(h.nodes.find(n => n.type === "select").props.value, "ID_FRONT");
+  assert.match(h.text, /DNI frontal/);
   submit(h); await h.flush(); assert.equal(posts, 2);
 });
 
@@ -163,14 +164,14 @@ test("history lazy, cached reopen, loading, empty, initial error retry and a11y"
 });
 
 for (const currentAvailable of [true, false]) test(`history metadata, no preview or legacy, own markers ${currentAvailable}`, async () => {
-  const documents = [row("ID_FRONT", 81), { ...row("OTHER", 82, "application/pdf"), isCurrent: false }];
+  const documents = [row("ID_FRONT", 81), { ...row("ID_BACK", 82, "application/pdf"), isCurrent: false }];
   const h = uiHarness({ props: { ...props, initialBackUrl: "https://legacy.invalid/secret" }, fetch: async url => url.includes("view=all") ? list(documents) : currentAvailable ? list([documents[1]]) : new Response(null, { status: 500 }) });
   await h.flush(); openHistory(h); await h.flush();
   const panel = history(h), entries = nodes(panel).filter(n => n.type === "li");
   assert.equal(entries.length, 2); assert.doesNotMatch(text(panel), /compatibilidad|legacy/);
   assert.equal(nodes(panel).filter(n => n.type === "img" || n.type === "iframe").length, 0);
   assert.match(text(entries[0]), /DNI frontal.*<b>document.pdf<\/b>.*PNG.*KiB.*Incorporado:/);
-  assert.match(text(entries[1]), /Otro.*PDF/);
+  assert.match(text(entries[1]), /DNI reverso.*PDF/);
   assert.match(text(entries[0]), /Actual · último incorporado/);
   assert.match(text(entries[1]), /Versión anterior/);
   assert.deepEqual(nodes(panel).filter(n => n.type === "a").map(n => n.props.href), documents.flatMap(d => ["inline", "attachment"].map(disposition => `/api/members/17/member-documents/${d.id}/content?disposition=${disposition}`)));
@@ -200,9 +201,9 @@ test("history honors newer B current marker over cached current A", async () => 
 test("history pagination reconciles explicit newer markers without guessing a current", async () => {
   let gets = 0;
   const h = start(async url => !url.includes("view=all") ? list([]) : ++gets === 1
-    ? page([row("OTHER", 9), row("ID_FRONT", 4)], "second")
-    : gets === 2 ? page([row("OTHER", 7), { ...row("ID_FRONT", 3), isCurrent: false }], "third")
-    : page([{ ...row("OTHER", 7), isCurrent: false }]));
+    ? page([row("ID_BACK", 9), row("ID_FRONT", 4)], "second")
+    : gets === 2 ? page([row("ID_BACK", 7), { ...row("ID_FRONT", 3), isCurrent: false }], "third")
+    : page([{ ...row("ID_BACK", 7), isCurrent: false }]));
   await h.flush(); openHistory(h); await h.flush();
   h.button("Cargar más").props.onClick(); await h.flush();
   assert.deepEqual(historyLabels(h), [
@@ -241,7 +242,7 @@ test("history pagination opaque cursor, lock, error retains cursor, dedup order 
   const h = start(url => {
     if (!url.includes("view=all")) return Promise.resolve(list([]));
     calls.push(url);
-    return calls.length === 1 ? Promise.resolve(page([row("OTHER", 9), row("OTHER", 5)], cursor)) : calls.length === 2 ? pending.promise : Promise.resolve(page([row("OTHER", 5), row("OTHER", 7)]));
+    return calls.length === 1 ? Promise.resolve(page([row("ID_BACK", 9), row("ID_BACK", 5)], cursor)) : calls.length === 2 ? pending.promise : Promise.resolve(page([row("ID_BACK", 5), row("ID_BACK", 7)]));
   }); await h.flush(); openHistory(h); await h.flush();
   const more = h.button("Cargar más"); more.props.onClick(); more.props.onClick(); h.render();
   assert.equal(calls.length, 2); assert.equal(h.button("Cargar más").props.disabled, true);
@@ -265,7 +266,7 @@ for (const additional of [false, true]) for (const outcome of ["success", "error
   const h = start((url, options) => {
     if (!url.includes("view=all")) return Promise.resolve(list([]));
     signals.push(options.signal); gets++;
-    if (additional && gets === 1) return Promise.resolve(page([row("OTHER", 1)], "old-cursor"));
+    if (additional && gets === 1) return Promise.resolve(page([row("ID_BACK", 1)], "old-cursor"));
     return gets === (additional ? 2 : 1) ? old.promise : fresh.promise;
   }); await h.flush(); openHistory(h); await h.flush();
   if (additional) { h.button("Cargar más").props.onClick(); h.render(); }
@@ -273,10 +274,10 @@ for (const additional of [false, true]) for (const outcome of ["success", "error
   assert.equal(gets, additional ? 3 : 2); assert.equal(signals.at(-2).aborted, true);
   assert.equal(history(h).props.hidden, true); assert.equal(nodes(history(h)).filter(n => n.type === "li").length, 0);
   openHistory(h); assert.equal(gets, additional ? 3 : 2);
-  if (outcome === "success") old.resolve(page([row("OTHER", 88)], "stale"));
+  if (outcome === "success") old.resolve(page([row("ID_BACK", 88)], "stale"));
   else old.reject(Object.assign(new Error("old"), { name: outcome === "abort" ? "AbortError" : "Error" }));
   await h.flush(); assert.equal(history(h).props["aria-busy"], true); assert.doesNotMatch(text(history(h)), /No se pudo|No se pudieron/);
-  fresh.resolve(page([row("OTHER", 99)])); await h.flush();
+  fresh.resolve(page([row("ID_BACK", 99)])); await h.flush();
   assert.equal(nodes(history(h)).filter(n => n.type === "li").length, 1);
   assert.ok(nodes(history(h)).some(n => n.props?.href?.includes("/99/content")));
   assert.ok(!nodes(history(h)).some(n => n.props?.href?.includes("/88/content")));
@@ -288,9 +289,9 @@ for (const additional of [false, true]) for (const freshFails of [false, true]) 
   const h = start(url => {
     if (!url.includes("view=all")) return Promise.resolve(list([]));
     calls.push(url); gets++;
-    if (additional && gets === 1) return Promise.resolve(page([row("OTHER", 1)], "old-cursor"));
+    if (additional && gets === 1) return Promise.resolve(page([row("ID_BACK", 1)], "old-cursor"));
     if (gets === (additional ? 2 : 1)) return old.promise;
-    return Promise.resolve(freshFails ? new Response(null, { status: 500 }) : page([row("OTHER", 99)], "fresh-cursor"));
+    return Promise.resolve(freshFails ? new Response(null, { status: 500 }) : page([row("ID_BACK", 99)], "fresh-cursor"));
   }); await h.flush(); openHistory(h); await h.flush();
   if (additional) { h.button("Cargar más").props.onClick(); h.render(); }
   send(h); await h.flush();
@@ -299,7 +300,7 @@ for (const additional of [false, true]) for (const freshFails of [false, true]) 
   assert.equal(history(h).props["aria-busy"], false);
   if (freshFails) assert.match(before, /No se pudo cargar el histórico documental\./);
   else assert.ok(nodes(history(h)).some(n => n.props?.href?.includes("/99/content")));
-  if (outcome === "success") old.resolve(page([row("OTHER", 88)], "stale-cursor"));
+  if (outcome === "success") old.resolve(page([row("ID_BACK", 88)], "stale-cursor"));
   else old.reject(Object.assign(new Error("old"), { name: outcome === "abort" ? "AbortError" : "Error" }));
   await h.flush();
   assert.equal(text(history(h)), before); assert.equal(history(h).props.hidden, true);
@@ -328,7 +329,7 @@ for (const additional of [false, true]) for (const reject of [false, true]) test
   if (additional) h.button("Cargar más").props.onClick();
   h.render({ ...props, memberId: 18 }); await h.flush(); assert.equal(signal.aborted, true);
   assert.equal(h.button("Ver histórico").props["aria-expanded"], false);
-  if (reject) pending.reject(Object.assign(new Error("late"), { name: "AbortError" })); else pending.resolve(page([row("OTHER", 88)], "old"));
+  if (reject) pending.reject(Object.assign(new Error("late"), { name: "AbortError" })); else pending.resolve(page([row("ID_BACK", 88)], "old"));
   await h.flush(); assert.equal(h.lateUpdates, 0); assert.ok(!h.nodes.some(n => n.props?.href?.includes("/88/content")));
   const last = deferred(); const unmounted = start((url, options) => { signal = options.signal; return url.includes("view=all") ? last.promise : Promise.resolve(list([])); });
   await unmounted.flush(); openHistory(unmounted); unmounted.unmount(); assert.equal(signal.aborted, true);
@@ -336,7 +337,7 @@ for (const additional of [false, true]) for (const reject of [false, true]) test
   await tick(); assert.equal(unmounted.lateUpdates, 0);
 });
 
-test("current loading, error, retry, empty and six neutral slots", async () => {
+test("current loading, error, retry, empty and two neutral slots", async () => {
   const pending = deferred(); let count = 0;
   const h = start((url, options) => { assert.equal(url, "/api/members/17/member-documents?view=current"); assert.equal(options.cache, "no-store"); return ++count === 1 ? pending.promise : Promise.resolve(list([])); });
   assert.match(h.text, /Cargando documentación…/); assert.equal(h.nodes.filter(n => n.type === "article").length, 0);
@@ -344,18 +345,18 @@ test("current loading, error, retry, empty and six neutral slots", async () => {
   assert.match(h.text, /No se pudo cargar la documentación\./); assert.doesNotMatch(h.text, /Sin documento incorporado/);
   h.button("Reintentar").props.onClick(); await h.flush();
   assert.match(h.text, /No hay documentos incorporados al expediente\./);
-  assert.equal(h.nodes.filter(n => n.type === "article").length, 6);
-  assert.equal(h.text.match(/Sin documento incorporado/g).length, 6);
+  assert.equal(h.nodes.filter(n => n.type === "article").length, 2);
+  assert.equal(h.text.match(/Sin documento incorporado/g).length, 2);
   assert.doesNotMatch(h.text, /Pendiente|DOCUMENTACIÓN COMPLETA/);
 });
 
 test("all types ordered, MIME determines preview, real canonical links and accessible labels", async () => {
   const rows = types.map((type, i) => row(type, i + 1, i % 2 ? "application/pdf" : "image/png"));
   const h = start(async () => list([...rows].reverse())); await h.flush();
-  assert.deepEqual(h.nodes.filter(n => n.type === "h4").map(n => n.props.children), labels);
-  assert.equal(h.nodes.filter(n => n.type === "img").length, 3);
-  assert.match(h.text, /DNI: ambas caras adjuntadas/);
-  for (const document of rows) {
+  assert.deepEqual(h.nodes.filter(n => n.type === "h4").map(n => n.props.children), labels.slice(0, 2));
+  assert.equal(h.nodes.filter(n => n.type === "img").length, 1);
+  assert.match(h.text, /DNI: ambas caras disponibles/);
+  for (const document of rows.slice(0, 2)) {
     const base = `/api/members/17/member-documents/${document.id}/content?disposition=`;
     const open = h.nodes.find(n => n.type === "a" && n.props.href === base + "inline");
     assert.equal(open.props.target, "_blank"); assert.equal(open.props.rel, "noopener noreferrer"); assert.ok(open.props["aria-label"]);
@@ -370,17 +371,22 @@ test("all types ordered, MIME determines preview, real canonical links and acces
 
 for (const mime of ["image/jpeg", "image/png", "image/webp", "application/pdf"]) test(`preview ${mime}, own error preserves canonical document and never activates legacy`, async () => {
   const h = uiHarness({ props: { ...props, initialFrontUrl: "/api/members/17/documents?side=front" }, fetch: async () => list([row("ID_FRONT", 1, mime)]) }); await h.flush();
-  assert.match(h.text, /DNI: una cara adjuntada/); assert.doesNotMatch(h.text, /compatibilidad/);
+  assert.match(h.text, /DNI: una cara disponible/); assert.doesNotMatch(h.text, /compatibilidad/);
   const img = h.nodes.find(n => n.type === "img");
   if (mime === "application/pdf") assert.equal(img, undefined);
   else { img.props.onError(); h.render(); assert.match(h.text, /No se pudo cargar la vista previa\./); }
   assert.equal(h.nodes.filter(n => n.type === "a").length, 2); assert.doesNotMatch(h.text, /compatibilidad/);
 });
 
-test("legacy signals follow props and remain informational only", async () => {
+for (const side of ["front", "back"]) test(`legacy visible authenticated endpoint ${side}`, async () => {
   const h = start(async () => list([])); await h.flush();
-  h.render({ ...props, initialBackUrl: "https://legacy.invalid/private" });
-  assert.match(h.text, /Hay un DNI de compatibilidad/); assert.equal(h.nodes.filter(n => n.type === "a" || n.type === "img").length, 0);
+  h.render({ ...props, [side === "front" ? "initialFrontUrl" : "initialBackUrl"]: "https://storage.invalid/private?token=secret" });
+  assert.match(h.text, /DNI anterior · compatibilidad/);
+  assert.match(h.text, /DNI: una cara disponible/);
+  assert.equal(h.nodes.find(n => n.type === "object").props.data, `/api/members/17/documents?side=${side}`);
+  assert.equal(h.nodes.find(n => n.type === "a").props.href, `/api/members/17/documents?side=${side}`);
+  assert.ok(h.nodes.every(n => !JSON.stringify(n.props).includes("storage.invalid")));
+  assert.equal(h.nodes.filter(n => n.type === "time").length, 0);
   h.render(props); assert.doesNotMatch(h.text, /compatibilidad/);
 });
 
@@ -413,7 +419,7 @@ for (const oldError of [false, true]) test(`stale ${oldError ? "error" : "respon
   const h = start((url, options) => { if (options.method === "POST") return Promise.resolve(list([])); signals.push(options.signal); return ++gets === 1 ? Promise.resolve(list([])) : gets === 2 ? old.promise : fresh.promise; });
   await h.flush(); h.button("Actualizar documentación").props.onClick(); send(h); await tick(); h.render();
   assert.equal(signals[1].aborted, true);
-  if (oldError) old.reject(new Error("old")); else old.resolve(list([row("OTHER", 88)]));
+  if (oldError) old.reject(new Error("old")); else old.resolve(list([row("ID_BACK", 88)]));
   await h.flush(); assert.match(h.text, /Cargando documentación…/); assert.doesNotMatch(h.text, /No se pudo cargar la documentación/);
   fresh.resolve(list([row("ID_FRONT", 99)])); await h.flush();
   assert.ok(h.nodes.some(n => n.props?.href?.includes("/99/content"))); assert.ok(!h.nodes.some(n => n.props?.href?.includes("/88/content")));
@@ -471,9 +477,9 @@ test("confirmed upload followed by failed current must not claim old absences", 
   assert.doesNotMatch(h.text, /No hay documentos incorporados|Sin documento incorporado/);
 });
 
-test("legacy alone never counts towards canonical DNI copy", async () => {
+test("legacy alone available without fabricated canonical metadata", async () => {
   const h = uiHarness({ props: { ...props, initialFrontUrl: "/legacy/front", initialBackUrl: "/legacy/back" }, fetch: async () => list([]) });
-  await h.flush(); assert.match(h.text, /DNI de compatibilidad/); assert.doesNotMatch(h.text, /DNI: (ambas caras|una cara)/);
+  await h.flush(); assert.match(h.text, /DNI anterior/); assert.match(h.text, /DNI: ambas caras disponibles/); assert.equal(h.nodes.filter(n => n.type === "time").length, 0);
 });
 
 for (const abort of [false, true]) test(`old ${abort ? "AbortError" : "error"} after new success is ignored`, async () => {
@@ -502,6 +508,74 @@ for (const mode of ["success", "rejected", "uncertain", "refreshFailed"]) test(`
   if (mode === "uncertain") { assert.ok(inputs(h).every(n => n.props.disabled)); submit(h); await h.flush(); assert.equal(posts, 1); h.button("Actualizar documentación").props.onClick(); await h.flush(); }
   assert.ok(inputs(h).every(n => !n.props.disabled)); assert.equal(posts, 1);
   send(h, "back"); await h.flush(); assert.equal(posts, 2);
+});
+
+for (const initialPhotoUrl of [null, "https://storage.invalid/photo?token=old"]) test(`photo existing and refreshed history URL remains visible ${initialPhotoUrl}`, async () => {
+  let photoUrl = initialPhotoUrl;
+  const h = uiHarness({ path: "app/members/[id]/page.tsx", name: "default", mocks: {
+    "next-auth/react": { useSession: () => ({ status: "authenticated", data: { user: { role: "ADMIN" } } }) },
+    "next/navigation": { useParams: () => ({ id: "17" }) },
+    "@/components/ui/page-header": { PageHeader: () => null },
+  }, fetch: async (url, options) => {
+    if (url.endsWith("/photo")) {
+      assert.equal(options.method, "POST");
+      assert.deepEqual([...options.body.keys()], ["image"]);
+      photoUrl = "https://storage.invalid/photo?token=uploaded";
+      return Response.json({ photoUrl });
+    }
+    if (url.endsWith("/operational-status")) return Response.json({ member, expired: false, hasContract: false });
+    if (url.endsWith("/history")) return Response.json({ member: { ...member, photoUrl }, sales: [], totalSpent: 0, count: 0 });
+    return url.includes("member-documents?") ? list([]) : Response.json([]);
+  } }); await h.flush();
+  const photo = () => h.nodes.find(n => n.type === "img" && n.props.alt === "Foto del socio");
+  assert.equal(photo()?.props.src ?? null, initialPhotoUrl);
+  photoUrl = "https://storage.invalid/photo?token=renewed";
+  await h.button("Renovar 1 año").props.onClick(); await h.flush();
+  assert.equal(photo()?.props.src, photoUrl);
+  const photoInput = h.nodes.find(n => n.type === "input" && n.props.accept === ".jpg,.jpeg,.png,.webp");
+  photoInput.props.onChange({ target: { files: [new File(["x"], "photo.png", { type: "image/png" })] } });
+  await h.flush(); assert.equal(photo()?.props.src, "https://storage.invalid/photo?token=uploaded");
+  assert.ok(h.nodes.some(n => n.type === "a" && text(n) === "Abrir foto" && n.props.href === photoUrl));
+});
+
+for (const mode of ["empty", "http", "network", "badPayload", "invalidJson"]) test(`photo refresh ${mode}: authoritative empty clears, errors preserve loaded photo`, async () => {
+  const original = "https://storage.invalid/photo?token=valid";
+  let refreshing = false;
+  const h = uiHarness({ path: "app/members/[id]/page.tsx", name: "default", mocks: {
+    "next-auth/react": { useSession: () => ({ status: "authenticated", data: { user: { role: "ADMIN" } } }) },
+    "next/navigation": { useParams: () => ({ id: "17" }) },
+    "@/components/ui/page-header": { PageHeader: () => null },
+  }, fetch: async url => {
+    if (url.endsWith("/operational-status")) return Response.json({ member, expired: false, hasContract: false });
+    if (url.endsWith("/history")) {
+      if (refreshing && mode === "network") throw new Error("network");
+      if (refreshing && mode === "http") return Response.json({ error: "failed" }, { status: 500 });
+      if (refreshing && mode === "badPayload") return Response.json({ error: "failed" });
+      if (refreshing && mode === "invalidJson") return new Response("invalid");
+      return Response.json({ member: { ...member, photoUrl: refreshing ? null : original }, sales: [], totalSpent: 0, count: 0 });
+    }
+    return url.includes("member-documents?") ? list([]) : Response.json([]);
+  } });
+  await h.flush();
+  const photo = () => h.nodes.find(n => n.type === "img" && n.props.alt === "Foto del socio");
+  assert.equal(photo()?.props.src, original);
+  refreshing = true;
+  await h.button("Renovar 1 año").props.onClick(); await h.flush();
+  // A successful history response with null is authoritative: show the empty state.
+  assert.equal(photo()?.props.src ?? null, mode === "empty" ? null : original);
+  assert.match(h.text, mode === "empty" ? /Sin foto/ : /No se pudo actualizar la ficha/);
+});
+
+test("history filters all extra types even when a page contains no DNI", async () => {
+  let gets = 0;
+  const h = start(async url => !url.includes("view=all") ? list([]) : ++gets === 1
+    ? page(types.slice(2).map((type, i) => row(type, i + 10)), "next") : page([row("ID_BACK", 2)]));
+  await h.flush(); openHistory(h); await h.flush();
+  assert.equal(nodes(history(h)).filter(n => n.type === "li").length, 0);
+  assert.doesNotMatch(text(history(h)), /Autorización|Justificante|Anexo|Otro/);
+  h.button("Cargar más").props.onClick(); await h.flush();
+  assert.equal(nodes(history(h)).filter(n => n.type === "li").length, 1);
+  assert.match(text(history(h)), /DNI reverso/);
 });
 
 test("whole page upload preserves unrelated state and never calls general refresh", async () => {
