@@ -1,7 +1,7 @@
 ﻿import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
-import { uiHarness, deferred, tick } from "./fixtures/member-document-ui-harness.mjs";
+import { uiHarness, deferred, tick, nodes, text } from "./fixtures/member-document-ui-harness.mjs";
 const types = ["ID_FRONT", "ID_BACK", "AUTHORIZATION", "PROOF", "ANNEX", "OTHER"];
 const labels = ["DNI frontal", "DNI reverso", "Autorización", "Justificante", "Anexo", "Otro"];
 const row = (type = "ID_FRONT", id = 1, mimeType = "image/png") => ({ id, type, mimeType, originalName: "<b>document.pdf</b>", byteLength: 1500, createdAt: "2026-10-06T12:00:00Z", isCurrent: true });
@@ -10,6 +10,139 @@ const props = { memberId: 17, initialFrontUrl: null, initialBackUrl: null, canUp
 const start = fetch => uiHarness({ props, fetch });
 const inputs = h => h.nodes.filter(n => n.type === "input" && n.props.type === "file");
 const send = (input) => input.props.onChange({ target: { files: [new File(["x"], "id.png", { type: "image/png" })], value: "id.png" } });
+const history = h => h.nodes.find(n => n.props?.id === `document-history-17`);
+const page = (items, nextCursor = null) => Response.json({ items, nextCursor });
+const openHistory = h => { h.button("Ver histórico").props.onClick(); h.render(); };
+
+test("history lazy, cached reopen, loading, empty, initial error retry and a11y", async () => {
+  const pending = deferred(); const calls = [];
+  const h = start((url) => { if (!url.includes("view=all")) return Promise.resolve(list([])); calls.push(url); return calls.length === 1 ? pending.promise : Promise.resolve(list([])); });
+  await h.flush(); assert.equal(calls.length, 0);
+  assert.equal(h.button("Ver histórico").props["aria-expanded"], false);
+  assert.equal(h.button("Ver histórico").props["aria-controls"], history(h).props.id);
+  openHistory(h); assert.equal(calls[0], "/api/members/17/member-documents?view=all&limit=20");
+  assert.equal(history(h).props["aria-busy"], true); assert.equal(h.button("Cerrar histórico").props["aria-expanded"], true);
+  pending.reject(new Error("offline")); await h.flush();
+  assert.match(text(history(h)), /No se pudo cargar el histórico documental\./);
+  assert.ok(nodes(history(h)).some(n => n.props?.role === "alert"));
+  assert.match(h.text, /No hay documentos incorporados/);
+  h.button("Reintentar").props.onClick(); await h.flush(); assert.match(text(history(h)), /El histórico documental está vacío\./);
+  h.button("Cerrar histórico").props.onClick(); h.render(); openHistory(h); await h.flush(); assert.equal(calls.length, 2);
+});
+
+for (const currentAvailable of [true, false]) test(`history metadata, no preview or legacy, current precedence ${currentAvailable}`, async () => {
+  const documents = [row("ID_FRONT", 81), { ...row("OTHER", 82, "application/pdf"), isCurrent: false }];
+  const h = uiHarness({ props: { ...props, initialBackUrl: "https://legacy.invalid/secret" }, fetch: async url => url.includes("view=all") ? list(documents) : currentAvailable ? list([documents[1]]) : new Response(null, { status: 500 }) });
+  await h.flush(); openHistory(h); await h.flush();
+  const panel = history(h), entries = nodes(panel).filter(n => n.type === "li");
+  assert.equal(entries.length, 2); assert.doesNotMatch(text(panel), /compatibilidad|legacy/);
+  assert.equal(nodes(panel).filter(n => n.type === "img" || n.type === "iframe").length, 0);
+  assert.match(text(entries[0]), /DNI frontal.*<b>document.pdf<\/b>.*PNG.*KiB.*Incorporado:/);
+  assert.match(text(entries[1]), /Otro.*PDF/);
+  assert.match(text(entries[currentAvailable ? 1 : 0]), /Actual · último incorporado/);
+  assert.match(text(entries[currentAvailable ? 0 : 1]), /Versión anterior/);
+  assert.deepEqual(nodes(panel).filter(n => n.type === "a").map(n => n.props.href), documents.flatMap(d => ["inline", "attachment"].map(disposition => `/api/members/17/member-documents/${d.id}/content?disposition=${disposition}`)));
+});
+
+test("history pagination opaque cursor, lock, error retains cursor, dedup order and end", async () => {
+  const cursor = "opaque+/=&? %雪"; const pending = deferred(); const calls = [];
+  const h = start(url => {
+    if (!url.includes("view=all")) return Promise.resolve(list([]));
+    calls.push(url);
+    return calls.length === 1 ? Promise.resolve(page([row("OTHER", 9), row("OTHER", 5)], cursor)) : calls.length === 2 ? pending.promise : Promise.resolve(page([row("OTHER", 5), row("OTHER", 7)]));
+  }); await h.flush(); openHistory(h); await h.flush();
+  const more = h.button("Cargar más"); more.props.onClick(); more.props.onClick(); h.render();
+  assert.equal(calls.length, 2); assert.equal(h.button("Cargar más").props.disabled, true);
+  const expected = new URLSearchParams({ view: "all", limit: "20", cursor });
+  assert.equal(calls[1], `/api/members/17/member-documents?${expected}`);
+  pending.reject(new Error("offline")); await h.flush();
+  assert.match(text(history(h)), /No se pudieron cargar más documentos\./);
+  assert.equal(nodes(history(h)).filter(n => n.type === "li").length, 2);
+  h.button("Cerrar histórico").props.onClick(); h.render(); openHistory(h); await h.flush();
+  assert.equal(calls.length, 2);
+  assert.match(text(history(h)), /No se pudieron cargar más documentos\./);
+  assert.equal(nodes(history(h)).filter(n => n.type === "li").length, 2);
+  h.button("Reintentar").props.onClick(); await h.flush(); assert.equal(calls[2], calls[1]);
+  assert.deepEqual(nodes(history(h)).filter(n => n.type === "a" && n.props.target).map(n => n.props.href.match(/documents\/(\d+)/)[1]), ["9", "5", "7"]);
+  assert.equal(h.button("Cargar más"), undefined); assert.doesNotMatch(text(history(h)), /vacío|No se pudieron/);
+  h.button("Cerrar histórico").props.onClick(); h.render(); openHistory(h); await h.flush(); assert.equal(calls.length, 3);
+});
+
+for (const additional of [false, true]) for (const outcome of ["success", "error", "abort"]) test(`history stale upload reset ${additional} ${outcome}`, async () => {
+  const old = deferred(), fresh = deferred(); let gets = 0; const signals = [];
+  const h = start((url, options) => {
+    if (!url.includes("view=all")) return Promise.resolve(list([]));
+    signals.push(options.signal); gets++;
+    if (additional && gets === 1) return Promise.resolve(page([row("OTHER", 1)], "old-cursor"));
+    return gets === (additional ? 2 : 1) ? old.promise : fresh.promise;
+  }); await h.flush(); openHistory(h); await h.flush();
+  if (additional) { h.button("Cargar más").props.onClick(); h.render(); }
+  h.button("Cerrar histórico").props.onClick(); h.render(); send(inputs(h)[0]); await h.flush();
+  assert.equal(gets, additional ? 3 : 2); assert.equal(signals.at(-2).aborted, true);
+  assert.equal(history(h).props.hidden, true); assert.equal(nodes(history(h)).filter(n => n.type === "li").length, 0);
+  openHistory(h); assert.equal(gets, additional ? 3 : 2);
+  if (outcome === "success") old.resolve(page([row("OTHER", 88)], "stale"));
+  else old.reject(Object.assign(new Error("old"), { name: outcome === "abort" ? "AbortError" : "Error" }));
+  await h.flush(); assert.equal(history(h).props["aria-busy"], true); assert.doesNotMatch(text(history(h)), /No se pudo|No se pudieron/);
+  fresh.resolve(page([row("OTHER", 99)])); await h.flush();
+  assert.equal(nodes(history(h)).filter(n => n.type === "li").length, 1);
+  assert.ok(nodes(history(h)).some(n => n.props?.href?.includes("/99/content")));
+  assert.ok(!nodes(history(h)).some(n => n.props?.href?.includes("/88/content")));
+  assert.equal(h.button("Cargar más"), undefined); assert.match(h.text, /Documento incorporado\./);
+});
+
+for (const additional of [false, true]) for (const freshFails of [false, true]) for (const outcome of ["success", "error", "abort"]) test(`history late settlement after newest result ${additional} ${freshFails} ${outcome}`, async () => {
+  const old = deferred(); let gets = 0; const calls = [];
+  const h = start(url => {
+    if (!url.includes("view=all")) return Promise.resolve(list([]));
+    calls.push(url); gets++;
+    if (additional && gets === 1) return Promise.resolve(page([row("OTHER", 1)], "old-cursor"));
+    if (gets === (additional ? 2 : 1)) return old.promise;
+    return Promise.resolve(freshFails ? new Response(null, { status: 500 }) : page([row("OTHER", 99)], "fresh-cursor"));
+  }); await h.flush(); openHistory(h); await h.flush();
+  if (additional) { h.button("Cargar más").props.onClick(); h.render(); }
+  send(inputs(h)[0]); await h.flush();
+  h.button("Cerrar histórico").props.onClick(); h.render();
+  const before = text(history(h));
+  assert.equal(history(h).props["aria-busy"], false);
+  if (freshFails) assert.match(before, /No se pudo cargar el histórico documental\./);
+  else assert.ok(nodes(history(h)).some(n => n.props?.href?.includes("/99/content")));
+  if (outcome === "success") old.resolve(page([row("OTHER", 88)], "stale-cursor"));
+  else old.reject(Object.assign(new Error("old"), { name: outcome === "abort" ? "AbortError" : "Error" }));
+  await h.flush();
+  assert.equal(text(history(h)), before); assert.equal(history(h).props.hidden, true);
+  assert.equal(history(h).props["aria-busy"], false); assert.equal(h.lateUpdates, 0);
+  openHistory(h); assert.equal(gets, additional ? 3 : 2);
+  h.button(freshFails ? "Reintentar" : "Cargar más").props.onClick(); await h.flush();
+  assert.equal(calls.at(-1), `/api/members/17/member-documents?view=all&limit=20${freshFails ? "" : "&cursor=fresh-cursor"}`);
+});
+
+test("history refresh failure preserves upload success and resets loaded sequence", async () => {
+  let gets = 0;
+  const h = start(async url => !url.includes("view=all") ? list([]) : ++gets === 1 ? page([row()], "cursor") : new Response(null, { status: 500 }));
+  await h.flush(); openHistory(h); await h.flush(); send(inputs(h)[0]); await h.flush();
+  assert.match(h.text, /Documento incorporado\./); assert.match(text(history(h)), /No se pudo cargar el histórico documental\./);
+  assert.equal(nodes(history(h)).filter(n => n.type === "li").length, 0); assert.equal(h.button("Cargar más"), undefined);
+  assert.ok(h.nodes.some(n => n.props?.role === "status" && text(n) === "Documento incorporado."));
+});
+
+for (const additional of [false, true]) for (const reject of [false, true]) test(`history member change unmount ${additional} ${reject}`, async () => {
+  const pending = deferred(); let gets = 0, signal;
+  const h = start((url, options) => {
+    if (!url.includes("view=all")) return Promise.resolve(list([]));
+    gets++; signal = options.signal;
+    return additional && gets === 1 ? Promise.resolve(page([row()], "cursor")) : pending.promise;
+  }); await h.flush(); openHistory(h); await h.flush();
+  if (additional) h.button("Cargar más").props.onClick();
+  h.render({ ...props, memberId: 18 }); await h.flush(); assert.equal(signal.aborted, true);
+  assert.equal(h.button("Ver histórico").props["aria-expanded"], false);
+  if (reject) pending.reject(Object.assign(new Error("late"), { name: "AbortError" })); else pending.resolve(page([row("OTHER", 88)], "old"));
+  await h.flush(); assert.equal(h.lateUpdates, 0); assert.ok(!h.nodes.some(n => n.props?.href?.includes("/88/content")));
+  const last = deferred(); const unmounted = start((url, options) => { signal = options.signal; return url.includes("view=all") ? last.promise : Promise.resolve(list([])); });
+  await unmounted.flush(); openHistory(unmounted); unmounted.unmount(); assert.equal(signal.aborted, true);
+  if (reject) last.reject(new Error("late")); else last.resolve(list([row()]));
+  await tick(); assert.equal(unmounted.lateUpdates, 0);
+});
 
 test("current loading, error, retry, empty and six neutral slots", async () => {
   const pending = deferred(); let count = 0;
@@ -135,7 +268,7 @@ for (const mode of ["http", "network", "badPayload", "secondaryHttp", "secondary
 
 test("document source has no legacy URL state, general upload/history or sensitive client fields", () => {
   const source = readFileSync(new URL("../components/member-documents-card.tsx", import.meta.url), "utf8");
-  assert.doesNotMatch(source, /storageBucket|storageKey|sha256|signedUrl|view=all|nextCursor=|onUploaded|setFrontUrl|setBackUrl/);
+  assert.doesNotMatch(source, /storageBucket|storageKey|sha256|signedUrl|nextCursor=|onUploaded|setFrontUrl|setBackUrl/);
 });
 
 test("confirmed upload followed by failed current must not claim old absences", async () => {

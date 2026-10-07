@@ -31,7 +31,7 @@ export function uiHarness({ path = "components/member-documents-card.tsx", name 
       source = source.replace(mutation.from, mutation.to);
     }
     vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText, {
-      exports, fetch, FormData, AbortController, console, setTimeout, clearTimeout,
+      exports, fetch, FormData, AbortController, URLSearchParams, console, setTimeout, clearTimeout,
       window: { location: { reload() {} } },
       require: id => {
         if (id === "react") return hooks;
