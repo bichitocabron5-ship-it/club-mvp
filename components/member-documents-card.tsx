@@ -16,7 +16,7 @@ const labels = ["DNI frontal", "DNI reverso"];
 const isDni = (item: MemberDocumentListItem) => item.type === "ID_FRONT" || item.type === "ID_BACK";
 const rejected: Record<string, string> = {
   INVALID_DOCUMENT_TYPE: "Selecciona un tipo de documento válido.",
-  DOCUMENT_TOO_LARGE: "El archivo supera el máximo de 5 MiB.",
+  DOCUMENT_TOO_LARGE: "El archivo supera el tamaño máximo permitido de 5 MiB.",
   REQUEST_TOO_LARGE: "El archivo supera el máximo de 5 MiB.",
   UNSUPPORTED_MIME: "Selecciona un archivo JPEG, PNG, WEBP o PDF.",
   INVALID_DOCUMENT_BYTES: "El archivo no es una imagen o PDF válido.",
@@ -240,9 +240,8 @@ function CurrentDocuments({ memberId, initialFrontUrl, initialBackUrl, canUpload
   const back = items?.some(item => item.type === "ID_BACK") || Boolean(initialBackUrl);
   return (
     <section className="app-panel mt-6 rounded-[2rem] p-4 sm:p-6" aria-busy={loading || uploading}>
-      <h2 className="text-xl font-black">Expediente documental</h2>
-      <h3 className="mt-4 font-bold">Documentación actual</h3>
-      <p className="mt-2 text-sm app-muted">Actual indica el último documento incorporado de cada tipo. No implica validación ni obligatoriedad.</p>
+      <h2 className="text-xl font-black">Documento de identidad</h2>
+      <p className="mt-2 text-sm app-muted">DNI frontal y reverso. La disponibilidad no implica validación ni obligatoriedad.</p>
       {loading && <p role="status" className="mt-4">Cargando documentación…</p>}
       {error && <p role="alert" className="mt-4">No se pudo cargar la documentación.{items !== null && " Se muestran los últimos datos cargados."}</p>}
       <button type="button" className="app-button-secondary mt-3 min-h-11 px-4" disabled={loading || uploading} onClick={async () => {
@@ -260,40 +259,61 @@ function CurrentDocuments({ memberId, initialFrontUrl, initialBackUrl, canUpload
             const side = type === "ID_FRONT" ? "front" : "back";
             const legacyAvailable = !item && !loading && !error && Boolean(side === "front" ? initialFrontUrl : initialBackUrl);
             const legacyUrl = `/api/members/${memberId}/documents?side=${side}`;
-            return <article key={type} className="min-w-0 rounded-2xl border border-black/10 p-4">
-              <h4 className="font-bold">{labels[index]}</h4>
+            return <article key={type} className="flex min-w-0 flex-col rounded-2xl border border-black/10 bg-white/60 p-3 sm:p-5">
+              <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-bold tracking-widest app-muted">{side === "front" ? "ANVERSO" : "REVERSO"}</p>
+                  <h3 className="mt-1 text-lg font-black">{labels[index]}</h3>
+                </div>
+                {item ? <span className="app-badge app-badge-positive rounded-full px-3 py-1 text-xs">INCORPORADO</span>
+                  : legacyAvailable ? <span className="app-badge app-badge-info rounded-full px-3 py-1 text-xs">ANTERIOR</span>
+                  : !loading && !error && <span className="app-badge rounded-full bg-black/5 px-3 py-1 text-xs app-muted">SIN DOCUMENTO</span>}
+              </header>
               {item ? <MemberDocumentItem key={`${memberId}:${item.id}`} memberId={memberId} item={item} label={labels[index]} /> : legacyAvailable ? <>
-                <p className="mt-2 text-sm">DNI anterior · compatibilidad</p>
-                <object data={legacyUrl} aria-label={`Vista previa de ${labels[index]} anterior`} className="mt-3 h-56 w-full">
-                  <p>Vista previa no disponible. Utiliza Abrir.</p>
-                </object>
-                <a href={legacyUrl} target="_blank" rel="noopener noreferrer" className="app-button-secondary mt-3 inline-flex min-h-11 items-center px-3" aria-label={`Abrir ${labels[index]} anterior`}>Abrir</a>
-              </> : !loading && !error && <p className="mt-2 app-muted">Sin documento incorporado</p>}
+                <div className="flex min-h-64 flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-black/10 bg-black/5 p-4 text-center">
+                  <p className="font-bold">Documento anterior</p>
+                  <p className="text-sm app-muted">DNI anterior · compatibilidad</p>
+                </div>
+                <a href={legacyUrl} target="_blank" rel="noopener noreferrer" className="app-button-secondary mt-4 inline-flex min-h-12 items-center justify-center px-4 text-center" aria-label={`Abrir ${labels[index]} anterior`}>Abrir</a>
+              </> : !loading && !error && <div className="flex min-h-64 flex-1 items-center justify-center rounded-xl border border-dashed border-black/10 bg-black/5 p-4 text-center">
+                <p className="text-sm app-muted">Sin documento incorporado</p>
+              </div>}
               {side && canUpload && <button type="button" disabled={uploading || needsRefresh}
-                className="app-button-secondary mt-4 min-h-11 px-4" onClick={() => {
+                className="app-button-secondary mt-3 min-h-12 w-full px-3 py-3 text-center" onClick={() => {
                   if (uploadLock.current || uncertain.current) return;
                   chooseType(type);
                   fileInput.current?.focus();
+                  fileInput.current?.click();
                 }}>{(item || legacyAvailable) && !error && !loading ? "Incorporar nueva versión" : side === "front" ? "Incorporar frontal" : "Incorporar reverso"}</button>}
             </article>;
           })}
         </div>
       </>}
-      {canUpload && <form className="mt-6 min-w-0 space-y-3" aria-busy={uploading} noValidate
+      {canUpload && <form className="mt-6 min-w-0 space-y-3 rounded-2xl border border-black/10 bg-black/[0.02] p-3 sm:p-5" aria-busy={uploading} noValidate
         onSubmit={event => { event.preventDefault(); void upload(); }}>
-        <h3 className="font-bold">Incorporar documento</h3>
-        <p className="text-sm font-semibold">{documentType === "ID_FRONT" ? "DNI frontal" : documentType === "ID_BACK" ? "DNI reverso" : "Elige Incorporar frontal o Incorporar reverso."}</p>
+        <h3 className="font-bold">{documentType === "ID_FRONT" ? "Incorporar DNI frontal" : documentType === "ID_BACK" ? "Incorporar DNI reverso" : "Incorporar documento"}</h3>
+        {!documentType && <p className="text-sm app-muted">Elige Incorporar frontal o Incorporar reverso.</p>}
         <label className="block text-sm font-semibold" htmlFor={`document-file-${memberId}`}>Archivo</label>
         <input ref={fileInput} id={`document-file-${memberId}`} type="file" required
           accept="image/jpeg,image/png,image/webp,application/pdf" disabled={uploading || needsRefresh}
           aria-describedby={`document-help-${memberId}`} className="block w-full min-w-0 overflow-hidden text-sm"
-          onChange={event => { if (!uploadLock.current && !uncertain.current) selectedFile.current = event.target.files?.[0] ?? null; }} />
+          onChange={event => {
+            if (uploadLock.current || uncertain.current) return;
+            const file = event.target.files?.[0] ?? null;
+            selectedFile.current = file;
+            if (file && file.size > 5 * 1024 * 1024) {
+              setNotice({ error: true, text: rejected.DOCUMENT_TOO_LARGE });
+            } else if (file && file.size > 0 && acceptedMime.includes(file.type)) {
+              setNotice(null);
+            }
+          }} />
         <p id={`document-help-${memberId}`} className="text-sm app-muted">Formatos admitidos: JPEG, PNG, WEBP y PDF. Tamaño máximo: 5 MiB.</p>
         {!loading && !error && items?.some(item => item.type === documentType) && <p className="text-sm">Se conservarán los documentos anteriores.</p>}
         <button type="submit" disabled={uploading || needsRefresh} className="app-button-primary min-h-11 w-full px-4 sm:w-auto">Incorporar documento</button>
         {uploading && <p role="status">Incorporando documento…</p>}
       </form>}
-      <h3 className="mt-6 font-bold">Histórico documental</h3>
+      <div className="mt-6 border-t border-black/10 pt-5">
+      <h3 className="text-sm font-bold app-muted">Histórico documental</h3>
       <button type="button" className="app-button-secondary mt-3 min-h-11 px-4"
         aria-expanded={historyOpen} aria-controls={`document-history-${memberId}`} onClick={() => {
           setHistoryOpen(!historyOpen);
@@ -321,6 +341,7 @@ function CurrentDocuments({ memberId, initialFrontUrl, initialBackUrl, canUpload
         {nextCursor !== null && <button type="button" className="app-button-secondary mt-3 min-h-11 px-4" disabled={pageLoading}
           onClick={() => { void loadHistory(nextCursor); }}>{pageError ? "Reintentar" : "Cargar más"}</button>}
         {pageLoading && <p role="status">Cargando más documentos…</p>}
+      </div>
       </div>
       {notice && <p className="mt-4" role={notice.error ? "alert" : "status"}>{notice.text}</p>}
     </section>
