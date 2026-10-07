@@ -283,6 +283,7 @@ function CurrentDocuments({ memberId, initialFrontUrl, initialBackUrl, canUpload
                   if (uploadLock.current || uncertain.current) return;
                   chooseType(type);
                   fileInput.current?.focus();
+                  fileInput.current?.click();
                 }}>{(item || legacyAvailable) && !error && !loading ? "Incorporar nueva versión" : side === "front" ? "Incorporar frontal" : "Incorporar reverso"}</button>}
             </article>;
           })}

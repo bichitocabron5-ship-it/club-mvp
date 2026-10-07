@@ -23,6 +23,74 @@ const history = h => h.nodes.find(n => n.props?.id === `document-history-17`);
 const page = (items, nextCursor = null) => Response.json({ items, nextCursor });
 const openHistory = h => { h.button("Ver histórico").props.onClick(); h.render(); };
 
+for (const existing of [false, true]) for (const side of ["front", "back"]) {
+  test(`file picker synchronous shared input ${side} existing=${existing}`, async () => {
+    const pending = deferred(); const posts = [];
+    const h = start(async (url, options) => {
+      if (options.method === "POST") { posts.push({ url, body: options.body }); return pending.promise; }
+      return list(existing ? [row("ID_FRONT", 1), row("ID_BACK", 2)] : []);
+    });
+    await h.flush();
+    const input = inputs(h)[0], ref = input.props.ref;
+    let clicks = 0, inHandler = false;
+    const dom = { value: "", focus() {}, click() {
+      assert.equal(inHandler, true, "picker must open inside the original click stack");
+      assert.equal(inputs(h)[0].props.disabled, false);
+      clicks++;
+    } };
+    ref.current = dom;
+    const actions = () => h.nodes.filter(n => n.type === "article").map(article => nodes(article).find(n => n.type === "button"));
+    const action = actions()[side === "front" ? 0 : 1];
+    assert.equal(text(action), existing ? "Incorporar nueva versión" : `Incorporar ${side === "front" ? "frontal" : "reverso"}`);
+    assert.equal(action.props.type, "button");
+    inHandler = true;
+    const result = action.props.onClick();
+    inHandler = false;
+    assert.equal(result, undefined, "quick action must be synchronous");
+    assert.equal(clicks, 1, "focus alone does not open the file picker");
+    h.render();
+    assert.equal(inputs(h).length, 1);
+    assert.equal(inputs(h)[0].props.ref, ref);
+    assert.equal(ref.current, dom);
+    assert.equal(h.nodes.filter(n => n.type === "form").length, 1);
+    assert.match(text(h.nodes.find(n => n.type === "form")), side === "front" ? /Incorporar DNI frontal/ : /Incorporar DNI reverso/);
+    await h.flush(); assert.equal(posts.length, 0);
+    dom.value = "same.png";
+    inputs(h)[0].props.onChange({ target: { files: [new File(["x"], "same.png", { type: "image/png" })] } });
+    await h.flush(); assert.equal(posts.length, 0, "selection must require explicit submit");
+    submit(h); h.render();
+    assert.equal(posts.length, 1);
+    assert.equal(posts[0].url, "/api/members/17/member-documents");
+    assert.equal(posts[0].body.get("type"), side === "front" ? "ID_FRONT" : "ID_BACK");
+    assert.ok(actions().every(button => button.props.disabled));
+    assert.equal(inputs(h)[0].props.disabled, true);
+    actions().forEach(button => button.props.onClick());
+    assert.equal(clicks, 1);
+    pending.resolve(new Response(null, { status: 201 })); await h.flush();
+    assert.equal(dom.value, "");
+    h.unmount();
+  });
+}
+
+for (const mime of ["image/jpeg", "image/png", "image/webp", "application/pdf"]) test(`new canonical upload preview ${mime}`, async () => {
+  let saved = false;
+  const h = start(async (url, options) => {
+    if (options.method === "POST") { saved = true; return new Response(null, { status: 201 }); }
+    return list(saved ? [row("ID_FRONT", 91, mime)] : []);
+  });
+  await h.flush(); choose(h);
+  inputs(h)[0].props.onChange({ target: { files: [new File(["x"], "document", { type: mime })] } });
+  submit(h); await h.flush();
+  const images = h.nodes.filter(n => n.type === "img");
+  assert.equal(images.length, mime === "application/pdf" ? 0 : 1);
+  if (mime === "application/pdf") assert.match(h.text, /Documento PDF/);
+  else {
+    assert.equal(images[0].props.src, "/api/members/17/member-documents/91/content?disposition=inline");
+    images[0].props.onLoad(); h.render();
+    assert.doesNotMatch(h.text, /Cargando vista previa/);
+  }
+});
+
 for (const status of [500, 502, 504]) test(`uncertain HTTP ${status} prevents duplicate incorporation`, async () => {
   let posts = 0;
   const h = start(async (url, options) => {
@@ -58,7 +126,7 @@ test("pre-upload refresh cannot unlock a later uncertain POST", async () => {
 test("file DOM reset permits selecting the same file again", async () => {
   let posts = 0;
   const h = start(async (url, options) => { if (options.method === "POST") posts++; return list([]); }); await h.flush();
-  const dom = { value: "", focus() {} }, file = new File(["x"], "same.png", { type: "image/png" });
+  const dom = { value: "", focus() {}, click() {} }, file = new File(["x"], "same.png", { type: "image/png" });
   inputs(h)[0].props.ref.current = dom;
   choose(h);
   function selectSameFile() {
@@ -151,7 +219,7 @@ for (const mime of ["image/jpeg", "image/png", "image/webp", "application/pdf"])
 test("quick actions common form synchronous selection focus lock and append-only", async () => {
   const pending = deferred(); let posts = 0;
   const h = start(async (url, options) => { if (options.method === "POST") { posts++; assert.equal(options.body.get("type"), "ID_BACK"); return pending.promise; } return list([row()]); }); await h.flush();
-  let focused = 0; const dom = { value: "file.png", focus() { focused++; } }; inputs(h)[0].props.ref.current = dom;
+  let focused = 0; const dom = { value: "file.png", focus() { focused++; }, click() {} }; inputs(h)[0].props.ref.current = dom;
   h.button("Incorporar nueva versión").props.onClick(); h.render();
   assert.match(h.text, /DNI frontal/);
   assert.match(h.text, /Se conservarán los documentos anteriores\./); assert.doesNotMatch(h.text, /reemplazar|sobrescribir/i);

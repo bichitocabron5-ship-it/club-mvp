@@ -6,6 +6,13 @@ const card = "components/member-documents-card.tsx";
 const item = "components/member-document-item.tsx";
 const page = "app/members/[id]/page.tsx";
 const mutations = [
+  { name: "file picker click removed", fails: "file picker synchronous", edits: [{ file: card, from: 'fileInput.current?.click();', to: '' }] },
+  { name: "file picker deferred to timer", fails: "file picker synchronous", edits: [{ file: card, from: 'fileInput.current?.click();', to: 'setTimeout(() => fileInput.current?.click(), 0);' }] },
+  { name: "file picker deferred to promise", fails: "file picker synchronous", edits: [{ file: card, from: 'fileInput.current?.click();', to: 'void Promise.resolve().then(() => fileInput.current?.click());' }] },
+  { name: "file picker deferred to effect", fails: "file picker synchronous", edits: [
+    { file: card, from: 'fileInput.current?.click();', to: '' },
+    { file: card, from: 'function chooseType(type: string) {', to: 'useEffect(() => { if (documentType) fileInput.current?.click(); }, [documentType]); function chooseType(type: string) {' },
+  ] },
   { name: "uncertain server response permits retry", fails: "uncertain HTTP", edits: [{ file: card, from: 'response.status >= 500', to: 'false' }] },
   { name: "old refresh unlocks uncertain POST", fails: "pre-upload refresh", edits: [{ file: card, from: 'const confirmsUncertain = uncertain.current;', to: 'const confirmsUncertain = true;' }] },
   { name: "file DOM reset removed", fails: "file DOM reset", edits: [{ file: card, from: 'if (fileInput.current) fileInput.current.value = "";', to: '' }] },
