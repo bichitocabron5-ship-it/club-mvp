@@ -51,7 +51,8 @@ export async function GET(
   const canWithdraw = facts.active && !facts.expired && facts.hasContract;
 
   return NextResponse.json({
-    member,
+    // Operational consumers do not need documentary Storage references.
+    member: { ...member, dniFrontUrl: null, dniBackUrl: null },
     hasContract: facts.hasContract,
     contract: facts.hasContract
       ? {
@@ -65,5 +66,5 @@ export async function GET(
       noContract: !facts.hasContract,
       expired: facts.expired,
     },
-  });
+  }, { headers: { "Cache-Control": "private, no-store" } });
 }

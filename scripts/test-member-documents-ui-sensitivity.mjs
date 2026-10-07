@@ -6,6 +6,7 @@ const card = "components/member-documents-card.tsx";
 const item = "components/member-document-item.tsx";
 const page = "app/members/[id]/page.tsx";
 const mutations = [
+  { name: "uncertain server response permits retry", fails: "uncertain HTTP", edits: [{ file: card, from: 'response.status >= 500', to: 'false' }] },
   { name: "old refresh unlocks uncertain POST", fails: "pre-upload refresh", edits: [{ file: card, from: 'const confirmsUncertain = uncertain.current;', to: 'const confirmsUncertain = true;' }] },
   { name: "file DOM reset removed", fails: "file DOM reset", edits: [{ file: card, from: 'if (fileInput.current) fileInput.current.value = "";', to: '' }] },
   { name: "DNI endpoint returns", fails: "general exact 5 MiB", edits: [{ file: card, from: '`/api/members/${memberId}/member-documents`, { method: "POST"', to: '`/api/members/${memberId}/dni`, { method: "POST"' }] },

@@ -23,6 +23,24 @@ const history = h => h.nodes.find(n => n.props?.id === `document-history-17`);
 const page = (items, nextCursor = null) => Response.json({ items, nextCursor });
 const openHistory = h => { h.button("Ver histórico").props.onClick(); h.render(); };
 
+for (const status of [500, 502, 504]) test(`uncertain HTTP ${status} prevents duplicate incorporation`, async () => {
+  let posts = 0;
+  const h = start(async (url, options) => {
+    if (options.method === "POST") {
+      posts++;
+      // A commit can succeed even when its acknowledgement/proxy response fails.
+      return Response.json({ error: "MEMBER_DOCUMENT_CREATE_FAILED" }, { status });
+    }
+    return list([]);
+  });
+  await h.flush(); send(h); await h.flush();
+  assert.match(h.text, /No se pudo confirmar la incorporación/);
+  assert.equal(h.button("Incorporar documento").props.disabled, true);
+  submit(h); await h.flush(); assert.equal(posts, 1);
+  await h.button("Actualizar documentación").props.onClick(); await h.flush();
+  assert.equal(h.button("Incorporar documento").props.disabled, false);
+});
+
 test("pre-upload refresh cannot unlock a later uncertain POST", async () => {
   const old = deferred(); let gets = 0, posts = 0;
   const h = start(async (url, options) => {

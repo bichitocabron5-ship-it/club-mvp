@@ -50,7 +50,7 @@ function harness(options = {}) {
         assert.deepEqual(JSON.parse(JSON.stringify(query.where)), { id: 1 });
         return options.missingUser ? null : { id: 1, active: options.active ?? true, role: options.role ?? "STAFF" };
       } },
-      memberContract: { findMany: async query => {
+      memberContract: { findFirst: async () => null, findMany: async query => {
         reads++;
         assert.deepEqual(JSON.parse(JSON.stringify(query.where)), { memberId: 17 });
         assert.deepEqual(JSON.parse(JSON.stringify(query.orderBy)), [{ signedAt: "desc" }, { id: "desc" }]);
@@ -102,6 +102,19 @@ function harness(options = {}) {
 }
 let checks = 0;
 async function test(name, fn) { await fn(); checks++; console.log(`PASS ${name}`); }
+await test("operational status never discloses legacy DNI references to an active non-staff user", async () => {
+  const h = harness({ role: "MEMBER", members: [{ ...member, active: true, expiresAt: null, rfidCode: null,
+    dniFrontUrl: "https://storage.invalid/front?token=PRIVATE_DNI",
+    dniBackUrl: "member-documents/members/17/dni-back.pdf",
+  }] });
+  const response = await h.get("operational-status");
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.member.dniFrontUrl, null);
+  assert.equal(body.member.dniBackUrl, null);
+  assert.doesNotMatch(JSON.stringify(body), /PRIVATE_DNI|member-documents|storage.invalid/);
+  assert.match(response.headers.get("cache-control"), /private.*no-store/);
+});
 async function safeBody(response) {
   assert.equal(response.status, 200);
   const text = await response.text();
