@@ -546,7 +546,7 @@ export default function MembersPage() {
                             </span>
                           )}
 
-                          {member.rfidCode ? (
+                          {member.hasRfid ? (
                             <span className="app-badge app-badge-info rounded-full px-3 py-1 text-xs font-bold">
                               RFID
                             </span>

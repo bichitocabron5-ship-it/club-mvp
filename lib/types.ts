@@ -124,7 +124,18 @@ export type ProductLike = {
   unit: ProductUnit | string;
 };
 
-export type MemberListItem = MemberSummary & { expired: boolean };
+export type MemberListItem = {
+  id: number;
+  memberNumber: string | null;
+  fullName: string;
+  dni: string;
+  phone: string | null;
+  active: boolean;
+  expiresAt: string | null;
+  hasRfid: boolean;
+  hasContract: boolean;
+  expired: boolean;
+};
 
 export type MemberSummary = {
   id: number;

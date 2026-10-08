@@ -65,7 +65,7 @@ async function listApi(override) {
     constructor(...args) { super(...(args.length ? args : [now.getTime() + clockReads++])); }
   }
   const load = loader({
-    "@/lib/auth-server": { requireAuth: async () => ({ ok: true }) },
+    "@/lib/auth-server": { requireStaffOrAdmin: async () => ({ ok: true }) },
     "@/lib/prisma": { prisma: { member: { findMany: async query => { queries.push(query); return rows; } } } },
     "next/server": { NextResponse: Response },
     "@/lib/member-operational-status": { getMemberOperationalFacts: (...args) => {
@@ -83,20 +83,20 @@ await test("tied member relation selects greater ID with take 1 and one query", 
     signingSessionId: null, contractTemplateId: null, documentSnapshotId: null }];
   let reads = 0;
   const load = loader({
-    "@/lib/auth-server": { requireAuth: async () => ({ ok: true }) },
+    "@/lib/auth-server": { requireStaffOrAdmin: async () => ({ ok: true }) },
     "@/lib/prisma": { prisma: { member: { findMany: async query => {
       reads++;
-      assert.deepEqual(plain(query), { include: { contracts: { take: 1,
+      assert.deepEqual(plain(query), { select: { id: true, memberNumber: true, fullName: true, dni: true, phone: true, active: true, expiresAt: true, rfidCode: true, contracts: { select: { id: true, consumptionGrams: true }, take: 1,
         orderBy: [{ signedAt: "desc" }, { id: "desc" }] } }, orderBy: { createdAt: "desc" } });
       const sorted = candidates.slice().sort((a, b) => {
-        for (const clause of query.include.contracts.orderBy) {
+        for (const clause of query.select.contracts.orderBy) {
           const [field, direction] = Object.entries(clause)[0];
           const delta = field === "signedAt" ? new Date(a[field]) - new Date(b[field]) : a[field] - b[field];
           if (delta) return direction === "desc" ? -delta : delta;
         }
         return 0;
       });
-      return [{ ...rows[0], contracts: sorted.slice(0, query.include.contracts.take) }];
+      return [{ ...rows[0], contracts: sorted.slice(0, query.select.contracts.take) }];
     } } } },
     "@/lib/member-operational-status": { getMemberOperationalFacts: (member, selected, time) => {
       assert.equal(selected.id, 43);
@@ -114,7 +114,7 @@ await test("tied member relation selects greater ID with take 1 and one query", 
 await test("GET uses core for A-L, existing query, one shared now and no N+1", () => {
   assert.equal(api.queries.length, 1);
   assert.deepEqual(plain(api.queries[0]), {
-    include: { contracts: { take: 1, orderBy: [{ signedAt: "desc" }, { id: "desc" }] } }, orderBy: { createdAt: "desc" },
+    select: { id: true, memberNumber: true, fullName: true, dni: true, phone: true, active: true, expiresAt: true, rfidCode: true, contracts: { select: { id: true, consumptionGrams: true }, take: 1, orderBy: [{ signedAt: "desc" }, { id: "desc" }] } }, orderBy: { createdAt: "desc" },
   });
   assert.equal(api.clockReads, 1);
   assert.equal(api.calls.length, rows.length);
@@ -133,8 +133,8 @@ for (const [i, [name, , , selected, , expired]] of cases.entries()) {
     assert.equal(result.expired, facts.expired);
     assert.equal(result.hasContract, facts.hasContract);
     const { contracts, ...previous } = row;
-    assert.deepEqual(result, plain({ ...previous, photoUrl: null, hasPhoto: true,
-      dniFrontUrl: null, dniBackUrl: null, hasContract: facts.hasContract, expired: facts.expired }));
+    assert.deepEqual(result, plain({ id: previous.id, memberNumber: previous.memberNumber, fullName: previous.fullName, dni: previous.dni, phone: previous.phone, active: previous.active, expiresAt: previous.expiresAt, hasRfid: facts.hasRfid,
+      hasContract: facts.hasContract, expired: facts.expired }));
     assert.equal(Object.hasOwn(result, "contracts"), false);
     assert.equal(contracts.length, selected ? 1 : 0);
   });
@@ -220,7 +220,7 @@ for (const clientTime of ["1900-01-01T00:00:00Z", "2099-01-01T00:00:00Z"]) {
       const card = page.nodes.find(n => n.props?.href === `/members/${row.id}`);
       assert.ok(badge(card, row.active ? "ACTIVO" : "BLOQUEADO"));
       assert.ok(badge(card, row.hasContract ? "CONTRATO" : "SIN CONTRATO"));
-      assert.equal(Boolean(badge(card, "RFID")), Boolean(row.rfidCode));
+      assert.equal(Boolean(badge(card, "RFID")), row.hasRfid);
       assert.equal(Boolean(badge(card, "CADUCADO")), row.expired);
       assert.equal(Boolean(badge(card, "VÁLIDO")), !row.expired && Boolean(row.expiresAt));
       if (row.expired) assert.match(badge(card, "CADUCADO").props.className, /danger/);
@@ -237,9 +237,32 @@ for (const clientTime of ["1900-01-01T00:00:00Z", "2099-01-01T00:00:00Z"]) {
       await page.click({ ACTIVE: "Activos", EXPIRED: "Caducados", BLOCKED: "Bloqueados", NO_CONTRACT: "Sin contrato", ALL: "Todos" }[filter]);
       assert.deepEqual(ids(), expected, filter);
     }
+    for (const [query, expected] of [["Member B", [2]], ["DOC3", [4]], ["12", [12]]]) {
+      page.change(n => n.type === "input" && n.props.placeholder?.includes("DNI"), query);
+      assert.deepEqual(ids(), expected);
+    }
     assert.deepEqual(requests, ["/api/members"]);
   });
 }
+
+await test("quick create refresh renders minimal production GET DTO and navigation", async () => {
+  let created = false;
+  const requests = [];
+  const page = pageHarness("@/app/members/page", async (url, options) => {
+    requests.push([url, options?.method ?? "GET"]);
+    if (options?.method === "POST") {
+      created = true;
+      return Response.json({ id: rows[0].id, fullName: rows[0].fullName, dni: rows[0].dni });
+    }
+    return Response.json(created ? api.result : []);
+  });
+  await page.flush();
+  await page.nodes.find(n => n.type === "form").props.onSubmit({ preventDefault() {} });
+  await page.flush();
+  assert.deepEqual(requests, [["/api/members", "GET"], ["/api/members", "POST"], ["/api/members", "GET"]]);
+  assert.equal(page.nodes.filter(n => /^\/members\/\d+$/.test(n.props?.href)).length, api.result.length);
+  assert.doesNotMatch(page.text, /Resultado sin confirmar|No se pudo actualizar/);
+});
 
 const snapshot = (overrides = {}) => ({
   member: { active: false, expiresAt: "2020-01-02T12:00:00.000Z", rfidCode: "UNTRUSTED-OPERATIONAL-RFID", fullName: "Wrong name" },
@@ -401,7 +424,10 @@ await test("Initial loading/error never fabricates favorable or unfavorable fact
 });
 await test("Types and source guards: list-only expired, no local expiry/polling/RFID substitution", () => {
   const detail = read("app/members/[id]/page.tsx"), list = read("app/members/page.tsx"), types = read("lib/types.ts");
-  assert.match(types, /type MemberListItem = MemberSummary & \{ expired: boolean \}/);
+  const listType = types.match(/type MemberListItem = \{[\s\S]*?\n\};/)[0];
+  assert.match(listType, /expired: boolean/);
+  assert.match(listType, /hasRfid: boolean/);
+  assert.doesNotMatch(listType, /MemberSummary|commercial|rfidCode|photoUrl|dniFrontUrl|dniBackUrl|createdAt/);
   assert.doesNotMatch(types.match(/type MemberSummary = \{[\s\S]*?\n\};/)[0], /expired/);
   assert.doesNotMatch(list, /operational-status|Date\.now\(|new Date\(\)/);
   assert.doesNotMatch(detail, /canWithdraw|hasRfid|setInterval|new Date\([^\n]*expiresAt[^\n]*\)\s*</);

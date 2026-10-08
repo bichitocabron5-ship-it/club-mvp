@@ -17,7 +17,7 @@ import type {
   TodayTotals,
 } from "@/lib/helpers/sales-cart";
 import type {
-  MemberSummary,
+  MemberListItem,
   ProductHashType,
   ProductSummary,
 } from "@/lib/types";
@@ -285,7 +285,7 @@ function restoreEditableTargetValue(
 }
 
 export function useSalesPage() {
-  const [members, setMembers] = useState<MemberSummary[]>([]);
+  const [members, setMembers] = useState<MemberListItem[]>([]);
   const [products, setProducts] = useState<ProductSummary[]>([]);
   const [recentSales, setRecentSales] = useState<RecentSale[]>([]);
   const [recentSalesDayClosed, setRecentSalesDayClosed] = useState(false);
@@ -542,7 +542,7 @@ export function useSalesPage() {
     let cancelled = false;
 
     void Promise.all([
-      fetchJson<MemberSummary[]>("/api/members"),
+      fetchJson<MemberListItem[]>("/api/members"),
       fetchJson<ProductSummary[]>("/api/products"),
     ])
       .then(([membersData, productsData]) => {

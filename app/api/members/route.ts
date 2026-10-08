@@ -1,5 +1,6 @@
 // app/api/members/route.ts
-import { requireAuth, requireStaffOrAdmin } from "@/lib/auth-server";
+import { requireStaffOrAdmin } from "@/lib/auth-server";
+import type { MemberListItem } from "@/lib/types";
 import { Prisma } from "@prisma/client";
 import {
   MEMBER_IDENTITY_MAX_INPUT_LENGTH,
@@ -32,14 +33,24 @@ const memberSchema = z.object({
 });
 
 export async function GET() {
-  const auth = await requireAuth();
+  const headers = { "Cache-Control": "private, no-store" };
+  const auth = await requireStaffOrAdmin();
   if (!auth.ok) {
-    return NextResponse.json({ error: auth.error }, { status: auth.status });
+    return NextResponse.json({ error: auth.error }, { status: auth.status, headers });
   }
 
   const members = await prisma.member.findMany({
-    include: {
+    select: {
+      id: true,
+      memberNumber: true,
+      fullName: true,
+      dni: true,
+      phone: true,
+      active: true,
+      expiresAt: true,
+      rfidCode: true,
       contracts: {
+        select: { id: true, consumptionGrams: true },
         take: 1,
         orderBy: [{ signedAt: "desc" }, { id: "desc" }],
       },
@@ -48,22 +59,24 @@ export async function GET() {
   });
 
   const now = new Date();
-  const result = members.map((member) => {
-    const { contracts, ...memberData } = member;
-    const facts = getMemberOperationalFacts(member, contracts[0] ?? null, now);
+  const result: MemberListItem[] = members.map((member) => {
+    const facts = getMemberOperationalFacts(member, member.contracts[0] ?? null, now);
 
     return {
-      ...memberData,
-      photoUrl: null,
-      hasPhoto: Boolean(member.photoUrl),
-      dniFrontUrl: null,
-      dniBackUrl: null,
+      id: member.id,
+      memberNumber: member.memberNumber,
+      fullName: member.fullName,
+      dni: member.dni,
+      phone: member.phone,
+      active: member.active,
+      expiresAt: member.expiresAt?.toISOString() ?? null,
+      hasRfid: facts.hasRfid,
       hasContract: facts.hasContract,
       expired: facts.expired,
     };
   });
 
-  return NextResponse.json(result);
+  return NextResponse.json(result, { headers });
 }
 
 type MemberConflictField = "dni" | "memberNumber" | "rfidCode";
