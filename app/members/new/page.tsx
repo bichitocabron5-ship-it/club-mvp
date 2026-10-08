@@ -62,7 +62,7 @@ export default function NewMemberPage() {
     let disposed = false;
     const id = new URL(window.location.href).searchParams.get("memberId");
     if (!id) { queueMicrotask(() => { if (!disposed) setRecoveringMember(false); }); return () => { disposed = true; }; }
-    void fetch(`/api/members/${encodeURIComponent(id)}/history`, { cache: "no-store" })
+    void fetch(`/api/members/${encodeURIComponent(id)}/registration`, { cache: "no-store" })
       .then(async (res) => {
         if (!res.ok) throw new Error("No se pudo recuperar el socio");
         const data = await res.json();
@@ -145,7 +145,7 @@ export default function NewMemberPage() {
         setRfidInput("");
         setRfidMessage("");
         setError("No se pudo confirmar la RFID. Abre el expediente y realiza una nueva decision sobre el estado actual.");
-        const refreshed = await fetch(`/api/members/${createdMember.id}/history`, { cache: "no-store" });
+        const refreshed = await fetch(`/api/members/${createdMember.id}/registration`, { cache: "no-store" });
         if (!refreshed.ok) throw new Error("Refresh failed");
         const history: { member: CreatedMember } = await refreshed.json();
         setCreatedMember(history.member);

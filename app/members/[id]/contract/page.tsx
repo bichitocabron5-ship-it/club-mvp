@@ -1,7 +1,7 @@
 "use client";
 
 import type {
-  MemberHistoryData,
+  MemberIdentityData,
 } from "@/lib/types";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -13,7 +13,7 @@ export default function MemberContractPage() {
   const memberId = Number(params.id);
   const validMemberId = Number.isInteger(memberId) && memberId > 0;
 
-  const [member, setMember] = useState<MemberHistoryData["member"] | null>(null);
+  const [member, setMember] = useState<MemberIdentityData["member"] | null>(null);
   const [loadingMember, setLoadingMember] = useState(validMemberId);
   const [error, setError] = useState("");
 
@@ -24,13 +24,13 @@ export default function MemberContractPage() {
 
     let cancelled = false;
 
-    void fetch(`/api/members/${memberId}/history`, { cache: "no-store" })
+    void fetch(`/api/members/${memberId}/identity`, { cache: "no-store" })
       .then(async (res) => {
         if (!res.ok) {
           throw new Error("No se pudieron cargar los datos del socio");
         }
 
-        const data: MemberHistoryData = await res.json();
+        const data: MemberIdentityData = await res.json();
 
         if (!cancelled) {
           setMember(data.member);

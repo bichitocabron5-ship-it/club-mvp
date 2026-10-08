@@ -531,11 +531,9 @@ export type MemberHistorySale = {
   qty: number;
   totalAmount: number;
   originalAmount: number | null;
-  discountPercent: number;
   discountAmount: number;
   finalAmount: number | null;
   discountReason: string | null;
-  discountSource: string;
   cancelledAt: string | null;
   cancelReason: string | null;
   createdAt: string;
@@ -554,20 +552,23 @@ export type MemberHistoryData = {
     phone: string | null;
     email: string | null;
     photoUrl: string | null;
-    dniFrontUrl: string | null;
-    dniBackUrl: string | null;
+    hasDniFront: boolean;
+    hasDniBack: boolean;
     active: boolean;
     joinedAt: string | null;
     expiresAt: string | null;
     rfidCode: string | null;
-    createdAt: string;
-    commercialProfile: string;
-    discountPercent: number;
-    commercialNotes: string | null;
+    commercialProfile?: string;
+    discountPercent?: number;
+    commercialNotes?: string | null;
   };
   sales: MemberHistorySale[];
   totalSpent: number;
   count: number;
+};
+
+export type MemberIdentityData = {
+  member: { fullName: string; dni: string; phone: string | null; email: string | null };
 };
 
 export type SigningSessionData = {
