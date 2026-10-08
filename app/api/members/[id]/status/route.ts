@@ -2,7 +2,7 @@
 import { requireAdmin } from "@/lib/auth-server";
 import { createAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
-import { NextResponse } from "next/server";
+import { memberMutationJson } from "@/lib/member-mutation-response";
 
 export async function PATCH(
   req: Request,
@@ -10,7 +10,7 @@ export async function PATCH(
 ) {
   const auth = await requireAdmin();
   if (!auth.ok) {
-    return NextResponse.json({ error: auth.error }, { status: auth.status });
+    return memberMutationJson({ error: auth.error }, { status: auth.status });
   }
 
   const { id } = await params;
@@ -18,7 +18,7 @@ export async function PATCH(
   const body = await req.json();
 
   if (!memberId || Number.isNaN(memberId)) {
-    return NextResponse.json({ error: "ID inválido" }, { status: 400 });
+    return memberMutationJson({ error: "ID inválido" }, { status: 400 });
   }
 
   const data: {
@@ -52,7 +52,7 @@ export async function PATCH(
   });
 
   if (!existingMember) {
-    return NextResponse.json({ error: "Socio no encontrado" }, { status: 404 });
+    return memberMutationJson({ error: "Socio no encontrado" }, { status: 404 });
   }
 
   const member = await prisma.member.update({
@@ -79,5 +79,5 @@ export async function PATCH(
     });
   }
 
-  return NextResponse.json(member);
+  return memberMutationJson({ ok: true });
 }
