@@ -108,10 +108,10 @@ await test("operational status never discloses legacy DNI references to an activ
     dniBackUrl: "member-documents/members/17/dni-back.pdf",
   }] });
   const response = await h.get("operational-status");
-  assert.equal(response.status, 200);
+  assert.equal(response.status, 403);
   const body = await response.json();
-  assert.equal(body.member.dniFrontUrl, null);
-  assert.equal(body.member.dniBackUrl, null);
+  assert.deepEqual(body, { error: "FORBIDDEN" });
+  assert.equal(h.reads(), 0);
   assert.doesNotMatch(JSON.stringify(body), /PRIVATE_DNI|member-documents|storage.invalid/);
   assert.match(response.headers.get("cache-control"), /private.*no-store/);
 });

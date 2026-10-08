@@ -24,7 +24,7 @@ export function SalesMemberSearch({
   memberRecentSalesLoading: boolean;
   memberRecentSummary: string;
   memberSearch: string;
-  selectedMember: MemberSummary | null;
+  selectedMember: (Pick<MemberSummary, "id" | "memberNumber" | "fullName"> & { dni?: string }) | null;
   onClearMember: () => void;
   onMemberChange: (memberId: string) => void;
   onMemberSearchBlur: () => void;

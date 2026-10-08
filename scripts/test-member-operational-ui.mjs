@@ -274,6 +274,17 @@ function detailHarness(initial = snapshot(), contracts = [{ ...contract, signedA
     set rfidConflict(value) { rfidConflict = value; },
   };
 }
+await test("detail accepts minimized operational DTO without contact or RFID", async () => {
+  const h = detailHarness({ member: { id: 1, memberNumber: "1", fullName: "Member A",
+    active: true, expiresAt: null, commercialProfile: "STANDARD", discountPercent: 0 },
+    hasContract: true, contract: { monthlyLimitG: 25 }, expired: false, canWithdraw: true,
+    reasons: { inactive: false, noContract: false, expired: false } });
+  await h.page.flush();
+  assert.ok(badge(h.page.tree, "ACTIVO"));
+  assert.ok(badge(h.page.tree, "CONTRATO"));
+  assert.ok(badge(h.page.tree, "RFID ASIGNADO"));
+  assert.doesNotMatch(h.page.text, /No se pudo actualizar/);
+});
 await test("tied historical cards keep their order and PDF links by contract ID", async () => {
   const contracts = [
     { ...contract, id: 43, fullName: "Legacy winner", signedPdfUrl: null, consumptionGrams: null,

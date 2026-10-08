@@ -2,11 +2,12 @@
 // HTTP and Prisma. No database, browser, credentials or additional dependencies.
 // Run: node scripts/test-sales-rfid.mjs
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import vm from "node:vm";
 import ts from "typescript";
+import { renderToStaticMarkup } from "react-dom/server";
 
 const require = createRequire(import.meta.url);
 const root = resolve(import.meta.dirname, "..");
@@ -16,9 +17,10 @@ function loader(mocks, globals = {}) {
     if (name in mocks) return mocks[name];
     if (!name.startsWith("@/")) return require(name);
     if (cache.has(name)) return cache.get(name);
-    const filename = resolve(root, name.slice(2) + ".ts");
+    const base = resolve(root, name.slice(2));
+    const filename = base + (existsSync(base + ".ts") ? ".ts" : ".tsx");
     const code = ts.transpileModule(readFileSync(filename, "utf8"), {
-      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
     }).outputText;
     const exports = {};
     cache.set(name, exports);
@@ -40,7 +42,7 @@ const product = { id: 1, name: "Product", unit: "UD", price: 10, stock: 100, act
 const members = [1, 2].map(id => ({ id, fullName: `Member ${id}`, dni: String(id), discountPercent: 10 }));
 const totals = { grams: 0, units: 0, monthlyGrams: 0, limits: { dailyLimitG: 10, dailyLimitUd: 15, monthlyLimitG: 30 } };
 
-async function pageHarness() {
+async function pageHarness({ listedMembers = members, canWithdraw = true } = {}) {
   const slots = [];
   let cursor = 0, dirty = true, page;
   const effects = [];
@@ -75,10 +77,16 @@ async function pageHarness() {
   let lookup = async () => Response.json({ id: 1, fullName: "Member 1" });
   let sale = async () => Response.json({ sales: [{ id: 1, memberId: Number(page.memberId) }], totalAmount: 9 });
   const fetchJson = async url => {
-    if (url === "/api/members") return members;
+    if (url === "/api/members") return listedMembers;
     if (url === "/api/products") return [product];
     if (url.endsWith("/today")) return totals;
-    if (url.endsWith("/operational-status")) return { member: members[Number(url.split("/")[3]) - 1], canWithdraw: true };
+    if (url.endsWith("/operational-status")) {
+      const selected = members[Number(url.split("/")[3]) - 1];
+      return { member: { id: selected.id, memberNumber: null, fullName: selected.fullName,
+        active: true, expiresAt: null, commercialProfile: "STANDARD", discountPercent: selected.discountPercent },
+        hasContract: true, contract: { monthlyLimitG: 30 }, expired: false, canWithdraw,
+        reasons: { inactive: false, noContract: false, expired: false } };
+    }
     return { sales: [], dayClosed: false };
   };
   const load = loader({ react, "@/lib/fetch-json": { fetchJson } }, {
@@ -121,6 +129,44 @@ async function pageHarness() {
     },
   };
 }
+
+// Exercise indirect consumers with the exact minimal operational member shape.
+for (const listed of [true, false]) {
+  const h = await pageHarness({ listedMembers: listed ? members : [] });
+  await h.manual(); await h.cart();
+  assert.equal(h.page.selectedMember.fullName, "Member 1");
+  assert.equal(h.page.selectedMember.dni, listed ? "1" : undefined);
+  assert.equal(Object.hasOwn(h.page.memberStatus.member, "dni"), false);
+  assert.equal(h.page.cartLines[0].discountPercent, 10);
+  assert.equal(h.page.cartLines[0].finalAmount, 9);
+  assert.equal(h.page.memberStatus.contract.monthlyLimitG, 30);
+  assert.equal(h.page.invalid, false);
+  const components = loader({});
+  const { SalesMemberSearch } = components("@/components/sales/sales-member-search");
+  const { SalesMemberStatus } = components("@/components/sales/sales-member-status");
+  const searchHtml = renderToStaticMarkup(SalesMemberSearch({ ...h.page, onMemberSearchChange() {} }));
+  assert.match(searchHtml, /Member 1/);
+  assert.equal(searchHtml.includes("DNI 1"), listed);
+  const statusHtml = renderToStaticMarkup(SalesMemberStatus({ loading: false, memberStatus: h.page.memberStatus }));
+  assert.match(statusHtml, /STANDARD/);
+  assert.match(statusHtml, /10\.00%/);
+  assert.match(statusHtml, /Mensual 30 g/);
+  assert.doesNotMatch(searchHtml + statusHtml, /undefined|NaN/);
+  h.page.syncMemberSearchToSelectedMember(); await h.flush();
+  assert.equal(h.page.memberSearch, "Member 1");
+  if (listed) {
+    h.page.setMemberSearch("2"); await h.flush();
+    assert.deepEqual(h.page.filteredMembers.map(row => row.id), [2]);
+  }
+}
+{
+  const h = await pageHarness({ canWithdraw: false });
+  await h.manual(); await h.cart();
+  assert.equal(h.page.invalid, true);
+  await h.page.handleRegisterWithdrawal(); await h.flush();
+  assert.equal(h.requests.length, 0);
+}
+console.log("PASS minimal operational DTO: listed DNI, identity fallback, search, profile, discount, limit and canWithdraw");
 
 // A/D + every HTTP/JSON failure: clear before await, even stale submit callbacks.
 for (const failure of [404, 401, 403, 429, 500, "network", "json", "shape"]) {

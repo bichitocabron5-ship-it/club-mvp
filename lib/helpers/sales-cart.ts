@@ -5,7 +5,7 @@ import {
   roundCurrency,
   roundQty,
 } from "@/lib/helpers/sales-formatters";
-import type { MemberSummary, ProductSummary } from "@/lib/types";
+import type { ProductSummary } from "@/lib/types";
 
 export type TodayTotals = {
   grams: number;
@@ -97,9 +97,14 @@ export type AddProductOptions = {
 };
 
 export type MemberOperationalStatus = {
-  member: MemberSummary & {
+  member: {
+    id: number;
+    memberNumber: string | null;
+    fullName: string;
     active: boolean;
     expiresAt: string | null;
+    commercialProfile: string;
+    discountPercent: number;
   };
   hasContract: boolean;
   contract: {
