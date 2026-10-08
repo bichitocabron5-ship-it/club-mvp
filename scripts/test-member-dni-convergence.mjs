@@ -142,7 +142,7 @@ for (const side of ["front", "back"]) {
     assert.equal(h.audits.length, 1); assert.equal(h.audits[0].action, "MEMBER_DOCUMENT_CREATED");
     assert.equal(h.rows[1].type, side === "front" ? "ID_FRONT" : "ID_BACK");
     const body = await (await h.history()).json();
-    assert.equal(body.member.dniFrontUrl, url("front")); assert.equal(body.member.dniBackUrl, url("back"));
+    assert.equal(body.member.hasDniFront, true); assert.equal(body.member.hasDniBack, true);
     assert.doesNotMatch(JSON.stringify(body), /storageBucket|storageKey|sha256|fixture|club-uploads|member-documents/);
   });
   test(`concurrent ${side}: tied creation timestamps preserve both and resolve greatest ID`, async () => {
@@ -187,7 +187,7 @@ test("storage quota rejection reproduces legacy unavailable and persisted photog
   assert.equal(history.member.photoUrl, null, "characterizes current response on failed signing, not absent DB data");
   assert.equal(h.member.photoUrl, photoUrl);
   for (const side of ["front", "back"]) {
-    assert.equal(history.member[side === "front" ? "dniFrontUrl" : "dniBackUrl"], url(side));
+    assert.equal(history.member[side === "front" ? "hasDniFront" : "hasDniBack"], true);
     const response = await h.get(side);
     assert.equal(response.status, 503);
     assert.deepEqual(await response.json(), { error: "DOCUMENT_UNAVAILABLE" });
@@ -220,7 +220,7 @@ test("cross-member, cross-side, arbitrary bucket/object and untrusted URL fail c
     "member-documents/members/17/dni-front.pdf/../secret", "member-documents/members/17/dni-front%2epdf"]) {
     const h = harness({ member: { dniFrontUrl: ref } });
     assert.equal((await h.get()).status, 404, ref);
-    assert.equal((await (await h.history()).json()).member.dniFrontUrl, null);
+    assert.equal((await (await h.history()).json()).member.hasDniFront, false);
   }
 });
 test("new content private, nosniff, confirmed MIME, safe filename; no internal metadata in HTTP", async () => {
@@ -317,8 +317,8 @@ test("real card: canonical current after DNI upload replaces visible legacy", as
   const { uiHarness } = await import("./fixtures/member-document-ui-harness.mjs");
   const h = harness(); let refreshes = 0, fail = false;
   const history = await (await h.history()).json();
-  const ui = uiHarness({ props: { memberId: 17, initialFrontUrl: history.member.dniFrontUrl,
-    initialBackUrl: history.member.dniBackUrl, canUpload: true }, fetch: async (path, options) => {
+  const ui = uiHarness({ props: { memberId: 17, initialFrontUrl: history.member.hasDniFront ? url("front") : null,
+    initialBackUrl: history.member.hasDniBack ? url("back") : null, canUpload: true }, fetch: async (path, options) => {
     if (options.method === "POST") {
       assert.equal(path, "/api/members/17/member-documents");
       return fail ? Response.json({ error: "UNSUPPORTED_MIME" }, { status: 415 }) : h.canonical(options.body);

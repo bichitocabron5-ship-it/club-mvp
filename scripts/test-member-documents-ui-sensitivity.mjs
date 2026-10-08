@@ -52,7 +52,7 @@ const mutations = [
   { name: "synchronous guard removed", fails: "upload front: synchronous lock", edits: [{ file: card, from: 'if (uploadLock.current || !canUpload || !mounted.current) return;', to: 'if (!canUpload || !mounted.current) return;' }] },
   { name: "successful POST misreported on refresh failure", fails: "upload refreshFailed:", edits: [{ file: card, from: 'Documento incorporado. No se pudo actualizar el listado.', to: 'No se pudo subir el documento.' }] },
   { name: "general refreshMember reactivated", fails: "whole page upload", edits: [
-    { file: page, from: 'initialBackUrl={data.member.dniBackUrl}', to: 'initialBackUrl={data.member.dniBackUrl} onUploaded={refreshMember}' },
+    { file: page, from: 'initialBackUrl={data.member.hasDniBack ? `/api/members/${id}/documents?side=back` : null}', to: 'initialBackUrl={data.member.hasDniBack ? `/api/members/${id}/documents?side=back` : null} onUploaded={refreshMember}' },
     { file: card, from: 'canUpload = false }: Props)', to: 'canUpload = false, onUploaded }: Props)' },
     { file: card, from: 'const refreshed = await refresh();', to: 'await onUploaded?.(); const refreshed = await refresh();' },
   ] },

@@ -13,14 +13,15 @@
     "typecheck": "prisma generate && next typegen && tsc --noEmit",
     "test:contract-template-migration": "node --test scripts/test-contract-template-migration.mjs",
     "test:operational-status-hardening": "node --test scripts/test-operational-status-hardening.mjs scripts/test-operational-status-sensitivity.mjs",
-    "ci": "npm run test:operational-status-hardening && npm run test:member-documents-ui && npm run test:member-document-reader && npm run test:member-document-core && npm run test:member-document-writer && npm run test:member-dni-convergence && npm run test:member-document-list && npm run test:member-document-content && npm run test:contract-template-migration && npm run lint && npm run typecheck && npm run build",
+    "ci": "npm run test:history-hardening && npm run test:operational-status-hardening && npm run test:member-documents-ui && npm run test:member-document-reader && npm run test:member-document-core && npm run test:member-document-writer && npm run test:member-dni-convergence && npm run test:member-document-list && npm run test:member-document-content && npm run test:contract-template-migration && npm run lint && npm run typecheck && npm run build",
     "test:member-document-reader": "node --test scripts/test-member-document-reader.mjs",
     "test:member-document-content": "node --test scripts/test-member-document-content.mjs",
     "test:member-document-list": "node --test scripts/test-member-document-list.mjs",
     "test:member-dni-convergence": "node --test scripts/test-member-dni-convergence.mjs",
     "test:member-document-writer": "node --test scripts/test-member-document-writer.mjs",
     "test:member-document-core": "node --test scripts/test-member-document-core.mjs",
-    "test:member-documents-ui": "node --test scripts/test-member-documents-ui.mjs scripts/test-member-documents-ui-sensitivity.mjs"
+    "test:member-documents-ui": "node --test scripts/test-member-documents-ui.mjs scripts/test-member-documents-ui-sensitivity.mjs",
+    "test:history-hardening": "node --test scripts/test-history-hardening.mjs scripts/test-history-sensitivity.mjs scripts/test-history-consumers.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",

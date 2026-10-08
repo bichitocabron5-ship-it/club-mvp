@@ -164,7 +164,7 @@ await test('new-member page reload fetches backend member and mounts panel for t
   assert.equal(nodes(initial).find(n => n.type === 'button' && n.props.type === 'submit').props.disabled, true);
   effects.splice(0).forEach(fn => fn()); await tick(); cursor = 0;
   const tree = Page();
-  assert.equal(calls.length, 1); assert.equal(calls[0].url, '/api/members/17/history'); assert.equal(calls[0].options.cache, 'no-store');
+  assert.equal(calls.length, 1); assert.equal(calls[0].url, '/api/members/17/registration'); assert.equal(calls[0].options.cache, 'no-store');
   assert.equal(nodes(tree).find(n => n.type === 'SigningPanel').props.memberId, 17);
   assert.equal(nodes(tree).some(n => n.type === 'form'), false);
 });

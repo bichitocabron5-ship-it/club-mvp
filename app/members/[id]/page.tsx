@@ -1247,8 +1247,8 @@ function MemberDetailContent({ id }: { id: string }) {
 
       <MemberDocumentsCard
         memberId={id}
-        initialFrontUrl={data.member.dniFrontUrl}
-        initialBackUrl={data.member.dniBackUrl}
+        initialFrontUrl={data.member.hasDniFront ? `/api/members/${id}/documents?side=front` : null}
+        initialBackUrl={data.member.hasDniBack ? `/api/members/${id}/documents?side=back` : null}
         canUpload={Boolean(authReady && canUploadPhoto)}
       />
 
@@ -1674,7 +1674,7 @@ function MemberDetailContent({ id }: { id: string }) {
                                 : "text-[#861f23]"
                             }`}
                           >
-                            {Number(sale.totalAmount).toLocaleString("es-ES", {
+                            {Number(sale.finalAmount ?? sale.totalAmount).toLocaleString("es-ES", {
                               style: "currency",
                               currency: "EUR",
                             })}
@@ -1682,7 +1682,7 @@ function MemberDetailContent({ id }: { id: string }) {
 
                           {sale.originalAmount !== null &&
                           Number(sale.originalAmount) !==
-                            Number(sale.totalAmount) ? (
+                            Number(sale.finalAmount ?? sale.totalAmount) ? (
                             <div className="mt-1 text-xs app-muted line-through">
                               {Number(sale.originalAmount).toLocaleString("es-ES", {
                                 style: "currency",

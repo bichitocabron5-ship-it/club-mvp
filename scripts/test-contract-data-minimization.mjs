@@ -130,7 +130,7 @@ for (const role of ["STAFF", "ADMIN"]) {
   });
   await test(`${role}: history remains free of signature`, async () => {
     assert.deepEqual(await safeBody(await harness({ role }).get("history")), {
-      member, sales: [], totalSpent: 0, count: 0,
+      member: { id: member.id, fullName: member.fullName, dni: member.dni, photoUrl: null, hasDniFront: false, hasDniBack: false }, sales: [], totalSpent: 0, count: 0,
     });
   });
 }
@@ -207,9 +207,9 @@ for (const role of ["STAFF", "ADMIN"]) {
     const h = harness({ role, jwtRole: "OTHER", members });
     for (const row of members) {
       assert.deepEqual(await safeBody(await h.get("history", String(row.id))), {
-        member: { ...row, photoUrl: `https://storage.invalid/${row.photoUrl}`,
-          dniFrontUrl: `/api/members/${row.id}/documents?side=front`,
-          dniBackUrl: `/api/members/${row.id}/documents?side=back` },
+        member: { id: row.id, fullName: row.fullName, dni: row.dni, photoUrl: `https://storage.invalid/${row.photoUrl}`,
+          hasDniFront: true,
+          hasDniBack: true },
         sales: [], totalSpent: 0, count: 0,
       });
     }
