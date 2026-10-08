@@ -1,6 +1,6 @@
 import type { FocusEvent, KeyboardEvent } from "react";
 
-import type { MemberSummary } from "@/lib/types";
+import type { MemberListItem } from "@/lib/types";
 
 export function SalesMemberSearch({
   disabled,
@@ -18,13 +18,13 @@ export function SalesMemberSearch({
   onMemberSearchChange,
 }: {
   disabled: boolean;
-  filteredMembers: MemberSummary[];
+  filteredMembers: MemberListItem[];
   memberId: string;
   memberRecentSalesError: string;
   memberRecentSalesLoading: boolean;
   memberRecentSummary: string;
   memberSearch: string;
-  selectedMember: (Pick<MemberSummary, "id" | "memberNumber" | "fullName"> & { dni?: string }) | null;
+  selectedMember: (Pick<MemberListItem, "id" | "memberNumber" | "fullName"> & { dni?: string }) | null;
   onClearMember: () => void;
   onMemberChange: (memberId: string) => void;
   onMemberSearchBlur: () => void;

@@ -42,5 +42,8 @@ jobs:
       - name: Member mutation hardening and sensitivity
         run: npm run test:member-mutation-hardening
 
+      - name: Members list hardening and sensitivity
+        run: npm run test:members-list-hardening
+
       - name: Build
         run: npm run build

@@ -12,7 +12,7 @@ import {
   type TodayTotals,
 } from "@/lib/helpers/sales-cart";
 import { normalizeMemberIdentity } from "@/lib/member-identity";
-import type { MemberSummary } from "@/lib/types";
+import type { MemberListItem } from "@/lib/types";
 
 type MemberOperationalDataLoadOptions = {
   reportLoadErrors?: boolean;
@@ -24,7 +24,7 @@ export function useSalesMember({
   onMemberLoadSuccess,
   rfidRef,
 }: {
-  members: MemberSummary[];
+  members: MemberListItem[];
   onMemberLoadError: (message: string) => void;
   onMemberLoadSuccess: () => void;
   rfidRef: RefObject<HTMLInputElement | null>;

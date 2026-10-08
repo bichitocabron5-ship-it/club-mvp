@@ -77,7 +77,10 @@ async function pageHarness({ listedMembers = members, canWithdraw = true } = {})
   let lookup = async () => Response.json({ id: 1, fullName: "Member 1" });
   let sale = async () => Response.json({ sales: [{ id: 1, memberId: Number(page.memberId) }], totalAmount: 9 });
   const fetchJson = async url => {
-    if (url === "/api/members") return listedMembers;
+    if (url === "/api/members") return listedMembers.map(m => ({
+      id: m.id, memberNumber: String(m.id), fullName: m.fullName, dni: m.dni,
+      phone: null, active: true, expiresAt: null, hasRfid: true, hasContract: true, expired: false,
+    }));
     if (url === "/api/products") return [product];
     if (url.endsWith("/today")) return totals;
     if (url.endsWith("/operational-status")) {
