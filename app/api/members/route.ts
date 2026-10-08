@@ -14,6 +14,7 @@ import { prisma } from "@/lib/prisma";
 import { getMemberOperationalFacts } from "@/lib/member-operational-status";
 import { normalizeRfidCode } from "@/lib/rfid";
 import { NextResponse } from "next/server";
+import { memberMutationJson } from "@/lib/member-mutation-response";
 import { z } from "zod";
 
 const memberSchema = z.object({
@@ -95,7 +96,7 @@ export async function POST(req: Request) {
   try {
     const auth = await requireStaffOrAdmin();
     if (!auth.ok) {
-      return NextResponse.json({ error: auth.error }, { status: auth.status });
+      return memberMutationJson({ error: auth.error }, { status: auth.status });
     }
 
     let body: unknown;
@@ -103,12 +104,12 @@ export async function POST(req: Request) {
       body = await req.json();
     } catch (error) {
       if (!(error instanceof SyntaxError)) throw error;
-      return NextResponse.json({ code: "INVALID_PAYLOAD", error: "JSON invalido" }, { status: 400 });
+      return memberMutationJson({ code: "INVALID_PAYLOAD", error: "JSON invalido" }, { status: 400 });
     }
     const parsed = memberSchema.safeParse(body);
 
     if (!parsed.success) {
-      return NextResponse.json({ error: "Datos invalidos" }, { status: 400 });
+      return memberMutationJson({ error: "Datos invalidos" }, { status: 400 });
     }
 
     const normalizedMemberNumber = normalizeMemberNumber(parsed.data.memberNumber);
@@ -120,23 +121,23 @@ export async function POST(req: Request) {
         : normalizeRfidCode(parsed.data.rfidCode);
 
     if (!validatedMemberNumber.ok) {
-      return NextResponse.json({ error: validatedMemberNumber.error }, { status: 400 });
+      return memberMutationJson({ error: validatedMemberNumber.error }, { status: 400 });
     }
 
     if (!normalizedDni) {
-      return NextResponse.json(
+      return memberMutationJson(
         { error: "Documento de identidad invalido" },
         { status: 400 }
       );
     }
 
     if (typeof parsed.data.rfidCode === "string" && !normalizedRfidCode) {
-      return NextResponse.json({ error: "Codigo RFID invalido" }, { status: 400 });
+      return memberMutationJson({ error: "Codigo RFID invalido" }, { status: 400 });
     }
 
     const expiresAt = parsed.data.expiresAt ? new Date(parsed.data.expiresAt) : null;
     if (expiresAt && Number.isNaN(expiresAt.getTime())) {
-      return NextResponse.json({ code: "INVALID_PAYLOAD", error: "Fecha invalida" }, { status: 400 });
+      return memberMutationJson({ code: "INVALID_PAYLOAD", error: "Fecha invalida" }, { status: 400 });
     }
 
     const isAdmin = auth.session.user.role === "ADMIN";
@@ -167,7 +168,7 @@ export async function POST(req: Request) {
       }
 
       if (forbiddenFields.length > 0) {
-        return NextResponse.json(
+        return memberMutationJson(
           {
             error: `No tienes permiso para definir estos campos: ${forbiddenFields.join(", ")}`,
           },
@@ -224,7 +225,16 @@ export async function POST(req: Request) {
           });
           return created;
         });
-        return NextResponse.json(member);
+        return memberMutationJson({
+          id: member.id,
+          memberNumber: member.memberNumber,
+          fullName: member.fullName,
+          dni: member.dni,
+          phone: member.phone,
+          email: member.email,
+          expiresAt: member.expiresAt,
+          rfidCode: member.rfidCode,
+        });
       } catch (error) {
         if (!explicitNumber && error instanceof MemberCreateConflict && error.field === "memberNumber") {
           continue;
@@ -232,7 +242,7 @@ export async function POST(req: Request) {
         throw error;
       }
     }
-    return NextResponse.json(
+    return memberMutationJson(
       { code: "MEMBER_NUMBER_GENERATION_CONFLICT", error: "No se pudo asignar un numero de socio unico. Reintenta." },
       { status: 409 }
     );
@@ -243,8 +253,8 @@ export async function POST(req: Request) {
         memberNumber: { code: "MEMBER_NUMBER_ALREADY_EXISTS", error: "El numero de socio ya existe." },
         rfidCode: { code: "RFID_ALREADY_ASSIGNED", error: "Esta chapita ya esta asignada a otro socio" },
       };
-      return NextResponse.json(conflicts[error.field], { status: 409 });
+      return memberMutationJson(conflicts[error.field], { status: 409 });
     }
-    return NextResponse.json({ error: "No se pudo crear el socio." }, { status: 500 });
+    return memberMutationJson({ error: "No se pudo crear el socio." }, { status: 500 });
   }
 }

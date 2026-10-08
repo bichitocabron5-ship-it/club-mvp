@@ -14,7 +14,6 @@ type CreatedMember = {
   dni: string;
   phone: string | null;
   email: string | null;
-  active: boolean;
   expiresAt: string | null;
   rfidCode: string | null;
 };
@@ -24,7 +23,6 @@ function isCreatedMember(value: unknown): value is CreatedMember {
   const member = value as Partial<CreatedMember>;
   return typeof member.id === "number" && Number.isSafeInteger(member.id) && member.id > 0 &&
     typeof member.fullName === "string" && typeof member.dni === "string" &&
-    typeof member.active === "boolean" &&
     (member.memberNumber === undefined || member.memberNumber === null ||
       typeof member.memberNumber === "string" || typeof member.memberNumber === "number") &&
     (member.phone === null || typeof member.phone === "string") &&
@@ -157,8 +155,8 @@ export default function NewMemberPage() {
         return;
       }
 
-      const updated: CreatedMember = await res.json();
-      setCreatedMember(updated);
+      const updated: { rfidCode: string | null } = await res.json();
+      setCreatedMember((current) => current ? { ...current, rfidCode: updated.rfidCode } : current);
       setAssigningRfid(false);
       setRfidInput("");
       setRfidMessage(`Chapita asignada correctamente: ${updated.rfidCode}`);

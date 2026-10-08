@@ -12,7 +12,7 @@ import {
   validateImageFile,
 } from "@/lib/storage";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { NextResponse } from "next/server";
+import { memberMutationJson } from "@/lib/member-mutation-response";
 
 function getUploadedImage(formData: FormData) {
   const value = formData.get("image");
@@ -38,7 +38,7 @@ export async function POST(
 ) {
   const auth = await requireStaffOrAdmin();
   if (!auth.ok) {
-    return NextResponse.json(
+    return memberMutationJson(
       { error: auth.status === 401 ? "No hay sesion." : "No tienes permiso para subir la foto del socio." },
       { status: auth.status }
     );
@@ -48,7 +48,7 @@ export async function POST(
   const memberId = Number(id);
 
   if (!Number.isInteger(memberId) || memberId <= 0) {
-    return NextResponse.json({ error: "ID de socio invalido" }, { status: 400 });
+    return memberMutationJson({ error: "ID de socio invalido" }, { status: 400 });
   }
 
   const member = await prisma.member.findUnique({
@@ -61,11 +61,11 @@ export async function POST(
   });
 
   if (!member) {
-    return NextResponse.json({ error: "Socio no encontrado" }, { status: 404 });
+    return memberMutationJson({ error: "Socio no encontrado" }, { status: 404 });
   }
 
   if (isStorageUrlsDisabled()) {
-    return NextResponse.json(
+    return memberMutationJson(
       { error: STORAGE_UPLOAD_DISABLED_MESSAGE },
       { status: 503 }
     );
@@ -75,22 +75,22 @@ export async function POST(
   const image = getUploadedImage(formData);
 
   if (image === "INVALID") {
-    return NextResponse.json({ error: "Archivo invalido" }, { status: 400 });
+    return memberMutationJson({ error: "Archivo invalido" }, { status: 400 });
   }
 
   if (!image) {
-    return NextResponse.json({ error: "Debes adjuntar una imagen." }, { status: 400 });
+    return memberMutationJson({ error: "Debes adjuntar una imagen." }, { status: 400 });
   }
 
   const validationError = validateImageFile(image);
   if (validationError) {
-    return NextResponse.json({ error: validationError }, { status: 400 });
+    return memberMutationJson({ error: validationError }, { status: 400 });
   }
 
   const extension = getImageExtension(image.type);
 
   if (!extension) {
-    return NextResponse.json({ error: "Formato no soportado" }, { status: 400 });
+    return memberMutationJson({ error: "Formato no soportado" }, { status: 400 });
   }
 
   try {
@@ -125,7 +125,7 @@ export async function POST(
       },
     });
 
-    return NextResponse.json({
+    return memberMutationJson({
       photoUrl: await createStorageSignedUrl(
         {
           bucket: uploaded.bucket,
@@ -137,7 +137,7 @@ export async function POST(
       ),
     });
   } catch (error) {
-    return NextResponse.json(
+    return memberMutationJson(
       {
         error:
           error instanceof Error

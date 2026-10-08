@@ -11,7 +11,7 @@ import {
 } from "@/lib/member-number";
 import { prisma } from "@/lib/prisma";
 import { normalizeRfidCode } from "@/lib/rfid";
-import { NextResponse } from "next/server";
+import { memberMutationJson } from "@/lib/member-mutation-response";
 import { z } from "zod";
 
 const staffEditableFields = [
@@ -65,20 +65,20 @@ export async function PATCH(
 ) {
   const auth = await requireStaffOrAdmin();
   if (!auth.ok) {
-    return NextResponse.json({ error: auth.error }, { status: auth.status });
+    return memberMutationJson({ error: auth.error }, { status: auth.status });
   }
 
   const { id } = await params;
   const memberId = Number(id);
   if (!Number.isSafeInteger(memberId) || memberId <= 0) {
-    return NextResponse.json({ error: "ID invalido" }, { status: 400 });
+    return memberMutationJson({ error: "ID invalido" }, { status: 400 });
   }
 
   let body;
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ code: "INVALID_PAYLOAD", error: "JSON invalido" }, { status: 400 });
+    return memberMutationJson({ code: "INVALID_PAYLOAD", error: "JSON invalido" }, { status: 400 });
   }
 
   // Inspect the original JSON before Zod can strip unknown editable fields.
@@ -89,12 +89,12 @@ export async function PATCH(
       expectedRfidCode: z.string().nullable(),
     }).strict().safeParse(body);
     if (!parsedRfid.success) {
-      return NextResponse.json({ code: "INVALID_PAYLOAD", error: "RFID requiere destino y precondicion, sin otros campos" }, { status: 400 });
+      return memberMutationJson({ code: "INVALID_PAYLOAD", error: "RFID requiere destino y precondicion, sin otros campos" }, { status: 400 });
     }
     const destination = parsedRfid.data.rfidCode === null ? null : normalizeRfidCode(parsedRfid.data.rfidCode);
     const expected = parsedRfid.data.expectedRfidCode === null ? null : normalizeRfidCode(parsedRfid.data.expectedRfidCode);
     if (destination === "" || expected === "") {
-      return NextResponse.json({ code: "INVALID_PAYLOAD", error: "Codigo RFID invalido" }, { status: 400 });
+      return memberMutationJson({ code: "INVALID_PAYLOAD", error: "Codigo RFID invalido" }, { status: 400 });
     }
     try {
       const result = await prisma.$transaction(async (tx) => {
@@ -112,7 +112,7 @@ export async function PATCH(
         if (updated.count === 0) {
           return (member.rfidCode === expected && expected === destination) ||
             (member.rfidCode === null && destination === null)
-            ? { status: 200, body: member }
+            ? { status: 200, body: { rfidCode: member.rfidCode } }
             : { status: 409, body: { code: "RFID_EXPECTATION_FAILED", error: "La RFID del socio cambio desde la confirmacion" } };
         }
         const actorUserId = Number(auth.session.user.id);
@@ -131,19 +131,19 @@ export async function PATCH(
             },
           },
         });
-        return { status: 200, body: member };
+        return { status: 200, body: { rfidCode: member.rfidCode } };
       });
-      return NextResponse.json(result.body, { status: result.status });
+      return memberMutationJson(result.body, { status: result.status });
     } catch (error) {
       if (error instanceof RfidAlreadyAssignedError) {
-        return NextResponse.json({ code: "RFID_ALREADY_ASSIGNED", error: "Esta chapita ya esta asignada a otro socio" }, { status: 409 });
+        return memberMutationJson({ code: "RFID_ALREADY_ASSIGNED", error: "Esta chapita ya esta asignada a otro socio" }, { status: 409 });
       }
-      return NextResponse.json({ error: "No se pudo actualizar la RFID" }, { status: 500 });
+      return memberMutationJson({ error: "No se pudo actualizar la RFID" }, { status: 500 });
     }
   }
   const parsed = memberUpdateSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: "Datos invalidos" }, { status: 400 });
+    return memberMutationJson({ error: "Datos invalidos" }, { status: 400 });
   }
   const data = parsed.data;
   const normalizedMemberNumber = normalizeMemberNumber(data.memberNumber);
@@ -152,15 +152,15 @@ export async function PATCH(
     data.dni === undefined ? undefined : normalizeMemberIdentity(data.dni);
   const normalizedExpiresAt = normalizeDateOnly(data.expiresAt);
   if (!validatedMemberNumber.ok) {
-    return NextResponse.json({ error: validatedMemberNumber.error }, { status: 400 });
+    return memberMutationJson({ error: validatedMemberNumber.error }, { status: 400 });
   }
 
   if (normalizedExpiresAt === "INVALID") {
-    return NextResponse.json({ error: "Fecha invalida" }, { status: 400 });
+    return memberMutationJson({ error: "Fecha invalida" }, { status: 400 });
   }
 
   if (data.dni !== undefined && !normalizedDni) {
-    return NextResponse.json(
+    return memberMutationJson(
       { error: "Documento de identidad invalido" },
       { status: 400 }
     );
@@ -171,7 +171,7 @@ export async function PATCH(
   });
 
   if (!existingMember) {
-    return NextResponse.json({ error: "Socio no encontrado" }, { status: 404 });
+    return memberMutationJson({ error: "Socio no encontrado" }, { status: 404 });
   }
 
   const isAdmin = auth.session.user.role === "ADMIN";
@@ -209,7 +209,7 @@ export async function PATCH(
     }
 
     if (attemptedForbiddenFields.length > 0) {
-      return NextResponse.json(
+      return memberMutationJson(
         {
           error: `No tienes permiso para modificar estos campos: ${attemptedForbiddenFields.join(", ")}`,
           allowedFields: staffEditableFields,
@@ -334,23 +334,23 @@ export async function PATCH(
       }
     }
 
-    return NextResponse.json(member);
+    return memberMutationJson({ ok: true });
   } catch (error) {
     if (isUniqueConstraintError(error, "memberNumber")) {
-      return NextResponse.json(
+      return memberMutationJson(
         { error: "El numero de socio ya existe." },
         { status: 400 }
       );
     }
 
     if (isUniqueConstraintError(error, "dni")) {
-      return NextResponse.json(
+      return memberMutationJson(
         { error: "No se pudo actualizar. El DNI ya existe." },
         { status: 409 }
       );
     }
 
-    return NextResponse.json(
+    return memberMutationJson(
       {
         error: "No se pudo actualizar. Revisa numero de socio, DNI o RFID duplicados.",
       },

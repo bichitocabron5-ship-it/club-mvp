@@ -20,7 +20,13 @@ function loader(mocks, globals = {}) {
     if (cache.has(name)) return cache.get(name);
     const base = resolve(root, name.slice(2));
     const filename = base + (existsSync(base + ".ts") ? ".ts" : ".tsx");
-    const code = ts.transpileModule(readFileSync(filename, "utf8"), {
+    let source = readFileSync(filename, "utf8");
+    for (const mutation of JSON.parse(process.env.MEMBER_MUTATION_MUTATIONS ?? "[]")) {
+      if (resolve(root, mutation.file) !== filename) continue;
+      assert.ok(source.includes(mutation.from), `Mutation anchor missing: ${mutation.from}`);
+      source = source.replaceAll(mutation.from, mutation.to);
+    }
+    const code = ts.transpileModule(source, {
       compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
     }).outputText;
     const exports = {};
@@ -117,7 +123,9 @@ await test("A/C/G: minimal automatic create, canonical DNI and omitted RFID", as
   assert.equal(result.body.fullName, "Test Member"); assert.equal(result.body.dni, "AB1234");
   assert.equal(result.body.memberNumber, "1"); assert.equal(result.body.rfidCode, null);
   assert.equal(h.calls.reads, 1); assert.equal(h.calls.transactions, 1);
-  assert.deepEqual(result.body, h.members[0]);
+  assert.deepEqual(result.body, Object.fromEntries(
+    ["id", "memberNumber", "fullName", "dni", "phone", "email", "expiresAt", "rfidCode"].map(key => [key, h.members[0][key]])
+  ));
 });
 await test("B: explicit number keeps syntax and bypasses algorithm", async () => {
   const h = apiHarness(); const r = await h.post({ ...minimum, memberNumber: "  X-001  " });
@@ -210,7 +218,7 @@ for (const field of ["active", "commercialProfile", "discountPercent", "commerci
 await test("T/V: persisted STAFF and ADMIN authority", async () => {
   const staff = apiHarness({ role: "STAFF" }); assert.equal((await staff.post()).status, 200);
   const admin = apiHarness(); const r = await admin.post({ ...minimum, active: false, discountPercent: 5, commercialProfile: "VIP", commercialNotes: "note" });
-  assert.equal(r.status, 200); assert.equal(r.body.active, false); assert.equal(r.body.discountPercent, 5);
+  assert.equal(r.status, 200); assert.equal(admin.members[0].active, false); assert.equal(admin.members[0].discountPercent, 5);
 });
 for (const [label, options, status] of [["W", { noSession: true }, 401], ["X", { role: "MEMBER" }, 403], ["inactive stale session", { active: false }, 401]]) {
   await test(label, async () => {
@@ -241,8 +249,8 @@ await test("audit preserves existing truncation without truncating Member", asyn
 });
 await test("unchanged permissive contracts and unknown fields", async () => {
   const h = apiHarness(); const r = await h.post({ ...minimum, active: "false", email: "not-email", phone: "free", commercialProfile: "", extra: "ignored" });
-  assert.equal(r.status, 200); assert.equal(r.body.active, true); assert.equal(r.body.email, "not-email");
-  assert.equal(r.body.commercialProfile, ""); assert.ok(!("extra" in r.body));
+  assert.equal(r.status, 200); assert.equal(h.members[0].active, true); assert.equal(r.body.email, "not-email");
+  assert.equal(h.members[0].commercialProfile, ""); assert.ok(!("extra" in r.body));
   for (const body of [{ name: "wrong", dni: "1" }, { ...minimum, memberNumber: null }, { ...minimum, memberNumber: " " }, { ...minimum, dni: "" }]) {
     assert.equal((await h.post(body)).status, 400);
   }
@@ -267,9 +275,9 @@ function pageHarness(path) {
   const load = loader({
     react, "react/jsx-runtime": { jsx, jsxs: jsx }, "next/link": { default: "a" },
     "@/components/ui/page-header": { PageHeader: "header" },
-  }, { URL, queueMicrotask: fn => fn(), window: { location: { href: "https://test/members/new" }, history: { replaceState() {} } }, fetch: async (url, options = {}) => {
+  }, { URL, setTimeout: () => 0, clearTimeout() {}, queueMicrotask: fn => fn(), window: { location: { href: "https://test/members/new" }, history: { replaceState() {} } }, fetch: async (url, options = {}) => {
     requests.push({ url, ...options });
-    return options.method === "POST" ? reply(url, options) : refresh();
+    return ["POST", "PATCH"].includes(options.method) ? reply(url, options) : refresh();
   } });
   const Page = load(path).default;
   function render() { cursor = 0; tree = Page(); }
@@ -279,7 +287,7 @@ function pageHarness(path) {
     return [node, ...nodes(node.props?.children ?? null)];
   }
   function text(node = tree) {
-    if (Array.isArray(node)) return node.map(item => text(item)).join(" ");
+    if (Array.isArray(node)) return node.map(item => text(item ?? null)).join(" ");
     if (node && typeof node === "object") return text(node.props?.children ?? null);
     return typeof node === "string" || typeof node === "number" ? String(node) : "";
   }
@@ -369,5 +377,19 @@ await test("confirmed quick create with refresh failure remains confirmed", asyn
   h.reply(async () => Response.json(created)); h.refresh(async () => Response.json({}, { status: 500 }));
   await h.submit(); h.render(); assert.ok(h.text().includes("Socio creado. No se pudo actualizar"));
   assert.ok(!h.text().includes("Resultado sin confirmar")); assert.equal(h.field("DNI").props.value, "");
+});
+await test("minimal RFID response preserves registration identity and signing target", async () => {
+  const h = pageHarness("@/app/members/new/page");
+  h.reply(async (_url, options) => options.method === "POST" ? Response.json(created) : Response.json({ rfidCode: "CONFIRMED" }));
+  await h.submit(); h.render();
+  h.nodes().find(node => node.type === "button" && h.text(node).includes("Asignar chapita")).props.onClick(); h.render();
+  h.nodes().find(node => node.type === "input" && node.props.autoFocus).props.onChange({ target: { value: "CONFIRMED" } }); h.render();
+  await h.submit(); await new Promise(resolve => setImmediate(resolve)); h.render();
+  const patch = h.requests.find(request => request.method === "PATCH");
+  assert.equal(patch.url, `/api/members/${created.id}`);
+  assert.deepEqual(JSON.parse(patch.body), { rfidCode: "CONFIRMED", expectedRfidCode: null });
+  assert.ok(h.text().includes(created.fullName)); assert.ok(h.text().includes(created.dni));
+  assert.ok(h.text().includes("CONFIRMED"));
+  assert.ok(h.nodes().some(node => node.props?.memberId === created.id));
 });
 console.log(`${checks} focused checks passed. Simulated transactions; PostgreSQL concurrency not exercised.`);
