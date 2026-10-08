@@ -65,7 +65,10 @@ function harness(options = {}) {
         id: true, fullName: true, active: true, expiresAt: true,
         rfidCode: true, commercialProfile: true, discountPercent: true,
       },
-    } : args.select ? { where: { id: 1 }, select: { id: true } } : { where: { id: 1 } });
+    } : args.select?.active ? { where: { id: 1 }, select: {
+      id: true, memberNumber: true, fullName: true, active: true, expiresAt: true,
+      rfidCode: true, commercialProfile: true, discountPercent: true,
+    } } : { where: { id: 1 }, select: { id: true } });
     return options.missingMember ? null : state.member;
   };
   const prisma = {
@@ -331,7 +334,9 @@ for (const [name, options, hasContract, expired, canWithdraw, inactive] of statu
   await test(`Operational-status ${name}: exact DTO`, async () => {
     const h = harness(options);
     assert.deepEqual(await expectResponse(await h.get(), 200), {
-      member: { ...plain(h.state.member), dniFrontUrl: null, dniBackUrl: null }, hasContract,
+      member: { id: h.state.member.id, fullName: h.state.member.fullName,
+        active: h.state.member.active, expiresAt: h.state.member.expiresAt?.toISOString() ?? null,
+        commercialProfile: h.state.member.commercialProfile, discountPercent: h.state.member.discountPercent }, hasContract,
       contract: hasContract ? { monthlyLimitG: options.contract === undefined ? 30 : options.contract.consumptionGrams } : null,
       expired, canWithdraw, reasons: { inactive, noContract: !hasContract, expired },
     });
