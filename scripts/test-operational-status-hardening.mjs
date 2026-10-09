@@ -58,8 +58,9 @@ function harness(options = {}) {
     const exports = {};
     cache.set(name, exports);
     let source = readFileSync(filename, "utf8");
-    if (name === "@/app/api/members/[id]/operational-status/route") {
-      for (const { from, to } of JSON.parse(process.env.OPERATIONAL_STATUS_MUTATIONS ?? "[]")) {
+    {
+      for (const { from, to, file = "@/app/api/members/[id]/operational-status/route" } of JSON.parse(process.env.OPERATIONAL_STATUS_MUTATIONS ?? "[]")) {
+        if (name !== file) continue;
         assert.ok(source.includes(from), `Mutation anchor missing: ${from}`);
         source = source.replaceAll(from, to);
       }

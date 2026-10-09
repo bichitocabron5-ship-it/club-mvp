@@ -337,10 +337,20 @@ await test("core owns contract and expiry facts; active remains an early guard",
   assert.ok(source.indexOf("if (!member.active)") < source.indexOf("await tx.memberContract.findFirst"));
 });
 
-await test("R/S scope review: current, auto-checkout, UI and core unchanged from HEAD", () => {
+await test("R/S scope review: current, auto-checkout, UI and core facts unchanged from HEAD", () => {
   // Sprint scope assertion, separate from behavioral coverage; no database access.
-  const paths = ["lib/member-operational-status.ts", "lib/access.ts", "app/api/access/current/route.ts", "app/api/access/auto-checkout/route.ts", "app/access/page.tsx"];
+  const paths = ["lib/access.ts", "app/api/access/current/route.ts", "app/api/access/auto-checkout/route.ts", "app/access/page.tsx"];
   const diff = execFileSync("git", ["diff", "HEAD", "--", ...paths], { cwd: root, encoding: "utf8" });
   assert.equal(diff, "");
+  // Overview adds a composition export; the access facts themselves must not change.
+  const filename = "lib/member-operational-status.ts";
+  const baseline = execFileSync("git", ["show", `HEAD:${filename}`], { cwd: root, encoding: "utf8" });
+  const factsDeclaration = text => {
+    const ast = ts.createSourceFile(filename, text, ts.ScriptTarget.Latest, true);
+    const declaration = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "getMemberOperationalFacts");
+    assert.ok(declaration, "Shared access facts must still exist");
+    return declaration.getText(ast).replaceAll("\r\n", "\n");
+  };
+  assert.equal(factsDeclaration(readFileSync(new URL(filename, root), "utf8")), factsDeclaration(baseline));
 });
 console.log(`${checks} checks passed against the production Access POST and operational helper.`);

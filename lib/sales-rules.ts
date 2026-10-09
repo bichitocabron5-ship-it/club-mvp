@@ -20,6 +20,24 @@ export function normalizeUnit(unit: string): ProductUnit | null {
   return null;
 }
 
+// Preserve the sales engine's server-local calendar month, not a UTC window.
+export function getMonthRange(now = new Date()) {
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  start.setDate(1);
+
+  const end = new Date(start);
+  end.setMonth(end.getMonth() + 1);
+
+  return { start, end };
+}
+
+export function getMonthlyGramTotal(sales: SaleWithProductUnit[]) {
+  return sales.reduce((total, sale) => {
+    return normalizeUnit(sale.product.unit) === "G" ? total + sale.qty : total;
+  }, 0);
+}
+
 export function getTodayRange() {
   const start = new Date();
   start.setHours(0, 0, 0, 0);

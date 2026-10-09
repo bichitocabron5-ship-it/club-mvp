@@ -19,6 +19,20 @@ export type MemberOperationalFacts = {
   hasRfid: boolean;
 };
 
+// Basic eligibility only; sales/access must still enforce their own restrictions.
+export function composeMemberOperationalStatus(facts: MemberOperationalFacts) {
+  return {
+    expired: facts.expired,
+    hasContract: facts.hasContract,
+    canWithdraw: facts.active && !facts.expired && facts.hasContract,
+    reasons: {
+      inactive: !facts.active,
+      noContract: !facts.hasContract,
+      expired: facts.expired,
+    },
+  };
+}
+
 /**
  * currentContract is selected by the caller's policy, not proof of legal validity.
  * Dates must be valid: Invalid Date yields NaN and would make expiry compare false.

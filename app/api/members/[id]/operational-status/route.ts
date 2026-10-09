@@ -1,7 +1,7 @@
 // app/api/members/[id]/operational-status/route.ts
 import { requireStaffOrAdmin } from "@/lib/auth-server";
 import type { MemberOperationalStatus } from "@/lib/helpers/sales-cart";
-import { getMemberOperationalFacts } from "@/lib/member-operational-status";
+import { composeMemberOperationalStatus, getMemberOperationalFacts } from "@/lib/member-operational-status";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
@@ -61,7 +61,7 @@ export async function GET(
     now,
   );
 
-  const canWithdraw = facts.active && !facts.expired && facts.hasContract;
+  const operational = composeMemberOperationalStatus(facts);
 
   const response: MemberOperationalStatus = {
     // Identity fallback and commercial fields are consumed by the existing TPV.
@@ -74,19 +74,12 @@ export async function GET(
       commercialProfile: member.commercialProfile,
       discountPercent: member.discountPercent,
     },
-    hasContract: facts.hasContract,
+    ...operational,
     contract: facts.hasContract
       ? {
           monthlyLimitG: facts.monthlyLimitG,
         }
       : null,
-    expired: facts.expired,
-    canWithdraw,
-    reasons: {
-      inactive: !facts.active,
-      noContract: !facts.hasContract,
-      expired: facts.expired,
-    },
   };
   return NextResponse.json(response, { headers });
 }
