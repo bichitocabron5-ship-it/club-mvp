@@ -9,6 +9,7 @@ import { isClosureOpen } from "@/lib/day-closure";
 import { getMemberOperationalFacts } from "@/lib/member-operational-status";
 import { prisma } from "@/lib/prisma";
 import { normalizeRfidCode } from "@/lib/rfid";
+import { getMonthRange, getMonthlyGramTotal } from "@/lib/sales-rules";
 import {
   getDailyTotals,
   getMemberSalePricing,
@@ -552,23 +553,6 @@ async function getSaleMemberStatusTx(
     ...member,
     monthlyLimitG: facts.monthlyLimitG,
   } satisfies TransactionMember;
-}
-
-function getMonthRange() {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  start.setDate(1);
-
-  const end = new Date(start);
-  end.setMonth(end.getMonth() + 1);
-
-  return { start, end };
-}
-
-function getMonthlyGramTotal(sales: Array<{ qty: number; product: { unit: string } }>) {
-  return sales.reduce((total, sale) => {
-    return normalizeUnit(sale.product.unit) === "G" ? total + sale.qty : total;
-  }, 0);
 }
 
 function getLinePricing(
