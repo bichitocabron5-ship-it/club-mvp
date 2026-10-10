@@ -53,7 +53,7 @@ const mutations = [
   { name: "successful POST misreported on refresh failure", fails: "upload refreshFailed:", edits: [{ file: card, from: 'Documento incorporado. No se pudo actualizar el listado.', to: 'No se pudo subir el documento.' }] },
   { name: "general refreshMember reactivated", fails: "whole page upload", edits: [
     { file: page, from: 'initialBackUrl={data.member.hasDniBack ? `/api/members/${id}/documents?side=back` : null}', to: 'initialBackUrl={data.member.hasDniBack ? `/api/members/${id}/documents?side=back` : null} onUploaded={refreshMember}' },
-    { file: card, from: 'canUpload = false }: Props)', to: 'canUpload = false, onUploaded }: Props)' },
+    { file: card, from: 'canUpload = false, onChanged }: Props)', to: 'canUpload = false, onChanged, onUploaded }: Props)' },
     { file: card, from: 'const refreshed = await refresh();', to: 'await onUploaded?.(); const refreshed = await refresh();' },
   ] },
   { name: "stale generation guard removed", fails: "older success arriving", edits: [{ file: card, from: 'mounted.current && generation.current === version', to: 'mounted.current' }] },

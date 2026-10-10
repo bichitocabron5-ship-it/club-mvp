@@ -1,3 +1,4 @@
+import { overviewFromOperational } from "./fixtures/member-overview.mjs";
 // Production GET, core and page callbacks/JSX; simulated hooks, HTTP, auth and Prisma.
 // No real browser/database. Run: node scripts/test-member-operational-ui.mjs
 import assert from "node:assert/strict";
@@ -150,17 +151,19 @@ await test("GET maps facts.hasContract and facts.expired, without recomputing th
 function nodes(node) {
   if (!node || typeof node !== "object") return [];
   if (Array.isArray(node)) return node.flatMap(nodes);
+  if (node.type?.name === "MemberProfileHeader") return nodes(node.type(node.props));
   return [node, ...nodes(node.props?.children)];
 }
 const text = node => typeof node === "string" || typeof node === "number" ? String(node)
-  : Array.isArray(node) ? node.map(text).join("") : node?.props ? text(node.props.children) : "";
+  : Array.isArray(node) ? node.map(text).join("") : node?.type?.name === "MemberProfileHeader"
+    ? text(node.type(node.props)) : node?.props ? text(node.props.children) : "";
 function pageHarness(path, fetch, clientTime = "2099-01-01T00:00:00Z") {
   const slots = [], effects = [], cleanups = [];
   let cursor = 0, tree, renderPage, reloads = 0;
   const react = {
     useState(initial) {
       const i = cursor++;
-      if (!(i in slots)) slots[i] = initial;
+      if (!(i in slots)) slots[i] = typeof initial === "function" ? initial() : initial;
       return [slots[i], value => { slots[i] = typeof value === "function" ? value(slots[i]) : value; }];
     },
     useRef(initial) { const i = cursor++; return slots[i] ??= { current: initial }; },
@@ -274,9 +277,9 @@ function detailHarness(initial = snapshot(), contracts = [{ ...contract, signedA
   let current = initial, hold = false, failure = false, rfidConflict = false;
   const page = pageHarness("@/app/members/[id]/page", async (url, options) => {
     requests.push(url);
-    if (url.endsWith("/operational-status")) {
+    if (url.endsWith("/overview")) {
       if (hold) return new Promise(resolve => pending.push(resolve));
-      return failure ? Response.json({ error: "failed" }, { status: 503 }) : Response.json(current);
+      return failure ? Response.json({ error: "failed" }, { status: 503 }) : Response.json(overviewFromOperational(current));
     }
     if (options?.method === "PATCH") {
       const payload = JSON.parse(options.body); payloads.push(payload);
@@ -323,8 +326,10 @@ await test("tied historical cards keep their order and PDF links by contract ID"
 });
 await test("Detail keeps history/contract collection/RFID; visual facts exclusively use coherent operational snapshot", async () => {
   const h = detailHarness(); await h.page.flush();
-  assert.deepEqual(h.requests.slice().sort(), ["access-logs", "contracts", "history", "operational-status"].map(s => `/api/members/1/${s}`).sort());
+  assert.deepEqual(h.requests.slice().sort(), ["access-logs", "contracts", "history", "overview"].map(s => `/api/members/1/${s}`).sort());
   assert.ok(badge(h.page.tree, "BLOQUEADO")); assert.ok(!badge(h.page.tree, "ACTIVO"));
+  assert.ok(h.page.button("Activar socio"), "Admin action shares the badge source despite history.active=true");
+  assert.ok(!h.page.nodes.some(n => n.type === "button" && text(n) === "Bloquear socio"));
   assert.ok(badge(h.page.tree, "MEMBRESÍA CADUCADA")); assert.ok(badge(h.page.tree, "SIN CONTRATO"));
   assert.match(h.page.text, /Member A/); assert.doesNotMatch(h.page.text, /Wrong name|UNTRUSTED-OPERATIONAL-RFID/);
   assert.ok(badge(h.page.tree, "RFID ASIGNADO"));
@@ -337,15 +342,14 @@ await test("Detail keeps history/contract collection/RFID; visual facts exclusiv
 });
 for (const label of ["Bloquear socio", "Activar socio", "Renovar 1 año", "Quitar vencimiento"]) {
   await test(`Operational refresh after ${label}`, async () => {
-    const h = detailHarness(); await h.page.flush();
-    if (label === "Activar socio") await h.page.click("Bloquear socio");
-    const before = h.requests.filter(u => u.endsWith("/operational-status")).length;
+    const h = detailHarness(snapshot({ member: { active: label === "Bloquear socio", expiresAt: now.toISOString() } })); await h.page.flush();
+    const before = h.requests.filter(u => u.endsWith("/overview")).length;
     h.current = snapshot({ member: { active: true, expiresAt: now.toISOString() }, expired: false, hasContract: true, canWithdraw: false });
     await h.page.click(label);
-    assert.equal(h.requests.filter(u => u.endsWith("/operational-status")).length, before + 1);
+    assert.equal(h.requests.filter(u => u.endsWith("/overview")).length, before + 1);
     assert.ok(badge(h.page.tree, "ACTIVO")); assert.ok(badge(h.page.tree, "CONTRATO"));
     assert.ok(!badge(h.page.tree, "MEMBRESÍA CADUCADA"));
-    assert.match(h.page.text, /VÁLIDA HASTA/);
+    assert.ok(h.page.nodes.some(n => n.type === "time" && n.props.dateTime), "Header exposes the confirmed expiration date");
   });
 }
 await test("Explicit expiration edit refreshes; unrelated edit omits expiresAt", async () => {
@@ -355,7 +359,7 @@ await test("Explicit expiration edit refreshes; unrelated edit omits expiresAt",
     await h.page.click("Guardar cambios");
     assert.equal(Object.hasOwn(h.payloads[0], "expiresAt"), value !== undefined);
     if (value !== undefined) assert.equal(h.payloads[0].expiresAt, value);
-    assert.equal(h.requests.filter(u => u.endsWith("/operational-status")).length, value === undefined ? 1 : 2);
+    assert.equal(h.requests.filter(u => u.endsWith("/overview")).length, 2);
   }
 });
 await test("RFID change/unassign/assign/conflict still use confirmed evidence independently of operational snapshot", async () => {
@@ -376,39 +380,39 @@ await test("RFID change/unassign/assign/conflict still use confirmed evidence in
   assert.match(h.page.text, /No se pudo confirmar la RFID/);
   h.page.change(n => n.props?.id === "member-rfid-code", "TAG5"); await h.page.click("Guardar RFID");
   assert.deepEqual(h.payloads.at(-1), { rfidCode: "TAG5", expectedRfidCode: "OTHER-CONFIRMED" });
-  assert.equal(h.requests.filter(u => u.endsWith("/operational-status")).length, 1);
+  assert.equal(h.requests.filter(u => u.endsWith("/overview")).length, 6);
 });
 await test("Out-of-order operational success/error cannot overwrite newer snapshot", async () => {
   for (const obsoleteError of [false, true]) {
     const h = detailHarness(); await h.page.flush(); h.hold = true;
-    await h.page.click("Bloquear socio"); await h.page.click("Activar socio");
-    assert.match(h.page.text, /Actualizando estado operativo/);
+    await h.page.click("Renovar 1 año"); await h.page.click("Quitar vencimiento");
+    assert.match(h.page.text, /Cargando estado operativo/);
     const latest = snapshot({ member: { active: true, expiresAt: null }, expired: false, hasContract: true });
-    h.pending[1](Response.json(latest)); await h.page.flush();
-    h.pending[0](obsoleteError ? Response.json({}, { status: 500 }) : Response.json(snapshot())); await h.page.flush();
+    h.pending[1](Response.json(overviewFromOperational(latest))); await h.page.flush();
+    h.pending[0](obsoleteError ? Response.json({}, { status: 500 }) : Response.json(overviewFromOperational(snapshot()))); await h.page.flush();
     assert.ok(badge(h.page.tree, "ACTIVO")); assert.ok(badge(h.page.tree, "CONTRATO"));
     assert.ok(!badge(h.page.tree, "MEMBRESÍA CADUCADA")); assert.doesNotMatch(h.page.text, /No se pudo actualizar/);
   }
 });
-await test("Failed refresh retains snapshot and shows error; retry recovers", async () => {
+await test("Failed refresh clears snapshot and shows error; retry recovers", async () => {
   const h = detailHarness(); await h.page.flush(); h.failure = true;
-  await h.page.click("Bloquear socio");
-  assert.ok(badge(h.page.tree, "BLOQUEADO")); assert.ok(badge(h.page.tree, "MEMBRESÍA CADUCADA"));
-  assert.ok(badge(h.page.tree, "SIN CONTRATO")); assert.match(h.page.text, /último estado confirmado/);
+  await h.page.click("Activar socio");
+  assert.ok(!badge(h.page.tree, "BLOQUEADO")); assert.ok(!badge(h.page.tree, "MEMBRESÍA CADUCADA"));
+  assert.ok(!badge(h.page.tree, "SIN CONTRATO")); assert.match(h.page.text, /No se pudo actualizar/);
   h.failure = false; h.current = snapshot({ hasContract: true }); await h.page.click("Reintentar");
   assert.ok(badge(h.page.tree, "CONTRATO")); assert.doesNotMatch(h.page.text, /No se pudo actualizar/);
 });
-await test("Failed explicit-edit refresh preserves snapshot without reload", async () => {
+await test("Failed explicit-edit refresh clears snapshot without reload", async () => {
   const h = detailHarness(); await h.page.flush(); h.failure = true;
   await h.page.click("Editar socio"); h.page.change(n => n.type === "input" && n.props.type === "date", "");
   await h.page.click("Guardar cambios");
-  assert.equal(h.page.reloads, 0); assert.ok(badge(h.page.tree, "MEMBRESÍA CADUCADA"));
-  assert.match(h.page.text, /último estado confirmado/);
+  assert.equal(h.page.reloads, 0); assert.ok(!badge(h.page.tree, "MEMBRESÍA CADUCADA"));
+  assert.match(h.page.text, /No se pudo actualizar/);
 });
 await test("Initial loading/error never fabricates favorable or unfavorable facts", async () => {
   const pending = [];
   const page = pageHarness("@/app/members/[id]/page", async url => {
-    if (url.endsWith("/operational-status")) return new Promise(resolve => pending.push(resolve));
+    if (url.endsWith("/overview")) return new Promise(resolve => pending.push(resolve));
     if (url.endsWith("/history")) return Response.json({ member: api.result[0], sales: [], totalSpent: 0, count: 0 });
     return Response.json([]);
   });
@@ -419,7 +423,7 @@ await test("Initial loading/error never fabricates favorable or unfavorable fact
     assert.match(page.text, /Estado no disponible/); assert.match(page.text, /No se pudo actualizar/);
     if (!pending.length) await page.click("Reintentar");
   }
-  page.unmount(); pending.shift()(Response.json(snapshot())); await page.flush();
+  page.unmount(); pending.shift()(Response.json(overviewFromOperational(snapshot()))); await page.flush();
   assert.ok(!badge(page.tree, "BLOQUEADO"), "Unmount invalidates pending response");
 });
 await test("Types and source guards: list-only expired, no local expiry/polling/RFID substitution", () => {
@@ -430,7 +434,8 @@ await test("Types and source guards: list-only expired, no local expiry/polling/
   assert.doesNotMatch(listType, /MemberSummary|commercial|rfidCode|photoUrl|dniFrontUrl|dniBackUrl|createdAt/);
   assert.doesNotMatch(types.match(/type MemberSummary = \{[\s\S]*?\n\};/)[0], /expired/);
   assert.doesNotMatch(list, /operational-status|Date\.now\(|new Date\(\)/);
-  assert.doesNotMatch(detail, /canWithdraw|hasRfid|setInterval|new Date\([^\n]*expiresAt[^\n]*\)\s*</);
+  assert.doesNotMatch(detail, /canWithdraw|setInterval|new Date\([^\n]*expiresAt[^\n]*\)\s*</);
+  assert.match(detail, /hasRfid=\{overview\?\.operational.hasRfid \?\? null\}/);
   assert.doesNotMatch(detail, /operationalStatus\.member\.rfidCode/);
   assert.match(detail, /if \(expirationEdited\) payload\.expiresAt = editForm\.expiresAt/);
   for (const ref of ["rfidBaseRef", "rfidMutationRef", "rfidVersionRef", "historyRequestRef"]) assert.ok(detail.includes(ref));

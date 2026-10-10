@@ -9,7 +9,7 @@ export const nodes = n => Array.isArray(n) ? n.flatMap(nodes) : n && typeof n ==
 export function deferred() { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; }
 
 // Executes production components/callbacks with simulated hook lifecycles, not a browser renderer.
-export function uiHarness({ path = "components/member-documents-card.tsx", name = "MemberDocumentsCard", props = {}, fetch, mocks = {} }) {
+export function uiHarness({ path = "components/member-documents-card.tsx", name = "MemberDocumentsCard", props = {}, fetch, mocks = {}, globals = {} }) {
   const instances = new Map(), cache = new Map();
   let active, cursor, tree, effects = [], used, lateUpdates = 0;
   const hooks = {
@@ -33,6 +33,7 @@ export function uiHarness({ path = "components/member-documents-card.tsx", name 
     vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText, {
       exports, fetch, FormData, AbortController, URLSearchParams, console, setTimeout, clearTimeout,
       window: { location: { reload() {} } },
+      ...globals,
       require: id => {
         if (id === "react") return hooks;
         if (id in mocks) return mocks[id];

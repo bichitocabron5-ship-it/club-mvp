@@ -9,6 +9,7 @@ type Props = {
   initialFrontUrl: string | null;
   initialBackUrl: string | null;
   canUpload?: boolean;
+  onChanged?: () => void;
 };
 const acceptedMime = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
 const dniTypes = ["ID_FRONT", "ID_BACK"] as const;
@@ -68,7 +69,7 @@ export function MemberDocumentsCard(props: Props) {
   return <CurrentDocuments key={String(props.memberId)} {...props} />;
 }
 
-function CurrentDocuments({ memberId, initialFrontUrl, initialBackUrl, canUpload = false }: Props) {
+function CurrentDocuments({ memberId, initialFrontUrl, initialBackUrl, canUpload = false, onChanged }: Props) {
   const [items, setItems] = useState<MemberDocumentListItem[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -203,7 +204,7 @@ function CurrentDocuments({ memberId, initialFrontUrl, initialBackUrl, canUpload
         response = await fetch(`/api/members/${memberId}/member-documents`, { method: "POST", body: form });
       } catch {
         uncertain.current = true;
-        if (mounted.current) setNeedsRefresh(true);
+        if (mounted.current) { setNeedsRefresh(true); onChanged?.(); }
         if (mounted.current) setNotice({ error: true, text: "No se pudo confirmar la incorporación. Actualiza la documentación antes de repetir." });
         return;
       }
@@ -214,7 +215,7 @@ function CurrentDocuments({ memberId, initialFrontUrl, initialBackUrl, canUpload
         // explicit pre-write failures are safe to retry without reconciliation.
         if (response.status >= 500 && !["STORAGE_UNAVAILABLE", "PRIVATE_STORAGE_REQUIRED", "STORAGE_UPLOAD_FAILED"].includes(payload?.error)) {
           uncertain.current = true;
-          if (mounted.current) setNeedsRefresh(true);
+          if (mounted.current) { setNeedsRefresh(true); onChanged?.(); }
           if (mounted.current) setNotice({ error: true, text: "No se pudo confirmar la incorporación. Actualiza la documentación antes de repetir." });
           return;
         }
@@ -223,6 +224,7 @@ function CurrentDocuments({ memberId, initialFrontUrl, initialBackUrl, canUpload
         return;
       }
       // HTTP success confirms the write independently of subsequent reads.
+      onChanged?.();
       selectedFile.current = null;
       if (fileInput.current) fileInput.current.value = "";
       setNotice({ error: false, text: "Documento incorporado." });
@@ -246,7 +248,7 @@ function CurrentDocuments({ memberId, initialFrontUrl, initialBackUrl, canUpload
       {error && <p role="alert" className="mt-4">No se pudo cargar la documentación.{items !== null && " Se muestran los últimos datos cargados."}</p>}
       <button type="button" className="app-button-secondary mt-3 min-h-11 px-4" disabled={loading || uploading} onClick={async () => {
         const confirmsUncertain = uncertain.current;
-        if (await refresh() && mounted.current && confirmsUncertain) { uncertain.current = false; setNeedsRefresh(false); }
+        if (await refresh() && mounted.current && confirmsUncertain) { uncertain.current = false; setNeedsRefresh(false); onChanged?.(); }
       }}>
         {error ? "Reintentar" : "Actualizar documentación"}
       </button>

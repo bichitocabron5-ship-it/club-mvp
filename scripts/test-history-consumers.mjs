@@ -1,3 +1,4 @@
+import { overviewFromOperational } from "./fixtures/member-overview.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { uiHarness, deferred } from "./fixtures/member-document-ui-harness.mjs";
@@ -44,7 +45,7 @@ for (const finalAmount of [80, 0, null]) test(`member row displays canonical amo
     "@/components/ui/page-header": { PageHeader: () => null },
   }, fetch: async url => {
     if (url.endsWith("/history")) return Response.json({ member, sales, count: 1, totalSpent: finalAmount ?? 100 });
-    if (url.endsWith("/operational-status")) return Response.json({ member, expired: false, hasContract: false });
+    if (url.endsWith("/overview")) return Response.json(overviewFromOperational({ member, expired: false, hasContract: false }, 17));
     return Response.json([]);
   } });
   await h.flush();

@@ -1,3 +1,4 @@
+import { overviewFromOperational } from "./fixtures/member-overview.mjs";
 // Real page callbacks, PATCH routes, Zod and normalizers; simulated hooks, HTTP,
 // auth and Prisma storage. No browser, database, SQL or concurrency guarantees.
 // Run: node scripts/test-member-expiration-preservation.mjs
@@ -76,7 +77,7 @@ async function pageHarness(api, role = "ADMIN") {
   const react = {
     useState(initial) {
       const i = cursor++;
-      if (!(i in slots)) slots[i] = initial;
+      if (!(i in slots)) slots[i] = typeof initial === "function" ? initial() : initial;
       return [slots[i], value => { slots[i] = typeof value === "function" ? value(slots[i]) : value; }];
     },
     useRef(initial) { const i = cursor++; return slots[i] ??= { current: initial }; },
@@ -96,6 +97,10 @@ async function pageHarness(api, role = "ADMIN") {
     window: { location: { reload() {} }, confirm: () => true },
     alert: message => { throw new Error(message); }, setTimeout: () => 0, clearTimeout() {},
     fetch: async (url, options) => {
+      if (url.endsWith("/overview")) return Response.json(overviewFromOperational({
+        member: { active: api.member.active, expiresAt: iso(api.member.expiresAt) },
+        expired: false, hasContract: true,
+      }));
       if (options?.method === "PATCH") {
         const payload = JSON.parse(options.body);
         payloads.push(payload);
@@ -111,6 +116,7 @@ async function pageHarness(api, role = "ADMIN") {
   function nodes(node) {
     if (!node || typeof node !== "object") return [];
     if (Array.isArray(node)) return node.flatMap(nodes);
+    if (node.type?.name === "MemberProfileHeader") return nodes(node.type(node.props));
     return [node, ...nodes(node.props?.children)];
   }
   const text = node => typeof node === "string" ? node : Array.isArray(node)
@@ -118,7 +124,9 @@ async function pageHarness(api, role = "ADMIN") {
   async function click(label) {
     const button = nodes(tree).find(node => node.type === "button" && text(node).trim() === label);
     assert.ok(button, `Button ${label}`);
-    await button.props.onClick(); render();
+    await button.props.onClick();
+    await new Promise(resolve => setImmediate(resolve));
+    render();
   }
   render();
   for (const effect of effects.splice(0)) effect();
