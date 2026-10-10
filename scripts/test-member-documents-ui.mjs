@@ -1,3 +1,4 @@
+import { overviewFromOperational } from "./fixtures/member-overview.mjs";
 ﻿import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
@@ -11,7 +12,7 @@ const start = fetch => uiHarness({ props, fetch });
 const inputs = h => h.nodes.filter(n => n.type === "input" && n.props.type === "file");
 const submit = h => h.nodes.find(n => n.type === "form" && n.props.onSubmit).props.onSubmit({ preventDefault() {} });
 const choose = (h, side = "front") => {
-  const slot = h.nodes.filter(n => n.type === "article")[side === "front" ? 0 : 1];
+  const slot = h.nodes.filter(n => n.type === "article" && nodes(n).some(child => child.type === "h3" && /^DNI (frontal|reverso)$/.test(text(child))))[side === "front" ? 0 : 1];
   nodes(slot).find(n => n.type === "button").props.onClick();
 };
 const send = (h, side = "front") => {
@@ -603,7 +604,7 @@ for (const mode of ["http", "network", "badPayload", "secondaryHttp", "secondary
     "@/components/member-photo-card": { MemberPhotoCard: () => null },
     "@/components/ui/page-header": { PageHeader: () => null },
   }, fetch: async url => {
-    if (url.endsWith("/operational-status")) return Response.json({ member, expired: false, hasContract: false });
+    if (url.endsWith("/overview")) return Response.json(overviewFromOperational({ member, expired: false, hasContract: false }, 17));
     if (url.endsWith("/history")) {
       if (mode === "network") throw new Error("network");
       if (mode === "http") return { ok: false, json() { parsedError = true; return { error: "bad" }; } };
@@ -613,7 +614,7 @@ for (const mode of ["http", "network", "badPayload", "secondaryHttp", "secondary
     return mode === "secondaryHttp" ? Response.json({ error: "bad" }, { status: 500 }) : Response.json([]);
   } }); await h.flush();
   assert.equal(parsedError, false); assert.doesNotMatch(h.text, /Cargando\.\.\./);
-  if (mode.startsWith("secondary")) { assert.match(h.text, /Socio test/); assert.match(h.text, /No se pudieron cargar los contratos/); assert.match(h.text, /No se pudieron cargar los accesos/); }
+  if (mode.startsWith("secondary")) { assert.match(h.text, /Member A/); assert.match(h.text, /No se pudieron cargar los contratos/); assert.match(h.text, /No se pudieron cargar los accesos/); }
   else assert.match(h.text, /No se pudo cargar la ficha del socio/);
 });
 
@@ -676,7 +677,7 @@ for (const initialPhotoUrl of [null, "https://storage.invalid/photo?token=old"])
       photoUrl = "https://storage.invalid/photo?token=uploaded";
       return Response.json({ photoUrl });
     }
-    if (url.endsWith("/operational-status")) return Response.json({ member, expired: false, hasContract: false });
+    if (url.endsWith("/overview")) return Response.json(overviewFromOperational({ member, expired: false, hasContract: false }, 17));
     if (url.endsWith("/history")) return Response.json({ member: { ...member, photoUrl }, sales: [], totalSpent: 0, count: 0 });
     return url.includes("member-documents?") ? list([]) : Response.json([]);
   } }); await h.flush();
@@ -699,7 +700,7 @@ for (const mode of ["empty", "http", "network", "badPayload", "invalidJson"]) te
     "next/navigation": { useParams: () => ({ id: "17" }) },
     "@/components/ui/page-header": { PageHeader: () => null },
   }, fetch: async url => {
-    if (url.endsWith("/operational-status")) return Response.json({ member, expired: false, hasContract: false });
+    if (url.endsWith("/overview")) return Response.json(overviewFromOperational({ member, expired: false, hasContract: false }, 17));
     if (url.endsWith("/history")) {
       if (refreshing && mode === "network") throw new Error("network");
       if (refreshing && mode === "http") return Response.json({ error: "failed" }, { status: 500 });
@@ -741,12 +742,12 @@ test("whole page upload preserves unrelated state and never calls general refres
   }, fetch: async (url, options) => {
     calls.push(url);
     if (options?.method === "POST") return new Response(null, { status: 200 });
-    if (url.endsWith("/operational-status")) return Response.json({ member, expired: false, hasContract: false });
+    if (url.endsWith("/overview")) return Response.json(overviewFromOperational({ member, expired: false, hasContract: false }, 17));
     if (url.endsWith("/history")) return Response.json({ member, sales: [], totalSpent: 0, count: 0 });
     return url.includes("member-documents?") ? list([]) : Response.json([]);
   } }); await h.flush();
   h.button("Editar socio").props.onClick(); h.render(); assert.ok(h.button("Guardar cambios"));
   const before = calls.length; send(h); await h.flush();
-  assert.deepEqual(calls.slice(before), ["/api/members/17/member-documents", "/api/members/17/member-documents?view=current"]);
+  assert.deepEqual(calls.slice(before), ["/api/members/17/member-documents", "/api/members/17/overview", "/api/members/17/member-documents?view=current"]);
   assert.ok(h.button("Guardar cambios"));
 });

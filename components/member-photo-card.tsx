@@ -7,6 +7,7 @@ type MemberPhotoCardProps = {
   initialPhotoUrl: string | null;
   canUpload: boolean;
   onUploaded?: () => Promise<void> | void;
+  variant?: "card" | "profile";
 };
 
 const ACCEPTED_PHOTO_TYPES = ".jpg,.jpeg,.png,.webp";
@@ -16,11 +17,15 @@ export function MemberPhotoCard({
   initialPhotoUrl,
   canUpload,
   onUploaded,
+  variant = "card",
 }: MemberPhotoCardProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [photoUrl, setPhotoUrl] = useState(initialPhotoUrl);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
+  const [failedPhotoUrl, setFailedPhotoUrl] = useState<string | null>(null);
+  const photoFailed = Boolean(photoUrl && failedPhotoUrl === photoUrl);
+  const compact = variant === "profile";
 
   async function uploadPhoto(file: File) {
     const formData = new FormData();
@@ -42,6 +47,7 @@ export function MemberPhotoCard({
       }
 
       setPhotoUrl(payload.photoUrl ?? null);
+      setFailedPhotoUrl(null);
       await onUploaded?.();
     } catch {
       setError("No se pudo subir la foto.");
@@ -54,8 +60,8 @@ export function MemberPhotoCard({
   }
 
   return (
-    <section className="overflow-hidden rounded-[1.75rem] border border-black/8 bg-white/82">
-      <div className="border-b border-black/7 px-4 py-4 sm:px-5">
+    <section aria-label="Foto del socio" className={compact ? "min-w-0 [overflow-wrap:anywhere]" : "overflow-hidden rounded-[1.75rem] border border-black/8 bg-white/82"}>
+      {!compact && <div className="border-b border-black/7 px-4 py-4 sm:px-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="mb-2 flex items-center gap-2">
@@ -86,36 +92,37 @@ export function MemberPhotoCard({
             {photoUrl ? "FOTO ADJUNTADA" : "FOTO PENDIENTE"}
           </span>
         </div>
-      </div>
+      </div>}
 
-      <div className="grid gap-5 p-4 sm:p-5 md:grid-cols-[180px_minmax(0,1fr)]">
+      <div className={compact ? "grid min-w-0 gap-3" : "grid gap-5 p-4 sm:p-5 md:grid-cols-[180px_minmax(0,1fr)]"}>
         <div>
           <div
-            className={`flex aspect-square w-full items-center justify-center overflow-hidden rounded-[1.5rem] border ${
+            className={`flex aspect-square w-full ${compact ? "mx-auto max-w-48" : ""} items-center justify-center overflow-hidden rounded-[1.5rem] border ${
               photoUrl
                 ? "border-black/8 bg-[#f7f4ee]"
                 : "border-dashed border-amber-300 bg-amber-50/45"
             }`}
           >
-            {photoUrl ? (
+            {photoUrl && !photoFailed ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={photoUrl}
                 alt="Foto del socio"
                 className="h-full w-full object-cover"
+                onError={() => setFailedPhotoUrl(photoUrl)}
               />
             ) : (
-              <div className="p-5 text-center">
+              <div role={photoFailed ? "status" : undefined} className="p-3 text-center">
                 <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-xl font-black text-amber-800">
                   ?
                 </div>
 
                 <div className="mt-3 text-sm font-black text-[#201f1d]">
-                  Sin foto
+                  {photoFailed ? "Foto no disponible" : "Sin foto"}
                 </div>
 
                 <p className="mt-1 text-xs leading-5 app-muted">
-                  Identificación visual pendiente.
+                  {photoFailed ? "No se pudo cargar la imagen." : "Identificación visual pendiente."}
                 </p>
               </div>
             )}
@@ -123,27 +130,27 @@ export function MemberPhotoCard({
         </div>
 
         <div className="flex min-w-0 flex-col justify-between">
-          <div>
+          {!compact && <div>
             <div className="text-[0.68rem] font-black uppercase tracking-[0.1em] app-muted">
               Estado
             </div>
 
             <div
               className={`mt-1 text-lg font-black ${
-                photoUrl ? "text-emerald-700" : "text-amber-800"
+                photoUrl && !photoFailed ? "text-emerald-700" : "text-amber-800"
               }`}
             >
-              {photoUrl ? "Foto disponible" : "Pendiente de adjuntar"}
+              {photoFailed ? "Foto no disponible" : photoUrl ? "Foto disponible" : "Pendiente de adjuntar"}
             </div>
 
             <p className="mt-3 max-w-xl text-sm leading-6 app-muted">
               Utiliza una fotografía reciente y reconocible del socio. Se admiten
               archivos JPG, PNG o WEBP de hasta 5 MB.
             </p>
-          </div>
+          </div>}
 
           {canUpload ? (
-            <div className="mt-5">
+            <div className={compact ? "min-w-0" : "mt-5"}>
               <input
                 ref={inputRef}
                 type="file"
@@ -158,7 +165,7 @@ export function MemberPhotoCard({
                 }}
               />
 
-              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+              <div className={compact ? "grid min-w-0 gap-2" : "flex flex-col gap-2 sm:flex-row sm:flex-wrap"}>
                 <button
                   type="button"
                   onClick={() => inputRef.current?.click()}
@@ -190,6 +197,7 @@ export function MemberPhotoCard({
                   Abrir foto
                 </a>
               </div>
+              {compact && <p className="mt-2 text-xs leading-5 app-muted">JPG, PNG o WEBP · hasta 5 MB.</p>}
             </div>
           ) : null}
 

@@ -2,6 +2,9 @@
 "use client";
 
 import { MemberDocumentsCard } from "@/components/member-documents-card";
+import { MemberOperationalSummary } from "@/components/member-operational-summary";
+import { createMemberOverviewLoader, type OverviewState } from "@/lib/member-overview-loader";
+import { MemberProfileHeader } from "@/components/member-profile-header";
 import { MemberPhotoCard } from "@/components/member-photo-card";
 import { normalizeRfidCode } from "@/lib/rfid";
 import type {
@@ -11,50 +14,8 @@ import type {
 } from "@/lib/types";
 import { useSession } from "next-auth/react";
 import { useParams } from "next/navigation";
-import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PageHeader } from "@/components/ui/page-header";
-
-type OperationalSnapshot = {
-  member: { active: boolean; expiresAt: string | null };
-  expired: boolean;
-  hasContract: boolean;
-};
-type OperationalState = {
-  snapshot: OperationalSnapshot | null;
-  loading: boolean;
-  error: string;
-};
-
-async function loadOperationalSnapshot(
-  id: string,
-  version: { current: number },
-  setState: Dispatch<SetStateAction<OperationalState>>,
-) {
-  const requestVersion = ++version.current;
-  setState((current) => ({ ...current, loading: true, error: "" }));
-  try {
-    const response = await fetch(`/api/members/${id}/operational-status`, { cache: "no-store" });
-    if (!response.ok) throw new Error("Operational status unavailable");
-    const snapshot: OperationalSnapshot = await response.json();
-    if (typeof snapshot?.member?.active !== "boolean" ||
-        !(snapshot.member.expiresAt === null || typeof snapshot.member.expiresAt === "string") ||
-        typeof snapshot.expired !== "boolean" || typeof snapshot.hasContract !== "boolean") {
-      throw new Error("Invalid operational status");
-    }
-    if (requestVersion !== version.current) return false;
-    setState({ snapshot, loading: false, error: "" });
-    return true;
-  } catch {
-    if (requestVersion === version.current) {
-      setState((current) => ({
-        ...current,
-        loading: false,
-        error: "No se pudo actualizar el estado operativo. Reintenta la consulta.",
-      }));
-    }
-    return false;
-  }
-}
 
 function mergeMemberHistory(
   current: MemberHistoryData | null,
@@ -82,10 +43,10 @@ function MemberDetailContent({ id }: { id: string }) {
     session?.user?.role === "ADMIN" || session?.user?.role === "STAFF";
 
   const [data, setData] = useState<MemberHistoryData | null>(null);
-  const [operational, setOperational] = useState<OperationalState>({
+  const [operational, setOperational] = useState<OverviewState>({
     snapshot: null, loading: true, error: "",
   });
-  const operationalRequestRef = useRef(0);
+  const [overviewLoader] = useState(() => createMemberOverviewLoader(id, setOperational));
   const [contracts, setContracts] = useState<MemberContractRecord[]>([]);
   const [accessLogs, setAccessLogs] = useState<AccessLogRecord[]>([]);
   const [editing, setEditing] = useState(false);
@@ -127,13 +88,38 @@ function MemberDetailContent({ id }: { id: string }) {
   }
 
   function refreshOperationalStatus() {
-    return loadOperationalSnapshot(id, operationalRequestRef, setOperational);
+    return overviewLoader.refresh(true);
   }
 
   useEffect(() => {
-    void loadOperationalSnapshot(id, operationalRequestRef, setOperational);
-    return () => { operationalRequestRef.current += 1; };
-  }, [id]);
+    overviewLoader.activate();
+    void overviewLoader.refresh();
+    let away = false;
+    const leave = () => { away = true; };
+    const resume = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      if (!away) return;
+      away = false;
+      void overviewLoader.refresh(true);
+    };
+    const visibility = () => {
+      if (document.visibilityState === "hidden") leave(); else resume();
+    };
+    const restored = (event: PageTransitionEvent) => { if (event.persisted) resume(); };
+    window.addEventListener?.("pagehide", leave);
+    window.addEventListener?.("blur", leave);
+    window.addEventListener?.("focus", resume);
+    window.addEventListener?.("pageshow", restored);
+    if (typeof document !== "undefined") document.addEventListener("visibilitychange", visibility);
+    return () => {
+      overviewLoader.dispose();
+      window.removeEventListener?.("pagehide", leave);
+      window.removeEventListener?.("blur", leave);
+      window.removeEventListener?.("focus", resume);
+      window.removeEventListener?.("pageshow", restored);
+      if (typeof document !== "undefined") document.removeEventListener("visibilitychange", visibility);
+    };
+  }, [overviewLoader]);
 
   async function refreshMember() {
     if (!id) return;
@@ -243,8 +229,11 @@ function MemberDetailContent({ id }: { id: string }) {
     : <div className="p-6 app-muted" role="status" aria-busy="true">Cargando...</div>;
 
   const authReady = status !== "loading";
-  const visibleMemberNumber = data.member.memberNumber ?? data.member.id;
-  const operationalStatus = operational.snapshot;
+  const overview = operational.snapshot;
+  const operationalStatus = overview ? {
+    member: { active: overview.operational.active, expiresAt: overview.operational.expiresAt },
+    expired: overview.operational.expired, hasContract: overview.operational.hasContract,
+  } : null;
 
   type MemberStatusPayload = {
     active?: boolean;
@@ -333,12 +322,14 @@ function MemberDetailContent({ id }: { id: string }) {
     }
 
     setEditing(false);
-    if (expirationEdited && !(await refreshOperationalStatus())) {
-      // Keep the confirmed snapshot and visible error instead of discarding them on reload.
+    // Refresh independently: a failed history read cannot hide an overview update.
+    void refreshOperationalStatus();
+    try {
       await refreshMember();
-      return;
+      setHistoryRefreshError("");
+    } catch {
+      setHistoryRefreshError("No se pudo actualizar la ficha. Se conservan los últimos datos cargados.");
     }
-    window.location.reload();
   }
 
   async function saveScannedRfid(code: string) {
@@ -377,6 +368,7 @@ function MemberDetailContent({ id }: { id: string }) {
         return;
       }
 
+      void refreshOperationalStatus();
       const updated: { rfidCode: string } = await res.json();
       syncRfid(updated.rfidCode);
       setAssigningRfid(false);
@@ -392,6 +384,8 @@ function MemberDetailContent({ id }: { id: string }) {
   }
 
   async function recoverRfidConflict() {
+    // The conflict confirms our RFID snapshot is stale, even if history fails.
+    void refreshOperationalStatus();
     rfidBlockedRef.current = true;
     setRfidBlocked(true);
     rfidBaseRef.current = undefined;
@@ -452,6 +446,7 @@ function MemberDetailContent({ id }: { id: string }) {
         setRfidError(err?.error || "No se pudo desasignar la RFID.");
         return;
       }
+      void refreshOperationalStatus();
       syncRfid(null);
       setAssigningRfid(false);
       setRfidInput("");
@@ -474,93 +469,31 @@ function MemberDetailContent({ id }: { id: string }) {
 
       {data.member && (
         <section className="app-panel mb-5 overflow-hidden rounded-[2rem]">
-          <div className="border-b border-black/7 px-5 py-5 sm:px-6">
-            <div className="mb-2 flex items-center gap-2">
-              <span className="h-[2px] w-6 rounded-full bg-[#a7282d]" />
-              <span className="text-[0.65rem] font-black uppercase tracking-[0.2em] text-[#a7282d]">
-                Expediente
-              </span>
-            </div>
-
-            <div className="flex flex-col gap-5 md:flex-row md:items-center">
+          <MemberProfileHeader
+            memberId={data.member.id}
+            memberNumber={overview ? overview.identity.memberNumber : data.member.memberNumber}
+            fullName={overview?.identity.fullName ?? data.member.fullName}
+            operational={operationalStatus}
+            loading={operational.loading}
+            error={operational.error}
+            hasRfid={overview?.operational.hasRfid ?? null}
+            editing={editing}
+            onToggleEdit={() => changeEditing(!editing)}
+            onRetry={() => void overviewLoader.refresh()}
+            photo={
               <MemberPhotoCard
                 key={`${id}:${data.member.photoUrl ?? ""}`}
                 memberId={id}
                 initialPhotoUrl={data.member.photoUrl}
                 canUpload={Boolean(authReady && canUploadPhoto)}
                 onUploaded={refreshMember}
+                variant="profile"
               />
+            }
+          />
 
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-semibold app-muted">
-                  Socio nº {visibleMemberNumber}
-                </div>
-
-                <h2 className="mt-1 break-words text-2xl font-black tracking-[-0.03em] text-[#201f1d] md:text-3xl">
-                  {data.member.fullName}
-                </h2>
-
-                <div className="mt-2 break-words text-sm app-muted">
-                  DNI {data.member.dni}
-                </div>
-
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {operationalStatus && <>
-                  <span
-                    className={`rounded-full border px-3 py-1 text-xs font-black ${
-                      operationalStatus.member.active
-                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                        : "border-red-200 bg-red-50 text-red-700"
-                    }`}
-                  >
-                    {operationalStatus.member.active ? "ACTIVO" : "BLOQUEADO"}
-                  </span>
-
-                  {operationalStatus.expired ? (
-                    <span className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-black text-red-700">
-                      MEMBRESÍA CADUCADA
-                    </span>
-                  ) : operationalStatus.member.expiresAt ? (
-                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">
-                      VÁLIDA HASTA{" "}
-                      {new Date(operationalStatus.member.expiresAt).toLocaleDateString("es-ES")}
-                    </span>
-                  ) : (
-                    <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-black text-amber-800">
-                      SIN VENCIMIENTO
-                    </span>
-                  )}
-
-                  <span className={`rounded-full border px-3 py-1 text-xs font-black ${
-                    operationalStatus.hasContract
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                      : "border-amber-200 bg-amber-50 text-amber-800"
-                  }`}>
-                    {operationalStatus.hasContract ? "CONTRATO" : "SIN CONTRATO"}
-                  </span>
-                  </>}
-
-                  {data.member.rfidCode ? (
-                    <span className="rounded-full border border-[#b4a78d]/30 bg-[#f3f0e9] px-3 py-1 text-xs font-black text-[#645b4c]">
-                      RFID ASIGNADO
-                    </span>
-                  ) : (
-                    <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-black text-amber-800">
-                      RFID PENDIENTE
-                    </span>
-                  )}
-                </div>
-                {operational.loading && <p role="status" className="mt-2 text-sm app-muted">
-                  {operationalStatus ? "Actualizando estado operativo..." : "Cargando estado operativo..."}
-                </p>}
-                {operational.error && <div role="alert" className="mt-2 text-sm text-red-700">
-                  {operational.error}{operationalStatus && " Se muestra el último estado confirmado."}
-                  <button type="button" className="app-button-secondary ml-2 rounded-full px-3 py-1"
-                    onClick={() => void refreshOperationalStatus()}>Reintentar</button>
-                </div>}
-              </div>
-            </div>
-          </div>
+          <MemberOperationalSummary overview={overview} loading={operational.loading} error={operational.error}
+            onRetry={() => void overviewLoader.refresh()} />
 
           <div className="p-5 sm:p-6">
 
@@ -574,6 +507,11 @@ function MemberDetailContent({ id }: { id: string }) {
             </div>
 
             <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-2xl bg-[#f7f4ee] p-4">
+                <div className="text-[0.68rem] font-black uppercase tracking-[0.1em] app-muted">DNI / documento</div>
+                <div className="mt-2 break-words font-black text-[#201f1d]">{data.member.dni}</div>
+              </div>
+
               <div className="rounded-2xl bg-[#f7f4ee] p-4">
                 <div className="text-[0.68rem] font-black uppercase tracking-[0.1em] app-muted">
                   Teléfono
@@ -696,63 +634,8 @@ function MemberDetailContent({ id }: { id: string }) {
             </section>
           )}
 
-          <div className="mt-5 overflow-hidden rounded-[1.75rem] border border-black/8 bg-white/75">
-            <div className="border-b border-black/7 px-5 py-4">
-              <div className="flex items-center gap-2">
-                <span className="h-[2px] w-6 rounded-full bg-[#a7282d]" />
-
-                <span className="text-[0.65rem] font-black uppercase tracking-[0.2em] text-[#a7282d]">
-                  Operaciones
-                </span>
-              </div>
-
-              <h3 className="mt-2 font-black text-[#201f1d]">
-                Acciones del socio
-              </h3>
-
-              <p className="mt-1 text-sm app-muted">
-                Accede a contrato, ventas, historial o edición del expediente.
-              </p>
-            </div>
-
-            <div className="space-y-5 p-5">
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <a
-                  href={`/members/${id}/contract`}
-                  className="app-button-primary inline-flex min-h-12 items-center justify-center rounded-xl px-4 py-3 text-center text-sm font-bold"
-                >
-                  Contrato / Firma
-                </a>
-
-                <a
-                  href="/sales"
-                  className="app-button-secondary inline-flex min-h-12 items-center justify-center rounded-xl px-4 py-3 text-center text-sm font-bold"
-                >
-                  Ir al TPV
-                </a>
-
-                <a
-                  href="#member-history"
-                  className="app-button-secondary inline-flex min-h-12 items-center justify-center rounded-xl px-4 py-3 text-center text-sm font-bold"
-                >
-                  Ver historial
-                </a>
-
-                <button
-                  type="button"
-                  onClick={() => changeEditing(!editing)}
-                  className={`inline-flex min-h-12 items-center justify-center rounded-xl px-4 py-3 text-sm font-bold ${
-                    editing
-                      ? "border border-[#a7282d]/20 bg-[#a7282d]/8 text-[#861f23]"
-                      : "bg-[#0b0b0c] text-white hover:bg-[#171719]"
-                  }`}
-                >
-                  {editing ? "Editando socio" : "Editar socio"}
-                </button>
-              </div>
-
               {authReady && isAdmin ? (
-                <div className="overflow-hidden rounded-[1.5rem] border border-[#b4a78d]/30 bg-[#f7f4ee]/70">
+                <div className="mt-5 overflow-hidden rounded-[1.5rem] border border-[#b4a78d]/30 bg-[#f7f4ee]/70">
                   <div className="border-b border-[#b4a78d]/20 px-4 py-4">
                     <div className="flex items-center gap-2">
                       <span className="h-[2px] w-5 rounded-full bg-[#b4a78d]" />
@@ -772,7 +655,7 @@ function MemberDetailContent({ id }: { id: string }) {
                   </div>
 
                   <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
-                    {data.member.active ? (
+                    {operationalStatus ? operationalStatus.member.active ? (
                       <button
                         type="button"
                         onClick={() => updateMemberStatus({ active: false })}
@@ -788,7 +671,7 @@ function MemberDetailContent({ id }: { id: string }) {
                       >
                         Activar socio
                       </button>
-                    )}
+                    ) : <p role="status" className="text-sm app-muted">Estado no disponible</p>}
 
                     <button
                       type="button"
@@ -808,8 +691,6 @@ function MemberDetailContent({ id }: { id: string }) {
                   </div>
                 </div>
               ) : null}
-            </div>
-          </div>
 
           {editing && (
             <div className="mt-5 overflow-hidden rounded-[1.75rem] border border-[#a7282d]/15 bg-white/88">
@@ -1246,6 +1127,7 @@ function MemberDetailContent({ id }: { id: string }) {
       )}
 
       <MemberDocumentsCard
+            onChanged={() => { void refreshOperationalStatus(); }}
         memberId={id}
         initialFrontUrl={data.member.hasDniFront ? `/api/members/${id}/documents?side=front` : null}
         initialBackUrl={data.member.hasDniBack ? `/api/members/${id}/documents?side=back` : null}
